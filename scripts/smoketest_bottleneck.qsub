@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -N rlvib_bottleneck_smoke
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o rlvib_bottleneck_smoke.qsub.log
+
+# Step-4 smoke test: frozen Qwen3-Omni + trainable zero-init bottlenecks.
+# See src/rlvib/models/bottleneck.py and scripts/smoketest_bottleneck.py.
+#   qsub -v VIDEO=$HOME/sample_av.mp4 scripts/smoketest_bottleneck.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/bottleneck_smoke_out.txt") 2>&1
+
+python -u scripts/smoketest_bottleneck.py --video "${VIDEO:-$HOME/sample_av.mp4}"
+
+echo "=== Done $(date) ==="
