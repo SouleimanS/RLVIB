@@ -38,6 +38,29 @@ GRPO later**; clean-room rebuild (no reuse of prior corrupted code/AVQA copy).
 
 ---
 
+## Step 1 results — Qwen3-Omni runs (2026-06-16)
+
+Smoke test (`scripts/smoketest_qwen3omni.py`) **passes** on one H200.
+
+- **Loads thinker-only**, ~63.4 GB (the `UNEXPECTED talker.*/code2wav.*` keys are
+  the skipped speech stack — expected with `enable_audio_output=False`).
+- **Env recipe that works:** transformers 5.12.1, plus `torchvision`, `ffmpeg`,
+  `eva-decord` with `FORCE_QWENVL_VIDEO_READER=decord`; cast **float** processor
+  outputs to bf16 (leave int ids/grids alone) before `generate`.
+- **Bottleneck attach points (confirmed via forward hooks):**
+  - audio → `thinker.audio_tower.proj2` (`Linear`) → `(T_a, 2048)` (~85 tokens / 3 s clip)
+  - vision → `thinker.visual.merger` (`Qwen3OmniMoeVisionPatchMerger`) → `(T_v, 2048)` (~3456 tokens)
+  - Both emit **2048-d** token streams (the Thinker hidden size); features are
+    scattered into `inputs_embeds` at the audio/image placeholder positions.
+- **Audio is used:** AV vs video-only answers differ under greedy decode
+  (`Answer changed when audio dropped -> True`).
+
+**=> the fusion bottleneck is a module over two 2048-d token sequences**
+(audio `T_a×2048`, video `T_v×2048`), inserted by wrapping/replacing those two
+submodules so their outputs pass through it before entering the Thinker.
+
+---
+
 ## 0. TL;DR — decisions
 
 1. **Drop the *video-only* VIB.** A single-stream VIB compresses visual
