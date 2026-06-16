@@ -1,0 +1,46 @@
+#!/bin/bash
+#PBS -N rlvib_dave_baseline
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o rlvib_dave_baseline.qsub.log
+
+# Frozen Qwen3-Omni baseline on DAVE (multiple choice). The clips ship in the HF
+# zips -- extract them once on the LOGIN node:
+#   cd data/DAVE && unzip -q ego4d.zip -d ego4d && unzip -q epic.zip -d epic && cd -
+#   (check the layout: paths in ego4d.json must resolve under data/DAVE/ego4d)
+#
+# Then run ONE mode at a time; loop the four modes for the ablation ΔAcc:
+#   for M in audio_visual_alignment visual_only audio_only text_only; do
+#     qsub -v "LIMIT=100,MODE=$M,DAVE_SPLIT=ego4d" scripts/eval_dave.qsub
+#   done
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+DAVE_SPLIT="${DAVE_SPLIT:-ego4d}"
+MODE="${MODE:-audio_visual_alignment}"
+
+echo "=== Node: $(hostname)  Date: $(date)  split=$DAVE_SPLIT mode=$MODE ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/dave_${DAVE_SPLIT}_${MODE}_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_dave \
+    --json "$PWD/data/DAVE/${DAVE_SPLIT}.json" \
+    --media-root "$PWD/data/DAVE/${DAVE_SPLIT}" \
+    --mode "$MODE" --limit "${LIMIT:-100}" \
+    --out "runs/dave_${DAVE_SPLIT}_${MODE}.json"
+
+echo "=== Done $(date) ==="
