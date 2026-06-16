@@ -17,6 +17,27 @@ GRPO later**; clean-room rebuild (no reuse of prior corrupted code/AVQA copy).
 
 ---
 
+## Locked decisions (2026-06-16)
+
+- **v0 base model: Qwen3-Omni-30B-A3B** (Thinker only — skip the Talker/Code2Wav
+  speech stack; this is text-answer QA). Freeze the encoders + Thinker; train the
+  fusion bottleneck on the **audio + vision adapter outputs (pre-Thinker)**; add
+  LoRA only if v0 plateaus (MoE-LoRA is fiddly — avoid until needed).
+  **VideoLLaMA2 = comparison arm (arm 2).**
+- **Eval suite:**
+  - **AVHBench** [arXiv:2410.18325] — AV cross-modal hallucination + AV-matching
+    (matching doubles as an AV-mismatch / abstention probe).
+  - **CMM — "The Curse of Multi-Modalities"** [arXiv:2410.12787] — hallucination
+    across language/visual/audio; diagnoses unimodal-prior overreliance + spurious
+    cross-modal correlation (the anti-shortcut axis).
+  - **DAVE** [arXiv:2503.09321] (recommended) — both-modalities-required QA →
+    modality-ablation **ΔAcc** headline (AVHBench/CMM are both hallucination-axis
+    and don't give ΔAcc directly).
+- **Risk to watch:** Qwen3-Omni is Sept-2025-new → tooling maturity; the Step-1
+  smoke test gates everything downstream.
+
+---
+
 ## 0. TL;DR — decisions
 
 1. **Drop the *video-only* VIB.** A single-stream VIB compresses visual
