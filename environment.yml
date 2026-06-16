@@ -41,6 +41,7 @@ dependencies:
       #   --index-url https://download.pytorch.org/whl/cu126
       # (or .../whl/cpu for a CPU-only install).
       - torch
+      - torchvision                  # required by transformers' Qwen2-VL/Qwen3-Omni video processor
 
       # --- Qwen3-Omni base model + audio-visual I/O (v0) ---
       - transformers>=5.2.0          # Qwen3-Omni-MoE support landed in transformers 5.2
