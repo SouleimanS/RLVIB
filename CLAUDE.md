@@ -46,3 +46,17 @@ Job-script conventions (see `scripts/rlvib.qsub`): `cd "$PBS_O_WORKDIR"`, source
 conda + `conda activate rlvib`, set `LD_LIBRARY_PATH="$CONDA_PREFIX/lib:…"` so the
 pip torch wheel finds its bundled CUDA libs, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`,
 and `tee` output into `runs/`. Group code `-P gae50891`, queue `-q rt_HF`.
+
+### Gotcha: don't export `LD_LIBRARY_PATH` shell-wide
+
+Exporting `LD_LIBRARY_PATH="$CONDA_PREFIX/lib:…"` in an interactive shell puts
+conda's OpenSSL ahead of the system one and breaks system `git` over HTTPS:
+
+```
+git-remote-https: symbol lookup error: /lib64/libldap.so.2:
+undefined symbol: EVP_md2, version OPENSSL_3.0.0
+```
+
+Run git with it cleared — `env -u LD_LIBRARY_PATH git …` — or just don't export
+it interactively (torch's pip wheel finds its CUDA libs via RPATH, so it isn't
+needed to run torch). It stays correctly scoped inside the qsub jobs.
