@@ -42,11 +42,17 @@ dependencies:
       # (or .../whl/cpu for a CPU-only install).
       - torch
 
+      # --- Qwen3-Omni base model + audio-visual I/O (v0) ---
+      - transformers>=5.2.0          # Qwen3-Omni-MoE support landed in transformers 5.2
+      - accelerate
+      - qwen-omni-utils              # process_mm_info + AV preprocessing helpers
+      - soundfile
+      - huggingface_hub
+      # flash-attn is optional (faster attention); needs a manual build:
+      #   pip install flash-attn --no-build-isolation
+
       # --- add later, as the RL design firms up ---
-      # - transformers
       # - trl
       # - peft
-      # - accelerate
       # - datasets
-      # - gymnasium
       # - wandb

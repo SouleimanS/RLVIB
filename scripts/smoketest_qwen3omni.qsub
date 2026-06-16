@@ -1,0 +1,41 @@
+#!/bin/bash
+#PBS -N rlvib_qwen3omni_smoke
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -o rlvib_qwen3omni_smoke.qsub.log
+
+# Step-1 smoke test: does Qwen3-Omni load + actually use audio on the node, and
+# where do its per-modality adapters live? See scripts/smoketest_qwen3omni.py.
+#
+#   qsub scripts/smoketest_qwen3omni.qsub
+#
+# FIRST RUN downloads ~60 GB of weights. If rt_HF compute nodes have no internet,
+# pre-download on the LOGIN node first (it has net):
+#   conda activate rlvib
+#   huggingface-cli download Qwen/Qwen3-Omni-30B-A3B-Instruct
+# then set TRANSFORMERS_OFFLINE=1 below and pass a LOCAL --video path.
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"   # torch wheel's CUDA libs
+export CUDA_VISIBLE_DEVICES=0                                     # 30B-A3B fits one H200
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# export HF_HOME="/path/to/large/fs/hf"   # ~60 GB cache; point at a roomy filesystem if $HOME is small
+# export TRANSFORMERS_OFFLINE=1            # set once weights are cached (and use a local --video)
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/qwen3omni_smoke_out.txt") 2>&1
+
+python -u scripts/smoketest_qwen3omni.py \
+    --video "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-Omni/demo/draw.mp4"
+
+echo "=== Done $(date) ==="
