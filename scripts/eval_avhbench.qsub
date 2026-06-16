@@ -10,13 +10,14 @@
 # Frozen Qwen3-Omni baseline on AVHBench (3 binary tasks).
 # See src/rlvib/eval/run_avhbench.py and docs/research/grounding-audio-to-video.md.
 #
-# First, on the LOGIN node, download AVHBench (Google Drive) and point these at it:
+# First, on the LOGIN node, download AVHBench (Google Drive) into the repo's data/
+# dir (data/ is gitignored -> the videos are NOT committed):
 #   pip install gdown
-#   mkdir -p ~/data/AVHBench
-#   gdown 1KcYDAv9lLy3hsx5rWdfRqMFV2NYcZ94W -O ~/data/AVHBench/qa.json
-#   gdown 10-Qp8zxA3ITT-ileEnCgJkf5Nzx1wry7 -O ~/data/AVHBench/videos.zip && \
-#     unzip -q ~/data/AVHBench/videos.zip -d ~/data/AVHBench/videos
-#   (check the unpacked layout; set AVHBENCH_VIDEOS to wherever the {id}.mp4 files land)
+#   cd ~/SOULEIMAN_repo/RLVIB && mkdir -p data/AVHBench
+#   gdown 1KcYDAv9lLy3hsx5rWdfRqMFV2NYcZ94W -O data/AVHBench/qa.json
+#   gdown 10-Qp8zxA3ITT-ileEnCgJkf5Nzx1wry7 -O data/AVHBench/videos.zip && \
+#     unzip -q data/AVHBench/videos.zip -d data/AVHBench/videos
+#   (check the layout; set AVHBENCH_VIDEOS if the {id}.mp4 files land deeper)
 #
 #   LIMIT=100 qsub -v LIMIT scripts/eval_avhbench.qsub   # quick sanity baseline
 #   LIMIT=0   qsub -v LIMIT scripts/eval_avhbench.qsub   # full run
@@ -33,8 +34,8 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRANSFORMERS_OFFLINE=1
 export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
-AVHBENCH_QA="${AVHBENCH_QA:-$HOME/data/AVHBench/qa.json}"
-AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$HOME/data/AVHBench/videos}"
+AVHBENCH_QA="${AVHBENCH_QA:-$PWD/data/AVHBench/qa.json}"
+AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$PWD/data/AVHBench/videos}"
 
 echo "=== Node: $(hostname)  Date: $(date) ==="
 nvidia-smi -L
