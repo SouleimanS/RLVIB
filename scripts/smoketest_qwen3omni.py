@@ -133,7 +133,13 @@ def main() -> int:
             text=text, audio=audios, images=images, videos=videos,
             return_tensors="pt", padding=True, use_audio_in_video=use_audio,
         )
-        inputs = inputs.to(next(model.parameters()).device)
+        # move to device; cast only FLOAT tensors to the model dtype (bf16) -- leave
+        # int tensors (input_ids, grids, masks) alone or embeddings/convs break.
+        p = next(model.parameters())
+        inputs = inputs.to(p.device)
+        for k, v in list(inputs.items()):
+            if torch.is_tensor(v) and torch.is_floating_point(v):
+                inputs[k] = v.to(p.dtype)
         shapes.clear()
         with torch.no_grad():
             out = model.generate(
