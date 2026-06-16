@@ -52,6 +52,7 @@ dependencies:
       - qwen-omni-utils              # process_mm_info + AV preprocessing helpers
       - soundfile
       - huggingface_hub
+      - eva-decord                   # video reader (decord fork, py3.11 wheels); torchvision removed io.read_video
       # flash-attn is optional (faster attention); needs a manual build:
       #   pip install flash-attn --no-build-isolation
 

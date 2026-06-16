@@ -18,9 +18,14 @@ runtime instead of hard-coding names, and let failures surface the real API.
 from __future__ import annotations
 
 import argparse
+import os
 import traceback
 
 import torch
+
+# Newer torchvision removed io.read_video, which qwen-omni-utils' default video
+# backend calls. Force a working reader (override with FORCE_QWENVL_VIDEO_READER).
+os.environ.setdefault("FORCE_QWENVL_VIDEO_READER", "decord")
 
 DEFAULT_MODEL = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
 DEFAULT_VIDEO = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-Omni/demo/draw.mp4"
