@@ -95,6 +95,19 @@ correlation. (Audio subsets pending the full run.)
 
 ---
 
+## Step 4 — bottleneck architecture validated (2026-06-16)
+
+`scripts/smoketest_bottleneck.py` passes on Qwen3-Omni: zero-init residual
+bottlenecks on `audio_tower.proj2` + `visual.merger` are **identity at init**
+(answer byte-identical), **16.8M trainable params with 0 trainable elsewhere**
+(LLM + encoders frozen), and **gradients flow** through the frozen Thinker into the
+bottleneck (fc2 grad norms ~4.7 / ~24, LM loss 17.1). The frozen-LLM +
+trainable-bottleneck path is green. `attach_bottlenecks(model)` is model-agnostic
+(`hidden_dim` per model: 2048 Qwen3, 3584 Qwen2.5 / VideoLLaMA2). Next:
+counterfactual-DPO training (Step 5).
+
+---
+
 ## 0. TL;DR — decisions
 
 1. **Drop the *video-only* VIB.** A single-stream VIB compresses visual

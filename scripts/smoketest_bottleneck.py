@@ -51,7 +51,7 @@ def main() -> int:
         for name, bn in bottlenecks.items():
             g = bn.fc2.weight.grad  # fc2 is zero-init; it receives gradient first
             print(f"  {name}: fc2.grad_norm = {None if g is None else float(g.norm()):.4e}")
-        print(f"  LM loss = {float(loss):.4f}")
+        print(f"  LM loss = {float(loss.detach()):.4f}")
     except Exception:  # noqa: BLE001 — surface the real forward signature
         print("forward/backward failed -- traceback:")
         traceback.print_exc()
