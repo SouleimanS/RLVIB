@@ -1,0 +1,45 @@
+#!/bin/bash
+#PBS -N rlvib_cmm_baseline
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o rlvib_cmm_baseline.qsub.log
+
+# Frozen Qwen3-Omni baseline on CMM (The Curse of Multi-Modalities).
+# Download (LOGIN node) into the repo's data/ (gitignored):
+#   python -c "from huggingface_hub import snapshot_download; \
+#     snapshot_download(repo_id='DAMO-NLP-SG/CMM', repo_type='dataset', local_dir='data/CMM')"
+#   find data/CMM -maxdepth 2 -name '*.json'    # locate the annotation json
+#   ls data/CMM                                 # see the media dir (raw_files / reorg_raw_files)
+# then point CMM_JSON at the annotation file and CMM_ROOT at the dir the
+# relative video/audio paths resolve against, e.g.:
+#   qsub -v "LIMIT=100,CMM_JSON=$PWD/data/CMM/<file>.json,CMM_ROOT=$PWD/data/CMM" scripts/eval_cmm.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+CMM_JSON="${CMM_JSON:-$PWD/data/CMM/cmm.json}"
+CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/cmm_baseline_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_cmm \
+    --json-path "$CMM_JSON" --data-root "$CMM_ROOT" \
+    --limit "${LIMIT:-100}" \
+    --out runs/cmm_baseline.json
+
+echo "=== Done $(date) ==="

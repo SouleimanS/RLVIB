@@ -39,3 +39,16 @@ def accuracy(preds: list[str | None], golds: list[str]) -> dict:
         "correct": correct,
         "parse_rate": parsed / n,
     }
+
+
+def parse_choice(text: str | None) -> str | None:
+    """Extract a single MC letter (A-E) from an answer like '(B)' or 'B) ...' (DAVE)."""
+    if not text:
+        return None
+    t = text.strip().upper()
+    m = re.search(r"\(([A-E])\)", t)  # prefer parenthesized "(B)"
+    if m:
+        return m.group(1)
+    m = re.match(r"([A-E])\b", t)  # else a leading "B" / "B)"
+    return m.group(1) if m else None
+

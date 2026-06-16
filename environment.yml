@@ -56,8 +56,10 @@ dependencies:
       # flash-attn is optional (faster attention); needs a manual build:
       #   pip install flash-attn --no-build-isolation
 
+      - datasets                     # HF datasets (DAVE etc.)
+      - gdown                        # Google Drive downloads (AVHBench)
+
       # --- add later, as the RL design firms up ---
       # - trl
       # - peft
-      # - datasets
       # - wandb
