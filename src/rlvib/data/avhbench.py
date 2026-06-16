@@ -2,11 +2,11 @@
 
 Distributed via Google Drive (not on the HF Hub). The QA file is a flat JSON list
 of {video_id, task, text, label}; videos are {video_id}.mp4 with audio embedded,
-in a flat directory. Tasks (exact `task` strings):
-  "AV Hallucination (Audio)"  -> video in, asks about audio   (label Yes/No)
-  "AV Hallucination (Video)"  -> audio in, asks about video   (label Yes/No)
-  "AV Matching"               -> do audio & video match?      (label Yes/No)
-  "AV Captioning"             -> free-text caption
+in a flat directory. Tasks (exact `task` strings, verified from the released json):
+  "Video-driven Audio Hallucination"  -> asks about audio          (label Yes/No)
+  "Audio-driven Video Hallucination"  -> asks about video          (label Yes/No)
+  "AV Matching"                       -> do audio & video match?   (label Yes/No)
+  "AV Captioning"                     -> free-text caption
 """
 from __future__ import annotations
 
@@ -15,7 +15,11 @@ import os
 
 from torch.utils.data import Dataset
 
-BINARY_TASKS = ("AV Hallucination (Audio)", "AV Hallucination (Video)", "AV Matching")
+BINARY_TASKS = (
+    "Video-driven Audio Hallucination",
+    "Audio-driven Video Hallucination",
+    "AV Matching",
+)
 CAPTION_TASK = "AV Captioning"
 
 
