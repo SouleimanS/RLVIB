@@ -29,6 +29,9 @@ dependencies:
   - pyyaml
   - tqdm
 
+  # --- media (audio/video decoding for qwen-omni-utils) ---
+  - ffmpeg
+
   # --- dev / quality ---
   - pytest
   - ruff
