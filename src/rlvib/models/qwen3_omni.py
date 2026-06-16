@@ -27,6 +27,8 @@ DEFAULT_MODEL = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
 class QwenOmni:
     """Thin wrapper around Qwen3-Omni for text-out audio-visual inference."""
 
+    hidden_dim = 2048  # adapter output dim (audio_tower.proj2 / visual.merger)
+
     def __init__(self, model_id: str = DEFAULT_MODEL, attn: str = "sdpa"):
         from transformers import (
             Qwen3OmniMoeForConditionalGeneration,

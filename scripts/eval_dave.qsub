@@ -38,9 +38,10 @@ nvidia-smi -L
 exec > >(tee -a "$PBS_O_WORKDIR/runs/dave_${DAVE_SPLIT}_${MODE}_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_dave \
+    --model "${MODEL:-qwen3-omni}" \
     --json "$PWD/data/DAVE/${DAVE_SPLIT}.json" \
     --media-root "$PWD/data/DAVE/${DAVE_SPLIT}" \
     --mode "$MODE" --limit "${LIMIT:-100}" \
-    --out "runs/dave_${DAVE_SPLIT}_${MODE}.json"
+    --out "runs/dave_${DAVE_SPLIT}_${MODEL:-qwen3-omni}_${MODE}.json"
 
 echo "=== Done $(date) ==="

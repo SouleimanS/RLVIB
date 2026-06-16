@@ -20,7 +20,7 @@ import time
 
 from rlvib.data.dave import MODE_SPEC, DaveDataset
 from rlvib.eval.metrics import parse_choice
-from rlvib.models import QwenOmni
+from rlvib.models import get_model
 
 
 def build_prompt(choices: list[str]) -> str:
@@ -34,6 +34,7 @@ def build_prompt(choices: list[str]) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--json", required=True)
     ap.add_argument("--media-root", required=True)
     ap.add_argument("--mode", default="audio_visual_alignment", choices=list(MODE_SPEC))
@@ -42,7 +43,7 @@ def main() -> int:
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    model = QwenOmni()
+    model = get_model(args.model)
     ds = DaveDataset(args.json, args.media_root, mode=args.mode)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     out = args.out or f"runs/dave_{args.mode}.json"

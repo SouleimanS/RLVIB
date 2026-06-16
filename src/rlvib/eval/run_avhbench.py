@@ -15,13 +15,14 @@ import time
 
 from rlvib.data.avhbench import BINARY_TASKS, AVHBenchDataset
 from rlvib.eval.metrics import accuracy, parse_yes_no
-from rlvib.models import QwenOmni
+from rlvib.models import get_model
 
 YN_SUFFIX = " Answer with a single word: Yes or No."
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--qa-json", required=True)
     ap.add_argument("--video-root", required=True)
     ap.add_argument("--tasks", nargs="*", default=list(BINARY_TASKS))
@@ -30,7 +31,7 @@ def main() -> int:
     ap.add_argument("--out", default="runs/avhbench_baseline.json")
     args = ap.parse_args()
 
-    model = QwenOmni()
+    model = get_model(args.model)
     ds = AVHBenchDataset(args.qa_json, args.video_root, tasks=args.tasks)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"AVHBench: {n}/{len(ds)} samples | tasks={args.tasks}", flush=True)

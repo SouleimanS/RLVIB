@@ -13,16 +13,17 @@ from __future__ import annotations
 import argparse
 import traceback
 
-from rlvib.models import QwenOmni
+from rlvib.models import get_model
 from rlvib.models.bottleneck import attach_bottlenecks
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--video", required=True)
     args = ap.parse_args()
 
-    m = QwenOmni()
+    m = get_model(args.model)
     msg = m.message(video=args.video, prompt="What is happening in this clip?")
 
     print("=== baseline (no bottleneck) ===", flush=True)

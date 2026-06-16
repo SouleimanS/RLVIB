@@ -28,6 +28,6 @@ nvidia-smi -L
 
 exec > >(tee -a "$PBS_O_WORKDIR/runs/bottleneck_smoke_out.txt") 2>&1
 
-python -u scripts/smoketest_bottleneck.py --video "${VIDEO:-$HOME/sample_av.mp4}"
+python -u scripts/smoketest_bottleneck.py --model "${MODEL:-qwen3-omni}" --video "${VIDEO:-$HOME/sample_av.mp4}"
 
 echo "=== Done $(date) ==="

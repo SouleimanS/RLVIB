@@ -30,23 +30,25 @@ class ResidualBottleneck(nn.Module):
         return x + self.fc2(self.act(self.fc1(x)))
 
 
-def attach_bottlenecks(qwen, dim: int = 2048):
+def attach_bottlenecks(model, dim: int | None = None):
     """Freeze the whole model; attach trainable ResidualBottlenecks on the audio +
-    vision adapters via forward hooks.
+    vision adapters via forward hooks. `dim` defaults to the model's adapter output
+    dim (`model.hidden_dim`: 2048 for Qwen3-Omni, 3584 for Qwen2.5-Omni / VideoLLaMA2).
 
     Returns (ModuleDict of bottlenecks, list of hook handles).
     Detach with:  for h in handles: h.remove()
     """
-    for p in qwen.model.parameters():
+    dim = dim or getattr(model, "hidden_dim", 2048)
+    for p in model.model.parameters():
         p.requires_grad_(False)
 
     bottlenecks = nn.ModuleDict({
         "audio": ResidualBottleneck(dim),
         "vision": ResidualBottleneck(dim),
-    }).to(qwen.device, qwen.dtype)
+    }).to(model.device, model.dtype)
 
     handles = []
-    for name, adapter in qwen.adapter_modules().items():
+    for name, adapter in model.adapter_modules().items():
         bn = bottlenecks[name]
 
         def hook(_module, _inputs, output, bn=bn):

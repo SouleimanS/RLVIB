@@ -43,8 +43,9 @@ nvidia-smi -L
 exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_avhbench \
+    --model "${MODEL:-qwen3-omni}" \
     --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
     --limit "${LIMIT:-100}" \
-    --out runs/avhbench_baseline.json
+    --out "runs/avhbench_${MODEL:-qwen3-omni}.json"
 
 echo "=== Done $(date) ==="

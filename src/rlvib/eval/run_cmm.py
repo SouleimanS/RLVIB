@@ -16,7 +16,7 @@ import time
 
 from rlvib.data.cmm import AUDIO_SUBSETS, CMMDataset
 from rlvib.eval.metrics import parse_yes_no
-from rlvib.models import QwenOmni
+from rlvib.models import get_model
 
 
 def _scores(pairs: list) -> dict:
@@ -34,6 +34,7 @@ def _scores(pairs: list) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--json-path", required=True)
     ap.add_argument("--data-root", required=True)
     ap.add_argument("--subsets", nargs="*", default=None, help="sub_category filter; default all")
@@ -42,7 +43,7 @@ def main() -> int:
     ap.add_argument("--out", default="runs/cmm_baseline.json")
     args = ap.parse_args()
 
-    model = QwenOmni()
+    model = get_model(args.model)
     ds = CMMDataset(args.json_path, args.data_root, sub_categories=args.subsets)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"CMM: {n}/{len(ds)} questions | subsets={args.subsets or 'all'}", flush=True)

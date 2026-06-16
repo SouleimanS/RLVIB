@@ -1,0 +1,33 @@
+# RLVIB — VideoLLaMA2 (audio-visual arm) environment.
+#
+# SEPARATE from environment.yml on purpose: VideoLLaMA2's audio_visual branch pins
+# transformers==4.42.3 / torch==2.2.0, INCOMPATIBLE with the transformers>=5.2 that
+# Qwen3-Omni / Qwen2.5-Omni need. So this comparison arm runs in its own env.
+#
+# Setup (ABCI login node):
+#   conda env create -f environment-vllama2.yml
+#   conda activate rlvib_vl2
+#   git clone -b audio_visual https://github.com/DAMO-NLP-SG/VideoLLaMA2 third_party/VideoLLaMA2
+#   pip install -e third_party/VideoLLaMA2           # pulls transformers==4.42.3, torch==2.2.0, decord, ...
+#   pip install flash-attn==2.5.8 --no-build-isolation
+#   huggingface-cli download DAMO-NLP-SG/VideoLLaMA2.1-7B-AV
+#
+# Inference: model_init(path) -> (model, processor, tokenizer);
+#            processor['video'](path, va=True) extracts AV from the mp4;
+#            mm_infer(tensor, question, model=, tokenizer=, modal='video').
+# Bottleneck attach: model.model.mm_projector (video) + model.model.mm_projector_a (audio),
+#                    LLM hidden dim 3584.
+
+name: rlvib_vl2
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+  - git
+  - ffmpeg          # audio extraction from video (va=True)
+  - pip:
+      - numpy
+      # torch / transformers / decord / etc. are pinned by `pip install -e VideoLLaMA2`.

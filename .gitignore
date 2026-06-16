@@ -31,6 +31,9 @@ dist/
 /data/
 /datasets/
 
+# --- Vendored third-party repos (e.g. VideoLLaMA2) ---
+/third_party/
+
 # --- OS / editor ---
 .DS_Store
 *.swp
