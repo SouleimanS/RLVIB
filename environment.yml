@@ -5,8 +5,8 @@
 # works on the cluster and on CPU-only boxes (it just reports CUDA unavailable
 # where there's no GPU). See the pip section for the CUDA-version caveat.
 #
-#   Create:   mamba env create -f environment.yml
-#   Update:   mamba env update -f environment.yml --prune
+#   Create:   conda env create -f environment.yml
+#   Update:   conda env update -f environment.yml --prune
 #   Activate: conda activate rlvib
 #
 # This is a deliberately MINIMAL base. RL / model libraries get added as the

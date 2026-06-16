@@ -5,8 +5,8 @@
 Create / update the conda env from `environment.yml`:
 
 ```bash
-mamba env create -f environment.yml             # first time
-mamba env update -f environment.yml --prune     # after editing the file
+conda env create -f environment.yml             # first time
+conda env update -f environment.yml --prune     # after editing the file
 ```
 
 ### Activate
