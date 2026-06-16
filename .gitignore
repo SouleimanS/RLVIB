@@ -10,26 +10,26 @@ dist/
 .mypy_cache/
 .ipynb_checkpoints/
 
-# --- Environments ---
-.venv/
-venv/
-env/
-envs/
+# --- Environments (top-level virtualenvs; anchored so src/ package dirs aren't ignored) ---
+/.venv/
+/venv/
+/env/
+/envs/
 
-# --- Experiment artifacts (reproducible from code + data; not tracked) ---
-runs/
-outputs/
-checkpoints/
+# --- Experiment artifacts (top-level; reproducible from code + data) ---
+/runs/
+/outputs/
+/checkpoints/
+/wandb/
+/logs/
 *.ckpt
 *.pt
 *.pth
-wandb/
-logs/
 *.qsub.log
 
-# --- Data ---
-data/
-datasets/
+# --- Data (top-level dataset dirs; anchored so src/rlvib/data is tracked) ---
+/data/
+/datasets/
 
 # --- OS / editor ---
 .DS_Store
