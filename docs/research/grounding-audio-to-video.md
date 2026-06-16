@@ -61,6 +61,27 @@ submodules so their outputs pass through it before entering the Thinker.
 
 ---
 
+## Step 2 results — AVHBench baseline (frozen Qwen3-Omni, 2026-06-16)
+
+Eval pipeline (`rlvib.eval.run_avhbench`) works end-to-end; yes/no parse rate 1.00.
+
+Sanity run (first 100 items; full ~5,302-sample run pending for the locked baseline):
+
+| Task | acc | n |
+|---|---|---|
+| Audio-driven Video Hallucination ("is X visible?") | 0.88 | 25 |
+| Video-driven Audio Hallucination ("is X audible?") | 0.65 | 49 |
+| AV Matching (do audio & video correspond?) | 0.62 | 26 |
+| overall | 0.70 | 100 |
+
+**Pattern (the meaningful part):** strong on *video* hallucination, weaker on
+*audio*, weakest on *AV Matching* — the model leans on vision and is worst at
+genuine audio-visual **correspondence**, exactly the grounding axis this project
+targets (AV-Matching is also the abstention-on-mismatch task). Clear headroom
+where it matters. (Small n → wide CIs.)
+
+---
+
 ## 0. TL;DR — decisions
 
 1. **Drop the *video-only* VIB.** A single-stream VIB compresses visual
