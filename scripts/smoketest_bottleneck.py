@@ -44,7 +44,8 @@ def main() -> int:
     print("\n=== gradient flow through the frozen model (dummy LM loss) ===", flush=True)
     try:
         inputs = m.build_inputs(msg)
-        out = m.model(**inputs, labels=inputs["input_ids"])
+        lm = getattr(m.model, "thinker", m.model)  # Qwen3 full Omni -> .thinker; Qwen2.5 thinker-class -> itself
+        out = lm(**inputs, labels=inputs["input_ids"])
         loss = out.loss if hasattr(out, "loss") else out["loss"]
         loss.backward()
         for name, bn in bottlenecks.items():
