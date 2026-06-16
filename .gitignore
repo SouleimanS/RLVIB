@@ -25,6 +25,7 @@ checkpoints/
 *.pth
 wandb/
 logs/
+*.qsub.log
 
 # --- Data ---
 data/

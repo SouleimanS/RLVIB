@@ -1,0 +1,42 @@
+#!/bin/bash
+#PBS -N rlvib_job
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o rlvib_job.qsub.log
+
+# Reusable training/eval template for RLVIB on ABCI (NVIDIA H200 / rt_HF).
+#   Submit:  qsub scripts/rlvib.qsub
+#
+# Adapted from the av_ib DPO job. Fill in the `python -m ...` entrypoint (and any
+# dataset-presence guards) once the training code lands.
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+# --- environment ---
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"   # torch wheel's bundled CUDA libs
+export CUDA_VISIBLE_DEVICES=0                                     # single GPU; rt_HF gives 8 — widen as needed
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# export TRANSFORMERS_OFFLINE=1                                   # uncomment once weights are cached on the node
+# export HF_DATASETS_OFFLINE=1
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+# --- run (tee stdout+stderr into the run log) ---
+exec > >(tee -a "$PBS_O_WORKDIR/runs/rlvib_job_out.txt") 2>&1
+
+# TODO: replace with the real entrypoint, e.g.
+# python -u -m rlvib.train \
+#     --config configs/example.yaml \
+#     --log-path runs/example.jsonl \
+#     --ckpt-path runs/example_final.pt
+echo "No entrypoint wired yet — edit scripts/rlvib.qsub."
+
+echo "=== Done $(date) ==="

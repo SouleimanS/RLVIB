@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -N rlvib_gpucheck
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=00:05:00
+#PBS -j oe
+#PBS -o rlvib_gpucheck.qsub.log
+
+# Minimal GPU sanity check: confirms the `rlvib` env sees CUDA on a compute node.
+#   Submit:  qsub scripts/gpucheck.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi
+python -c "import torch; print(torch.__version__, '| cuda:', torch.cuda.is_available(), '| build:', torch.version.cuda); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'GPU NOT VISIBLE')"
+echo "=== Done $(date) ==="

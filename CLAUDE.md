@@ -24,3 +24,25 @@ On a machine where `conda activate` already works in your shell, just:
 ```bash
 conda activate rlvib
 ```
+
+## Running on ABCI (PBS / qsub)
+
+GPUs are only available inside a batch/interactive job on the `rt_HF` queue —
+login nodes are CPU-only (so `torch.cuda.is_available()` is `False` there, which
+is expected). Job scripts live in `scripts/`.
+
+**Verified working (2026-06):** `torch 2.12.0+cu130`, `cuda: True` on
+8× NVIDIA H200 (~141 GB each), ABCI driver `580.105.08` (CUDA 13.0). The cu130
+wheel runs fine on this driver — no cu12 build needed.
+
+```bash
+qsub scripts/gpucheck.qsub                                      # ~5-min GPU sanity check
+qsub -I -P gae50891 -q rt_HF -l select=1 -l walltime=01:00:00   # interactive GPU session
+qsub scripts/rlvib.qsub                                         # submit a batch job
+qstat -u "$USER"                                                # check queue status
+```
+
+Job-script conventions (see `scripts/rlvib.qsub`): `cd "$PBS_O_WORKDIR"`, source
+conda + `conda activate rlvib`, set `LD_LIBRARY_PATH="$CONDA_PREFIX/lib:…"` so the
+pip torch wheel finds its bundled CUDA libs, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`,
+and `tee` output into `runs/`. Group code `-P gae50891`, queue `-q rt_HF`.
