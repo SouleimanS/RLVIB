@@ -61,24 +61,37 @@ submodules so their outputs pass through it before entering the Thinker.
 
 ---
 
-## Step 2 results — AVHBench baseline (frozen Qwen3-Omni, 2026-06-16)
+## Step 2 results — frozen Qwen3-Omni baselines (2026-06-16)
 
-Eval pipeline (`rlvib.eval.run_avhbench`) works end-to-end; yes/no parse rate 1.00.
+Eval harness (`rlvib.eval.run_{avhbench,cmm,dave}`) works end-to-end; parse rates
+~1.0. Numbers below are 100-sample sanity slices unless noted (full runs pending
+to tighten CIs); the *patterns* are the signal.
 
-Sanity run (first 100 items; full ~5,302-sample run pending for the locked baseline):
+**DAVE — modality-ablation ΔAcc (the grounding headline).** Same MC question,
+media swapped per mode (n=100 each; effectively ~4-way, chance 0.25):
 
-| Task | acc | n |
-|---|---|---|
-| Audio-driven Video Hallucination ("is X visible?") | 0.88 | 25 |
-| Video-driven Audio Hallucination ("is X audible?") | 0.65 | 49 |
-| AV Matching (do audio & video correspond?) | 0.62 | 26 |
-| overall | 0.70 | 100 |
+| mode | acc |
+|---|---|
+| audio_visual_alignment (video+audio) | 0.37 |
+| visual_only (silent video) | 0.34 |
+| audio_only | 0.32 |
+| text_only (language prior) | 0.25 |
 
-**Pattern (the meaningful part):** strong on *video* hallucination, weaker on
-*audio*, weakest on *AV Matching* — the model leans on vision and is worst at
-genuine audio-visual **correspondence**, exactly the grounding axis this project
-targets (AV-Matching is also the abstention-on-mismatch task). Clear headroom
-where it matters. (Small n → wide CIs.)
+=> text_only sits at chance (no language shortcut — DAVE isn't text-solvable).
+Audio alone helps a little (0.32 > 0.25). **But AV − visual_only is only +0.03**:
+with video present the model barely uses audio — a video-dominant shortcut. Growing
+**AV − visual_only** is the bottleneck's explicit target.
+
+**AVHBench (100-sample slice).** overall 0.70 | AV-Matching 0.62 (weakest) |
+Video-driven Audio Hallucination 0.65 | Audio-driven Video Hallucination 0.88.
+=> strong on video, weak on audio + correspondence.
+
+**CMM visual-language (100, video-only slice).** PA 0.98 / HR 0.80 / acc 0.89.
+=> nails present objects but hallucinates ~20% of absent ones via spurious
+correlation. (Audio subsets pending the full run.)
+
+**Three headroom metrics the bottleneck must move:** DAVE `AV − visual_only`
+(~+0.03; audio under-used), AVHBench AV-Matching (0.62), CMM HR (0.80).
 
 ---
 
