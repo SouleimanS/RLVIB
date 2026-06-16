@@ -81,7 +81,7 @@ class Qwen25Omni:
                 **inputs, thinker_max_new_tokens=max_new_tokens, do_sample=False,
                 use_audio_in_video=use_audio_in_video,
             )
-        except TypeError:  # fall back to the standard kwarg
+        except (TypeError, ValueError):  # Thinker class wants plain max_new_tokens
             out = self.model.generate(
                 **inputs, max_new_tokens=max_new_tokens, do_sample=False,
                 use_audio_in_video=use_audio_in_video,
