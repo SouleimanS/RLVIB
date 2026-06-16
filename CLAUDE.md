@@ -1,5 +1,9 @@
 # RLVIB
 
+Clean-room rebuild of an earlier audio-visual grounding project (`av_ib`): the
+prior code and the local AVQA dataset copy are corrupted and are **not** reused.
+Everything here is implemented from scratch against a freshly sourced dataset.
+
 ## Environment
 
 Create / update the conda env from `environment.yml`:
