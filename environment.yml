@@ -1,0 +1,52 @@
+# RLVIB — conda environment
+#
+# Target: ABCI cluster (NVIDIA H200 / Hopper).
+# The PyTorch wheel from PyPI bundles its own CUDA runtime, so the same spec
+# works on the cluster and on CPU-only boxes (it just reports CUDA unavailable
+# where there's no GPU). See the pip section for the CUDA-version caveat.
+#
+#   Create:   mamba env create -f environment.yml
+#   Update:   mamba env update -f environment.yml --prune
+#   Activate: conda activate rlvib
+#
+# This is a deliberately MINIMAL base. RL / model libraries get added as the
+# design firms up (see the commented list at the bottom).
+
+name: rlvib
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+
+  # --- scientific stack ---
+  - numpy
+  - scipy
+
+  # --- config / utilities ---
+  - pyyaml
+  - tqdm
+
+  # --- dev / quality ---
+  - pytest
+  - ruff
+
+  - pip:
+      # PyTorch. The default PyPI wheel currently resolves to a CUDA 13.0 build,
+      # which runs on ABCI H200 only with a recent driver (~R580+). If the
+      # cluster driver is older, force a CUDA 12.x build by prepending an index
+      # URL above this line, e.g.:
+      #   --index-url https://download.pytorch.org/whl/cu126
+      # (or .../whl/cpu for a CPU-only install).
+      - torch
+
+      # --- add later, as the RL design firms up ---
+      # - transformers
+      # - trl
+      # - peft
+      # - accelerate
+      # - datasets
+      # - gymnasium
+      # - wandb
