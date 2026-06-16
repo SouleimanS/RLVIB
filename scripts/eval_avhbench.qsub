@@ -1,0 +1,49 @@
+#!/bin/bash
+#PBS -N rlvib_avhbench_baseline
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o rlvib_avhbench_baseline.qsub.log
+
+# Frozen Qwen3-Omni baseline on AVHBench (3 binary tasks).
+# See src/rlvib/eval/run_avhbench.py and docs/research/grounding-audio-to-video.md.
+#
+# First, on the LOGIN node, download AVHBench (Google Drive) and point these at it:
+#   pip install gdown
+#   mkdir -p ~/data/AVHBench
+#   gdown 1KcYDAv9lLy3hsx5rWdfRqMFV2NYcZ94W -O ~/data/AVHBench/qa.json
+#   gdown 10-Qp8zxA3ITT-ileEnCgJkf5Nzx1wry7 -O ~/data/AVHBench/videos.zip && \
+#     unzip -q ~/data/AVHBench/videos.zip -d ~/data/AVHBench/videos
+#   (check the unpacked layout; set AVHBENCH_VIDEOS to wherever the {id}.mp4 files land)
+#
+#   LIMIT=100 qsub -v LIMIT scripts/eval_avhbench.qsub   # quick sanity baseline
+#   LIMIT=0   qsub -v LIMIT scripts/eval_avhbench.qsub   # full run
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate rlvib
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+AVHBENCH_QA="${AVHBENCH_QA:-$HOME/data/AVHBench/qa.json}"
+AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$HOME/data/AVHBench/videos}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_avhbench \
+    --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
+    --limit "${LIMIT:-100}" \
+    --out runs/avhbench_baseline.json
+
+echo "=== Done $(date) ==="
