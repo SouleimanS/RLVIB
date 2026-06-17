@@ -56,7 +56,8 @@ dependencies:
       # flash-attn is optional (faster attention); needs a manual build:
       #   pip install flash-attn --no-build-isolation
 
-      - datasets                     # HF datasets (DAVE etc.)
+      - datasets                     # HF datasets (DAVE, OmniInstruct-v1 training data)
+      - torchcodec                   # datasets>=5 audio decoding (OmniInstruct Audio feature)
       - gdown                        # Google Drive downloads (AVHBench)
 
       # --- add later, as the RL design firms up ---
