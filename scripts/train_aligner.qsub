@@ -29,6 +29,7 @@ nvidia-smi -L
 exec > >(tee -a "$PBS_O_WORKDIR/runs/train_aligner_out.txt") 2>&1
 
 python -u scripts/train_aligner.py --model "${MODEL:-qwen3-omni}" \
-    --n "${N:-150}" --epochs "${EPOCHS:-30}"
+    --n "${N:-150}" --epochs "${EPOCHS:-40}" \
+    --margin "${MARGIN:-0.1}" --det-w "${DETW:-1.0}"
 
 echo "=== Done $(date) ==="
