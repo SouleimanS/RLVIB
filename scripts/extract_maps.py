@@ -15,6 +15,7 @@ audio-bias. Prints token counts + grid so we can verify the reshape before trust
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import random
 
@@ -25,6 +26,34 @@ from rlvib.data import ave
 from rlvib.data.pairs import make_swap_examples
 from rlvib.models import get_model
 from rlvib.models.bottleneck import VariationalBottleneck, attach_bottlenecks, set_bypass
+
+
+def _render_combined(plt, path, audio, vmap, k, heard, seen):
+    """One figure per clip: audio rate (top, full width) + vision-rate frames (grid below)."""
+    if vmap is not None:
+        t = int(vmap.shape[0])
+        ncol = min(t, 4)
+        nrow = math.ceil(t / ncol)
+        vmin, vmax = float(vmap.min()), float(vmap.max())
+    else:
+        t, ncol, nrow = 0, 1, 0
+    fig = plt.figure(figsize=(3.2 * max(ncol, 2), 2.6 + 2.2 * nrow))
+    gs = fig.add_gridspec(nrow + 1, max(ncol, 1), height_ratios=[1.1] + [1] * nrow)
+    ax = fig.add_subplot(gs[0, :])
+    ax.plot(audio)
+    ax.set_title("audio rate -- KL bits per token (time ->)")
+    ax.set_xlabel("audio token (time)")
+    ax.set_ylabel("KL bits")
+    for fi in range(t):
+        r, c = divmod(fi, ncol)
+        axf = fig.add_subplot(gs[1 + r, c])
+        axf.imshow(vmap[fi], cmap="hot", vmin=vmin, vmax=vmax)
+        axf.set_title(f"frame {fi}", fontsize=8)
+        axf.axis("off")
+    fig.suptitle(f"clip{k}: heard={heard}  |  seen={seen}  -- vision rate per patch (shared scale)")
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
 
 
 def main() -> int:
@@ -80,6 +109,7 @@ def main() -> int:
         np.save(os.path.join(args.out, f"clip{k}_audio_kl.npy"), a)
         np.save(os.path.join(args.out, f"clip{k}_vision_kl.npy"), v)
 
+        vmap = None
         if grid_l is not None:
             t, h, w = grid_l
             hm, wm = h // merge, w // merge
@@ -87,24 +117,14 @@ def main() -> int:
                 vmap = v.reshape(t, hm, wm)
                 np.save(os.path.join(args.out, f"clip{k}_vision_kl_grid.npy"), vmap)
                 print(f"     vision reshaped -> (t={t}, h={hm}, w={wm})  OK", flush=True)
-                if plt is not None:
-                    for fi in range(t):
-                        plt.imsave(os.path.join(args.out, f"clip{k}_frame{fi}_visionkl.png"),
-                                   vmap[fi], cmap="hot")
             else:
                 print(f"     vision reshape MISMATCH: t*h/m*w/m={t * hm * wm} != "
                       f"vision_tokens={v.shape[0]} (inspect layout/merge before trusting)",
                       flush=True)
 
-        if plt is not None:
-            plt.figure(figsize=(6, 2))
-            plt.plot(a)
-            plt.title(f"clip{k} audio rate (heard={rec['audio_event']})")
-            plt.xlabel("audio token (time)")
-            plt.ylabel("KL bits")
-            plt.tight_layout()
-            plt.savefig(os.path.join(args.out, f"clip{k}_audio_kl.png"))
-            plt.close()
+        if plt is not None:  # one combined PNG per clip: audio rate on top, vision frames below
+            _render_combined(plt, os.path.join(args.out, f"clip{k}_combined.png"),
+                             a, vmap, k, rec["audio_event"], rec["visual_event"])
 
     for hd in handles:
         hd.remove()
