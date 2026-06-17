@@ -28,6 +28,6 @@ nvidia-smi -L
 exec > >(tee -a "$PBS_O_WORKDIR/runs/localize_out.txt") 2>&1
 
 python -u scripts/localize_cosine.py --model "${MODEL:-qwen3-omni}" --n "${N:-6}" \
-    ${ALIGNER:+--aligner "$ALIGNER" --out runs/localize_aligned}
+    ${ALIGNER:+--aligner "$ALIGNER" --out runs/localize_aligned} ${SILENCE:+--silence}
 
 echo "=== Done $(date) ==="

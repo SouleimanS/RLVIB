@@ -64,8 +64,10 @@ def _corr(x, y):
     return float(np.corrcoef(x, y)[0, 1])
 
 
-def _render(plt, path, video_path, Mm, Ms, ev_match, ev_swap, c_swap, c_sal, peak):
-    t = Mm.shape[0]
+def _render(plt, path, video_path, rows, title):
+    """rows: list of (map (t,h,w), tag). One row per map, overlaid on sampled frames."""
+    nrows = len(rows)
+    t = rows[0][0].shape[0]
     nsel = min(t, 4)
     sel = np.linspace(0, t - 1, nsel).round().astype(int)
     try:
@@ -77,13 +79,11 @@ def _render(plt, path, video_path, Mm, Ms, ev_match, ev_swap, c_swap, c_sal, pea
         lo, hi = np.percentile(a, 5), np.percentile(a, 95)
         return np.clip((a - lo) / (hi - lo + 1e-6), 0.0, 1.0)
 
-    fig = plt.figure(figsize=(3.2 * nsel, 6.2))
-    fig.suptitle(f"match-audio = {ev_match}   |   swap-audio = {ev_swap}\n"
-                 f"corr(match,swap)={c_swap:+.2f}   corr(match,saliency)={c_sal:+.2f}   "
-                 f"peak={peak:+.2f}   (low swap-corr = audio-dependent = good)", fontsize=10)
-    for col, fi in enumerate(sel):
-        for row, (M, tag) in enumerate(((Mm, "match"), (Ms, "swap"))):
-            ax = fig.add_subplot(2, nsel, row * nsel + col + 1)
+    fig = plt.figure(figsize=(3.2 * nsel, 0.8 + 3.0 * nrows))
+    fig.suptitle(title, fontsize=10)
+    for r, (M, tag) in enumerate(rows):
+        for col, fi in enumerate(sel):
+            ax = fig.add_subplot(nrows, nsel, r * nsel + col + 1)
             heat = norm(M[fi])
             if frames is not None:
                 H, W = frames[fi].shape[:2]
@@ -96,7 +96,7 @@ def _render(plt, path, video_path, Mm, Ms, ev_match, ev_swap, c_swap, c_sal, pea
                 ax.imshow(heat, cmap="turbo", vmin=0.0, vmax=1.0)
             ax.set_title(f"{tag}  frame {fi}", fontsize=8)
             ax.axis("off")
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
@@ -107,6 +107,8 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=6)
     ap.add_argument("--out", default="runs/localize")
     ap.add_argument("--aligner", default=None, help="path to a trained AVAligner checkpoint")
+    ap.add_argument("--silence", action="store_true",
+                    help="also compute the silence control (peak should collapse with no audio)")
     args = ap.parse_args()
 
     m = get_model(args.model)
@@ -165,7 +167,7 @@ def main() -> int:
     for it in items:
         by_cat.setdefault(it["category"], []).append(it)
 
-    corrs_swap, corrs_sal, peaks = [], [], []
+    corrs_swap, corrs_sal, peaks, corrs_sil, peaks_sil = [], [], [], [], []
     for k in range(min(args.n, len(items))):
         it = items[k]
         other = [c for c in by_cat if c != it["category"]]
@@ -193,12 +195,38 @@ def main() -> int:
         corrs_swap.append(c_swap)
         corrs_sal.append(c_sal)
         peaks.append(peak)
-        print(f"[{k}] match={it['category'][:26]:26s} swap={jt['category'][:26]:26s} "
-              f"corr(match,swap)={c_swap:+.3f}  corr(match,sal)={c_sal:+.3f}  peak={peak:+.2f}",
-              flush=True)
+        rows = [(Mm, "match"), (Ms, "swap")]
+        line = (f"[{k}] match={it['category'][:22]:22s} swap={jt['category'][:22]:22s} "
+                f"corr(swap)={c_swap:+.3f} corr(sal)={c_sal:+.3f} peak={peak:+.2f}")
+
+        c_sil = peak_sil = float("nan")
+        if args.silence:
+            from rlvib.data.pairs import silence_audio
+            sil_path = os.path.join(args.out, f"clip{k}_silent.mp4")
+            rs = None
+            try:
+                silence_audio(it["video_path"], sil_path)
+                rs = run(sil_path)
+            except Exception as e:  # noqa: BLE001
+                print(f"     silence build/run failed: {e}", flush=True)
+            if rs is not None:
+                Msil = _cosmap(rs[0], V_i, aligner).reshape(t, hm, wm)
+                c_sil = _corr(Mm, Msil)
+                peak_sil = float((Msil.max() - Msil.mean()) / (Msil.std() + 1e-6))
+                corrs_sil.append(c_sil)
+                peaks_sil.append(peak_sil)
+                rows.append((Msil, "silence"))
+                line += f" | corr(silence)={c_sil:+.3f} peak_silence={peak_sil:+.2f}"
+        print(line, flush=True)
+
         if plt is not None:
+            title = (f"match={it['category']}  |  swap={jt['category']}\n"
+                     f"corr(match,swap)={c_swap:+.2f}  corr(match,sal)={c_sal:+.2f}  peak={peak:+.2f}"
+                     + (f"   corr(match,silence)={c_sil:+.2f}  peak_silence={peak_sil:+.2f}"
+                        if args.silence else "")
+                     + "   (low corr + collapsing peak = audio-dependent)")
             _render(plt, os.path.join(args.out, f"clip{k}_localize.png"),
-                    it["video_path"], Mm, Ms, it["category"], jt["category"], c_swap, c_sal, peak)
+                    it["video_path"], rows, title)
 
     for hnd in handles:
         hnd.remove()
@@ -209,6 +237,10 @@ def main() -> int:
 
     print(f"\nN={len(peaks)}  mean corr(match,swap)={_mean(corrs_swap):+.3f}  "
           f"mean corr(match,sal)={_mean(corrs_sal):+.3f}  mean peak={_mean(peaks):+.2f}")
+    if corrs_sil:
+        print(f"        silence: mean corr(match,silence)={_mean(corrs_sil):+.3f}  "
+              f"peak_match={_mean(peaks):+.2f}  peak_silence={_mean(peaks_sil):+.2f}  "
+              f"(faithful => peak_silence << peak_match)")
     print("read: LOW corr(match,swap) => map CHANGES with audio => audio-dependent (good); "
           "HIGH => audio-invariant saliency.")
     print("      LOW corr(match,sal) => not just visual-norm saliency; HIGH peak => map is localized.")

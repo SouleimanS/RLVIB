@@ -37,6 +37,15 @@ def swap_audio(video_in: str, audio_src: str, out_path: str) -> str:
     return out_path
 
 
+def silence_audio(video_in: str, out_path: str) -> str:
+    """Replace the audio with digital silence (keeps an audio track so the encoder runs)."""
+    _run(["ffmpeg", "-y", "-loglevel", "error", "-i", video_in,
+          "-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=16000",
+          "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
+          "-shortest", out_path])
+    return out_path
+
+
 def make_swap_examples(items: list[dict], n: int, out_dir: str,
                        all_categories: list[str], k: int = 4,
                        rng: random.Random | None = None) -> list[dict]:
