@@ -18,6 +18,7 @@ import argparse
 import math
 import os
 import random
+import shutil
 
 import numpy as np
 import torch
@@ -28,8 +29,15 @@ from rlvib.models import get_model
 from rlvib.models.bottleneck import VariationalBottleneck, attach_bottlenecks, set_bypass
 
 
-def _render_combined(plt, path, audio, vmap, k, heard, seen):
-    """One figure per clip: audio rate (top, full width) + vision-rate frames (grid below)."""
+def _san(s: str) -> str:
+    """Filesystem-safe slug for an event name (categories have spaces/commas)."""
+    return "".join(c if c.isalnum() else "-" for c in s).strip("-")[:28]
+
+
+def _render_combined(plt, path, audio, vmap, k, heard, seen, prompt):
+    """One figure per clip: header + prompt, audio rate (full width), vision frames (grid)."""
+    header = f"clip{k}:   heard = {heard}    |    seen = {seen}\n\n{prompt}"
+    nlines = header.count("\n") + 1
     if vmap is not None:
         t = int(vmap.shape[0])
         ncol = min(t, 4)
@@ -37,11 +45,16 @@ def _render_combined(plt, path, audio, vmap, k, heard, seen):
         vmin, vmax = float(vmap.min()), float(vmap.max())
     else:
         t, ncol, nrow = 0, 1, 0
-    fig = plt.figure(figsize=(3.2 * max(ncol, 2), 2.6 + 2.2 * nrow))
-    gs = fig.add_gridspec(nrow + 1, max(ncol, 1), height_ratios=[1.1] + [1] * nrow)
+    head_in = 0.20 * nlines + 0.3
+    fig_h = head_in + 2.4 + 2.3 * nrow
+    fig = plt.figure(figsize=(3.4 * max(ncol, 2), fig_h))
+    fig.text(0.01, 0.99, header, va="top", ha="left", fontsize=8, family="monospace")
+    top = 1.0 - head_in / fig_h
+    gs = fig.add_gridspec(nrow + 1, max(ncol, 1), height_ratios=[1.2] + [1] * nrow,
+                          top=top, bottom=0.04, left=0.07, right=0.98, hspace=0.4, wspace=0.08)
     ax = fig.add_subplot(gs[0, :])
     ax.plot(audio)
-    ax.set_title("audio rate -- KL bits per token (time ->)")
+    ax.set_title("audio rate -- KL bits per token (time ->)", fontsize=9)
     ax.set_xlabel("audio token (time)")
     ax.set_ylabel("KL bits")
     for fi in range(t):
@@ -50,8 +63,6 @@ def _render_combined(plt, path, audio, vmap, k, heard, seen):
         axf.imshow(vmap[fi], cmap="hot", vmin=vmin, vmax=vmax)
         axf.set_title(f"frame {fi}", fontsize=8)
         axf.axis("off")
-    fig.suptitle(f"clip{k}: heard={heard}  |  seen={seen}  -- vision rate per patch (shared scale)")
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(path, dpi=120)
     plt.close(fig)
 
@@ -122,9 +133,13 @@ def main() -> int:
                       f"vision_tokens={v.shape[0]} (inspect layout/merge before trusting)",
                       flush=True)
 
-        if plt is not None:  # one combined PNG per clip: audio rate on top, vision frames below
+        seen, heard = rec["visual_event"], rec["audio_event"]
+        prompt = ave.format_mcq(rec["question"], rec["options"])
+        shutil.copy(rec["video_path"],  # the swapped clip the model saw/heard, for reference
+                    os.path.join(args.out, f"clip{k}_video_seen-{_san(seen)}_heard-{_san(heard)}.mp4"))
+        if plt is not None:  # one combined PNG per clip: header+prompt, audio rate, vision frames
             _render_combined(plt, os.path.join(args.out, f"clip{k}_combined.png"),
-                             a, vmap, k, rec["audio_event"], rec["visual_event"])
+                             a, vmap, k, heard, seen, prompt)
 
     for hd in handles:
         hd.remove()
