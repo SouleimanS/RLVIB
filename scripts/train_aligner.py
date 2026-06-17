@@ -35,10 +35,10 @@ def _pool(t):
 def _extract(model, items, cache_path):
     if os.path.exists(cache_path):
         d = torch.load(cache_path, weights_only=False)
-        if isinstance(d, dict) and "feats" in d:
-            print(f"loading cached features <- {cache_path}", flush=True)
+        if isinstance(d, dict) and "feats" in d and len(d["feats"]) >= 0.9 * len(items):
+            print(f"loading {len(d['feats'])} cached features <- {cache_path}", flush=True)
             return d["feats"], d.get("silence")
-        print("cache lacks the silence vector; re-extracting", flush=True)
+        print("cache missing silence or too small for --n; re-extracting", flush=True)
 
     adapters = model.adapter_modules()
     cap: dict = {}
