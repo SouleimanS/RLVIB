@@ -30,4 +30,5 @@ dependencies:
   - ffmpeg          # audio extraction from video (va=True)
   - pip:
       - numpy
+      - "setuptools<81"   # imageio_ffmpeg/moviepy import pkg_resources (removed in setuptools>=81)
       # torch / transformers / decord / etc. are pinned by `pip install -e VideoLLaMA2`.
