@@ -19,14 +19,23 @@ import torch.nn.functional as F
 from rlvib.models.bottleneck import set_bypass, total_kl
 
 
-def answer_logprob(model, messages, letter: str, use_audio_in_video: bool = True):
-    """log p(first generated token == `letter`) given prompt + media (keeps grad)."""
+def answer_logp_vec(model, messages, use_audio_in_video: bool = True):
+    """First-token log-prob vector over the vocab (keeps grad). One forward; index as
+    many candidate answers as needed (e.g. chosen & rejected) from the same result."""
     inputs = model.build_inputs(messages, use_audio_in_video=use_audio_in_video)
     lm = getattr(model.model, "thinker", model.model)  # Qwen3 -> .thinker; Qwen2.5 -> itself
     logits = lm(**inputs).logits[:, -1, :]             # next-token logits at the gen position
-    logp = torch.log_softmax(logits.float(), dim=-1)
-    tid = model.processor.tokenizer(letter, add_special_tokens=False).input_ids[0]
-    return logp[0, tid]
+    return torch.log_softmax(logits.float(), dim=-1)[0]
+
+
+def letter_id(model, letter: str) -> int:
+    """Token id for a bare MCQ letter (diag confirmed the model emits the bare letter)."""
+    return model.processor.tokenizer(letter, add_special_tokens=False).input_ids[0]
+
+
+def answer_logprob(model, messages, letter: str, use_audio_in_video: bool = True):
+    """log p(first generated token == `letter`) given prompt + media (keeps grad)."""
+    return answer_logp_vec(model, messages, use_audio_in_video)[letter_id(model, letter)]
 
 
 def mdpo_step(model, bottlenecks, optimizer, batch, beta: float = 0.1,
@@ -63,3 +72,44 @@ def mdpo_step(model, bottlenecks, optimizer, batch, beta: float = 0.1,
     optimizer.step()
     n = max(1, len(batch))
     return {"loss": sum(losses) / n, "margin": sum(margins) / n, "kl": sum(kls) / n}
+
+
+def dpo_step(model, bottlenecks, optimizer, batch, beta: float = 0.1,
+             beta_kl: float = 0.01) -> dict:
+    """Contrastive DPO on explicit chosen/rejected letters (one full-AV input each).
+
+    For audio-swap pairs: chosen = the HEARD event, rejected = the SEEN event, both
+    scored on the SAME swapped clip -> directly penalizes the visual shortcut. A
+    shortcut model puts mass on `rejected`, so `chosen` has room to grow (the gradient
+    the audio-drop counterfactual lacked). Reference = bottleneck bypassed. `p_chosen`
+    = fraction of the batch where the policy already prefers the heard answer.
+    """
+    optimizer.zero_grad()
+    losses, margins, kls, prefs = [], [], [], []
+    for ex in batch:
+        c, r = letter_id(model, ex["chosen_letter"]), letter_id(model, ex["rejected_letter"])
+
+        set_bypass(bottlenecks, False)              # policy
+        lp = answer_logp_vec(model, ex["messages"])
+        kl = total_kl(bottlenecks)
+        cp, rp = lp[c], lp[r]
+
+        with torch.no_grad():                       # reference = bottleneck bypassed
+            set_bypass(bottlenecks, True)
+            lr = answer_logp_vec(model, ex["messages"])
+            cr, rr = lr[c], lr[r]
+            set_bypass(bottlenecks, False)
+
+        margin = beta * ((cp - cr) - (rp - rr))
+        loss = -F.logsigmoid(margin) + beta_kl * kl
+        loss.backward()
+
+        losses.append(float(loss.detach()))
+        margins.append(float(margin.detach()))
+        kls.append(float(kl.detach()) if hasattr(kl, "detach") else float(kl))
+        prefs.append(float((cp > rp).detach()))
+
+    optimizer.step()
+    n = max(1, len(batch))
+    return {"loss": sum(losses) / n, "margin": sum(margins) / n,
+            "kl": sum(kls) / n, "p_chosen": sum(prefs) / n}

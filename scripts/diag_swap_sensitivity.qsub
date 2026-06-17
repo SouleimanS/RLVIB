@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -N rlvib_diag_swap
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -o rlvib_diag_swap.qsub.log
+
+# Confirm the audio-SWAP counterfactual carries signal (base model, no bottleneck).
+# Builds swapped AVE clips (needs ffmpeg) then probes the base. See the .py header.
+#   qsub scripts/diag_swap_sensitivity.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/diag_swap_out.txt") 2>&1
+
+python -u scripts/diag_swap_sensitivity.py --model "${MODEL:-qwen3-omni}" --n "${N:-8}"
+
+echo "=== Done $(date) ==="

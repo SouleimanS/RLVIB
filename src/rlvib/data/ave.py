@@ -80,6 +80,31 @@ def make_mcq(category: str, all_categories: list[str], k: int = 4,
     }
 
 
+def make_hear_mcq(audio_event: str, visual_event: str, all_categories: list[str],
+                  k: int = 4, rng: random.Random | None = None) -> dict:
+    """MCQ for an audio-SWAPPED clip: "which event do you HEAR?".
+
+    Options always include BOTH the heard event (gold) and the seen event (the visual
+    shortcut), plus distractors. Returns the usual fields plus `audio_letter` (gold)
+    and `visual_letter` (the seen shortcut) so the DPO can contrast them.
+    """
+    rng = rng or random.Random()
+    pool = [c for c in all_categories if c not in (audio_event, visual_event)]
+    distractors = rng.sample(pool, min(k - 2, len(pool)))
+    options = [audio_event, visual_event] + distractors
+    rng.shuffle(options)
+    ai, vi = options.index(audio_event), options.index(visual_event)
+    return {
+        "question": "Which event do you HEAR in this clip?",
+        "options": options,
+        "audio_event": audio_event,
+        "visual_event": visual_event,
+        "audio_letter": string.ascii_uppercase[ai],
+        "visual_letter": string.ascii_uppercase[vi],
+        "gold_letter": string.ascii_uppercase[ai],
+    }
+
+
 def format_mcq(question: str, options: list[str]) -> str:
     """Lettered prompt (parseable by rlvib.eval.metrics.parse_choice)."""
     opts = "\n".join(f"({string.ascii_uppercase[i]}) {o}" for i, o in enumerate(options))

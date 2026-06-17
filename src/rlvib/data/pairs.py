@@ -10,6 +10,8 @@ See docs/research/training-data-plan.md. Requires ffmpeg on PATH.
 """
 from __future__ import annotations
 
+import os
+import random
 import subprocess
 
 
@@ -33,3 +35,42 @@ def swap_audio(video_in: str, audio_src: str, out_path: str) -> str:
           "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
           "-shortest", out_path])
     return out_path
+
+
+def make_swap_examples(items: list[dict], n: int, out_dir: str,
+                       all_categories: list[str], k: int = 4,
+                       rng: random.Random | None = None) -> list[dict]:
+    """Materialize up to `n` audio-swapped AVE clips and build "which do you HEAR?" MCQs.
+
+    For each base clip i (visual/seen event A) pick a clip j of a DIFFERENT category
+    (audio/heard event B); write video_i + audio_j to `out_dir` (cached by name). Each
+    record carries the swapped `video_path`, the seen/heard events, the MCQ, and the
+    `audio_letter` (chosen) / `visual_letter` (rejected) for the contrastive DPO.
+    """
+    from rlvib.data import ave  # lazy: avoid any package import cycle
+
+    rng = rng or random.Random()
+    os.makedirs(out_dir, exist_ok=True)
+    by_cat: dict[str, list[dict]] = {}
+    for it in items:
+        by_cat.setdefault(it["category"], []).append(it)
+
+    order = items[:]
+    rng.shuffle(order)
+    out: list[dict] = []
+    for it in order:
+        if len(out) >= n:
+            break
+        other = [c for c in by_cat if c != it["category"]]
+        if not other:
+            continue
+        jt = rng.choice(by_cat[rng.choice(other)])
+        out_path = os.path.join(out_dir, f"{it['video_id']}__aud_{jt['video_id']}.mp4")
+        if not os.path.exists(out_path):
+            try:
+                swap_audio(it["video_path"], jt["video_path"], out_path)
+            except subprocess.CalledProcessError:
+                continue
+        mcq = ave.make_hear_mcq(jt["category"], it["category"], all_categories, k=k, rng=rng)
+        out.append(dict(mcq, video_path=out_path))
+    return out
