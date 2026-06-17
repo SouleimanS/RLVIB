@@ -54,6 +54,7 @@ class VariationalBottleneck(nn.Module):
         nn.init.zeros_(self.out.bias)
         self.bypass = False
         self.last_kl = None
+        self.last_kl_per_token = None  # (..., T) bits the bottleneck allocates per token
 
     def forward(self, x):
         if self.bypass:
@@ -62,7 +63,9 @@ class VariationalBottleneck(nn.Module):
         mu = self.to_mu(h)
         logvar = self.to_logvar(h).clamp(-8.0, 8.0)
         z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
-        self.last_kl = (-0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())).mean()
+        kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
+        self.last_kl = kl_elem.mean()                       # scalar rate for the IB loss
+        self.last_kl_per_token = kl_elem.sum(dim=-1).detach()  # per-token rate -> saliency map
         return x + self.out(z)
 
 
