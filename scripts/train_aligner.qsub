@@ -1,14 +1,15 @@
 #!/bin/bash
-#PBS -N rlvib_localize
+#PBS -N rlvib_train_aligner
 #PBS -P gae50891
 #PBS -q rt_HF
 #PBS -l select=1
-#PBS -l walltime=01:00:00
+#PBS -l walltime=01:30:00
 #PBS -j oe
-#PBS -o rlvib_localize.qsub.log
+#PBS -o rlvib_train_aligner.qsub.log
 
-# Free cosine-similarity audio->video localizer + audio-swap control (no training).
-#   qsub scripts/localize_cosine.qsub
+# Train the audio-visual alignment head on frozen tokens (contrastive). See train_aligner.py.
+#   qsub scripts/train_aligner.qsub
+#   N=300 EPOCHS=50 qsub -v N,EPOCHS scripts/train_aligner.qsub
 
 set -euo pipefail
 cd "$PBS_O_WORKDIR"
@@ -25,9 +26,9 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 echo "=== Node: $(hostname)  Date: $(date) ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/localize_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/train_aligner_out.txt") 2>&1
 
-python -u scripts/localize_cosine.py --model "${MODEL:-qwen3-omni}" --n "${N:-6}" \
-    ${ALIGNER:+--aligner "$ALIGNER" --out runs/localize_aligned}
+python -u scripts/train_aligner.py --model "${MODEL:-qwen3-omni}" \
+    --n "${N:-150}" --epochs "${EPOCHS:-30}"
 
 echo "=== Done $(date) ==="

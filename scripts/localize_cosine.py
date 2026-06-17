@@ -43,8 +43,14 @@ def _flat(x):
     return x.reshape(-1, x.shape[-1])  # (T, d)
 
 
-def _cosmap(audio, visual):
-    """cos(mean audio vector, each visual patch vector) -> (T_v,) in [-1, 1]."""
+def _cosmap(audio, visual, aligner=None):
+    """cos(mean audio vector, each visual patch vector) -> (T_v,) in [-1, 1].
+    With a trained aligner, project both through f_a/f_v first."""
+    if aligner is not None:
+        with torch.no_grad():
+            a = aligner.audio(audio.mean(0).float())
+            v = aligner.visual(visual.float())
+        return (v @ a).cpu().numpy()
     a = audio.mean(0)
     a = a / (a.norm() + 1e-6)
     v = visual / (visual.norm(dim=-1, keepdim=True) + 1e-6)
@@ -100,10 +106,20 @@ def main() -> int:
     ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--n", type=int, default=6)
     ap.add_argument("--out", default="runs/localize")
+    ap.add_argument("--aligner", default=None, help="path to a trained AVAligner checkpoint")
     args = ap.parse_args()
 
     m = get_model(args.model)
     os.makedirs(args.out, exist_ok=True)
+
+    aligner = None
+    if args.aligner:
+        from rlvib.models.aligner import AVAligner
+        ck = torch.load(args.aligner, weights_only=False)
+        aligner = AVAligner(dim=ck["dim"], proj=ck["proj"]).to(m.device).float()
+        aligner.load_state_dict(ck["state_dict"])
+        aligner.eval()
+        print(f"loaded aligner <- {args.aligner}", flush=True)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -165,8 +181,8 @@ def main() -> int:
         if t * hm * wm != V_i.shape[0]:
             print(f"[{k}] grid mismatch ({t*hm*wm} != {V_i.shape[0]}), skip", flush=True)
             continue
-        Mm = _cosmap(A_i, V_i).reshape(t, hm, wm)
-        Ms = _cosmap(A_j, V_i).reshape(t, hm, wm)
+        Mm = _cosmap(A_i, V_i, aligner).reshape(t, hm, wm)
+        Ms = _cosmap(A_j, V_i, aligner).reshape(t, hm, wm)
         sal = V_i.norm(dim=-1).cpu().numpy().reshape(t, hm, wm)
         c_swap, c_sal = _corr(Mm, Ms), _corr(Mm, sal)
         peak = float((Mm.max() - Mm.mean()) / (Mm.std() + 1e-6))
