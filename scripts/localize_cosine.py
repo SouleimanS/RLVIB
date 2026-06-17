@@ -174,6 +174,7 @@ def main() -> int:
         by_cat.setdefault(it["category"], []).append(it)
 
     corrs_swap, corrs_sal, peaks, corrs_sil, peaks_sil = [], [], [], [], []
+    dets_m, dets_sw, dets_sil = [], [], []
     for k in range(min(args.n, len(items))):
         it = items[k]
         other = [c for c in by_cat if c != it["category"]]
@@ -208,12 +209,15 @@ def main() -> int:
         sal = V_i.norm(dim=-1).cpu().numpy().reshape(t, hm, wm)
         c_swap, c_sal = _corr(Mm, Ms), _corr(Mm, sal)
         peak = float((Mm.max() - Mm.mean()) / (Mm.std() + 1e-6))
+        det_m, det_sw = float(Mm.max()), float(Ms.max())  # absolute detection score (max cosine)
         corrs_swap.append(c_swap)
         corrs_sal.append(c_sal)
         peaks.append(peak)
+        dets_m.append(det_m)
+        dets_sw.append(det_sw)
         rows = [(Mm, "match"), (Ms, "swap")]
-        line = (f"[{k}] match={it['category'][:22]:22s} swap={jt['category'][:22]:22s} "
-                f"corr(swap)={c_swap:+.3f} corr(sal)={c_sal:+.3f} peak={peak:+.2f}")
+        line = (f"[{k}] match={it['category'][:20]:20s} swap={jt['category'][:20]:20s} "
+                f"corr(swap)={c_swap:+.3f} peak={peak:+.2f} det_match={det_m:+.3f} det_swap={det_sw:+.3f}")
 
         c_sil = peak_sil = float("nan")
         if args.silence:
@@ -229,10 +233,13 @@ def main() -> int:
                 Msil = _cosmap(rs[0], V_i, aligner).reshape(t, hm, wm)
                 c_sil = _corr(Mm, Msil)
                 peak_sil = float((Msil.max() - Msil.mean()) / (Msil.std() + 1e-6))
+                det_sil = float(Msil.max())
                 corrs_sil.append(c_sil)
                 peaks_sil.append(peak_sil)
+                dets_sil.append(det_sil)
                 rows.append((Msil, "silence"))
-                line += f" | corr(silence)={c_sil:+.3f} peak_silence={peak_sil:+.2f}"
+                line += (f" | corr(silence)={c_sil:+.3f} peak_silence={peak_sil:+.2f} "
+                         f"det_silence={det_sil:+.3f}")
         print(line, flush=True)
 
         if plt is not None:
@@ -253,10 +260,13 @@ def main() -> int:
 
     print(f"\nN={len(peaks)}  mean corr(match,swap)={_mean(corrs_swap):+.3f}  "
           f"mean corr(match,sal)={_mean(corrs_sal):+.3f}  mean peak={_mean(peaks):+.2f}")
+    print(f"        detection (abs max cosine): det_match={_mean(dets_m):+.3f}  "
+          f"det_swap={_mean(dets_sw):+.3f}"
+          + (f"  det_silence={_mean(dets_sil):+.3f}" if dets_sil else ""))
     if corrs_sil:
         print(f"        silence: mean corr(match,silence)={_mean(corrs_sil):+.3f}  "
-              f"peak_match={_mean(peaks):+.2f}  peak_silence={_mean(peaks_sil):+.2f}  "
-              f"(faithful => peak_silence << peak_match)")
+              f"peak_match={_mean(peaks):+.2f}  peak_silence={_mean(peaks_sil):+.2f}")
+        print("        faithful => det_silence << det_match (alignment drops), not just peak shape")
     print("read: LOW corr(match,swap) => map CHANGES with audio => audio-dependent (good); "
           "HIGH => audio-invariant saliency.")
     print("      LOW corr(match,sal) => not just visual-norm saliency; HIGH peak => map is localized.")
