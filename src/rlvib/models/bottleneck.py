@@ -4,10 +4,10 @@
   VariationalBottleneck  (v1) — per-modality VIB: z = mu + sigma*eps, zero-init output
                                 (identity at init), exposes a KL rate term for the IB loss.
 
-Both attach via forward hooks on `model.adapter_modules()` (Qwen3-Omni
-audio_tower.proj2 / visual.merger, or per-model equivalents), with the LLM +
-encoders frozen. Zero-init output => attaching doesn't change the model until trained.
-See docs/research/ib-rl-method-and-framing.md (§2).
+Both attach via forward hooks on `model.adapter_modules()`, LLM + encoders frozen.
+Zero-init output => attaching doesn't change the model until trained. A `bypass` flag
+makes a bottleneck a pass-through (identity) — used to get the DPO reference logprobs
+(the frozen base) without holding a second model. See ib-rl-method-and-framing.md (§2).
 """
 from __future__ import annotations
 
@@ -26,9 +26,12 @@ class ResidualBottleneck(nn.Module):
         self.fc2 = nn.Linear(hidden, dim)
         nn.init.zeros_(self.fc2.weight)
         nn.init.zeros_(self.fc2.bias)
+        self.bypass = False
         self.last_kl = None
 
     def forward(self, x):
+        if self.bypass:
+            return x
         return x + self.fc2(self.act(self.fc1(x)))
 
 
@@ -49,9 +52,12 @@ class VariationalBottleneck(nn.Module):
         self.out = nn.Linear(hidden, dim)
         nn.init.zeros_(self.out.weight)
         nn.init.zeros_(self.out.bias)
+        self.bypass = False
         self.last_kl = None
 
     def forward(self, x):
+        if self.bypass:
+            return x
         h = self.act(self.enc(x))
         mu = self.to_mu(h)
         logvar = self.to_logvar(h).clamp(-8.0, 8.0)
@@ -91,3 +97,9 @@ def total_kl(bottlenecks):
     """Sum of the bottlenecks' last KL rate terms (0.0 if none recorded)."""
     kls = [b.last_kl for b in bottlenecks.values() if getattr(b, "last_kl", None) is not None]
     return sum(kls) if kls else 0.0
+
+
+def set_bypass(bottlenecks, on: bool) -> None:
+    """Toggle pass-through (identity) on all bottlenecks — used for the DPO reference."""
+    for b in bottlenecks.values():
+        b.bypass = on
