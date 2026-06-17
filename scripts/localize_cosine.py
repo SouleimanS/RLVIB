@@ -197,6 +197,12 @@ def main() -> int:
                     os.path.join(args.out, f"clip{k}_match_{_san(it['category'])}.mp4"))
         shutil.copy(jt["video_path"],
                     os.path.join(args.out, f"clip{k}_swapaudio_{_san(jt['category'])}.mp4"))
+        try:  # the actual mismatch to watch: clip i's video + clip j's audio
+            from rlvib.data.pairs import swap_audio
+            swap_audio(it["video_path"], jt["video_path"], os.path.join(
+                args.out, f"clip{k}_swapped_seen-{_san(it['category'])}_heard-{_san(jt['category'])}.mp4"))
+        except Exception as e:  # noqa: BLE001
+            print(f"     swapped mux failed: {e}", flush=True)
         Mm = _cosmap(A_i, V_i, aligner).reshape(t, hm, wm)
         Ms = _cosmap(A_j, V_i, aligner).reshape(t, hm, wm)
         sal = V_i.norm(dim=-1).cpu().numpy().reshape(t, hm, wm)
