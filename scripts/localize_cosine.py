@@ -21,12 +21,18 @@ from __future__ import annotations
 import argparse
 import os
 import random
+import shutil
 
 import numpy as np
 import torch
 
 from rlvib.data import ave
 from rlvib.models import get_model
+
+
+def _san(s: str) -> str:
+    """Filesystem-safe slug for an event name."""
+    return "".join(c if c.isalnum() else "-" for c in s).strip("-")[:28]
 
 
 def _load_frames(video_path, t):
@@ -187,6 +193,10 @@ def main() -> int:
         if t * hm * wm != V_i.shape[0]:
             print(f"[{k}] grid mismatch ({t*hm*wm} != {V_i.shape[0]}), skip", flush=True)
             continue
+        shutil.copy(it["video_path"],  # the clips used, copied in so they can be inspected
+                    os.path.join(args.out, f"clip{k}_match_{_san(it['category'])}.mp4"))
+        shutil.copy(jt["video_path"],
+                    os.path.join(args.out, f"clip{k}_swapaudio_{_san(jt['category'])}.mp4"))
         Mm = _cosmap(A_i, V_i, aligner).reshape(t, hm, wm)
         Ms = _cosmap(A_j, V_i, aligner).reshape(t, hm, wm)
         sal = V_i.norm(dim=-1).cpu().numpy().reshape(t, hm, wm)
