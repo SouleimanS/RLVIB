@@ -9,6 +9,7 @@
 #   conda activate rlvib_vl2
 #   git clone -b audio_visual https://github.com/DAMO-NLP-SG/VideoLLaMA2 third_party/VideoLLaMA2
 #   pip install -e third_party/VideoLLaMA2           # pulls transformers==4.42.3, torch==2.2.0, decord, ...
+#   pip install pytorchvideo                         # clip-sampling dep not pulled by the repo
 #   pip install flash-attn==2.5.8 --no-build-isolation
 #   huggingface-cli download DAMO-NLP-SG/VideoLLaMA2.1-7B-AV
 #
