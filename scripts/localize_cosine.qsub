@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N rlvib_localize
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -o rlvib_localize.qsub.log
+
+# Free cosine-similarity audio->video localizer + audio-swap control (no training).
+#   qsub scripts/localize_cosine.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/localize_out.txt") 2>&1
+
+python -u scripts/localize_cosine.py --model "${MODEL:-qwen3-omni}" --n "${N:-6}"
+
+echo "=== Done $(date) ==="
