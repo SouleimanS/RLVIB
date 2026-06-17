@@ -61,37 +61,68 @@ submodules so their outputs pass through it before entering the Thinker.
 
 ---
 
-## Step 2 results — frozen Qwen3-Omni baselines (2026-06-16)
+## Step 2 results — frozen-model baseline matrix (2026-06-17)
 
-Eval harness (`rlvib.eval.run_{avhbench,cmm,dave}`) works end-to-end; parse rates
-~1.0. Numbers below are 100-sample sanity slices unless noted (full runs pending
-to tighten CIs); the *patterns* are the signal.
+Full **3 models × 3 benchmarks** frozen-baseline matrix, one consistent
+`LIMIT=300` pass (`scripts/run_all_baselines.sh`): **n=300 per cell, parse rate
+1.00 everywhere**. Models: Qwen3-Omni-30B-A3B, Qwen2.5-Omni (both env `rlvib`),
+VideoLLaMA2 (env `rlvib_vl2`). These supersede the 2026-06-16 100-sample slices.
 
 **DAVE — modality-ablation ΔAcc (the grounding headline).** Same MC question,
-media swapped per mode (n=100 each; effectively ~4-way, chance 0.25):
+media swapped per mode (effectively ~4-way, chance 0.25). VideoLLaMA2's `mm_infer`
+needs a media input, so it skips `text_only` (no media) and `audio_only` (bare wav):
 
-| mode | acc |
-|---|---|
-| audio_visual_alignment (video+audio) | 0.37 |
-| visual_only (silent video) | 0.34 |
-| audio_only | 0.32 |
-| text_only (language prior) | 0.25 |
+| DAVE mode (n=300) | qwen3-omni | qwen2.5-omni | videollama2 |
+|---|---|---|---|
+| audio_visual_alignment (video+audio) | 0.380 | 0.307 | 0.357 |
+| visual_only (silent video) | 0.323 | 0.330 | 0.363 |
+| audio_only | 0.230 | 0.217 | — |
+| text_only (language prior) | 0.250 | 0.310 | — |
+| **AV − visual_only** (grounding Δ) | **+0.057** | **−0.023** | **−0.006** |
+| AV − audio_only | +0.150 | +0.090 | — |
 
-=> text_only sits at chance (no language shortcut — DAVE isn't text-solvable).
-Audio alone helps a little (0.32 > 0.25). **But AV − visual_only is only +0.03**:
-with video present the model barely uses audio — a video-dominant shortcut. Growing
+=> The video-dominant shortcut holds across **all three** models: **AV − visual_only
+is at best +0.057 (qwen3-omni) and goes negative for qwen2.5-omni and videollama2** —
+with video present, adding audio doesn't help (or slightly hurts). Qwen3-Omni's
+`text_only` sits at chance (0.250 — DAVE isn't text-solvable for it), but
+**Qwen2.5-Omni's text_only is *above* chance (0.310) and actually beats its own AV
+score** → a real language prior plus essentially no audio use. Growing
 **AV − visual_only** is the bottleneck's explicit target.
 
-**AVHBench (100-sample slice).** overall 0.70 | AV-Matching 0.62 (weakest) |
-Video-driven Audio Hallucination 0.65 | Audio-driven Video Hallucination 0.88.
-=> strong on video, weak on audio + correspondence.
+**AVHBench (cross-modal hallucination, acc).**
 
-**CMM visual-language (100, video-only slice).** PA 0.98 / HR 0.80 / acc 0.89.
-=> nails present objects but hallucinates ~20% of absent ones via spurious
-correlation. (Audio subsets pending the full run.)
+| AVHBench (acc) | qwen3-omni | qwen2.5-omni | videollama2 |
+|---|---|---|---|
+| overall (n=300) | 0.643 | 0.620 | **0.677** |
+| AV-Matching (n=88) | 0.568 | **0.795** | 0.580 |
+| Video-driven Audio Halluc. (n=140) | 0.679 | 0.450 | 0.671 |
+| Audio-driven Video Halluc. (n=72) | 0.667 | 0.736 | **0.806** |
 
-**Three headroom metrics the bottleneck must move:** DAVE `AV − visual_only`
-(~+0.03; audio under-used), AVHBench AV-Matching (0.62), CMM HR (0.80).
+=> VideoLLaMA2 leads overall and on audio-driven-video hallucination; Qwen2.5-Omni
+is unusually strong at AV-Matching (0.795) yet collapses on video-driven *audio*
+hallucination (0.450 — it invents sounds for silent/irrelevant video). Qwen3-Omni
+is the most balanced but weakest at AV-Matching (0.568) → correspondence is its
+soft spot.
+
+**CMM — visual-language subset (PA = perception acc on present objects, HR =
+hallucination resistance on absent ones; n=300).** (Audio subsets not in this run.)
+
+| CMM visual-language | qwen3-omni | qwen2.5-omni | videollama2 |
+|---|---|---|---|
+| PA (present-object acc) | 0.953 | **0.960** | 0.720 |
+| HR (hallucination resistance) | **0.780** | 0.653 | 0.087 |
+| acc | **0.867** | 0.807 | 0.403 |
+
+=> Qwen3-Omni is the strongest hallucination-resister (HR 0.780). VideoLLaMA2
+**collapses to a "present" bias** (HR 0.087 — it affirms almost every absent
+object), dragging acc to 0.403 despite middling PA. The Qwen models nail present
+objects but still hallucinate 22–35% of absent ones via spurious correlation.
+
+**Headroom metrics the bottleneck must move (taking Qwen3-Omni as the v0 base):**
+DAVE `AV − visual_only` (+0.057; audio under-used even by the best model),
+AVHBench AV-Matching (0.568), CMM HR (0.780). The cross-model picture also shows
+**no single frozen model dominates** — each leaks on a different axis — which is
+exactly the fragmentation a trained AV fusion bottleneck is meant to close.
 
 ---
 
