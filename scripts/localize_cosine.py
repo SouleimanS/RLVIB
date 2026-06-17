@@ -114,6 +114,10 @@ def main() -> int:
 
     aligner = None
     if args.aligner:
+        if not os.path.exists(args.aligner):
+            raise SystemExit(f"aligner checkpoint not found: {args.aligner}\n"
+                             f"Train it first:  qsub scripts/train_aligner.qsub  "
+                             f"(writes runs/aligner.pt), then re-run this.")
         from rlvib.models.aligner import AVAligner
         ck = torch.load(args.aligner, weights_only=False)
         aligner = AVAligner(dim=ck["dim"], proj=ck["proj"]).to(m.device).float()
