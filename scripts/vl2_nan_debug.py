@@ -10,7 +10,10 @@ active + grad:
 
   CONDA_ENV=rlvib_vl2 ... :  PYTHONPATH=src python scripts/vl2_nan_debug.py
 """
+import os
 import random
+
+os.environ["RLVIB_VIB_DEBUG"] = "1"  # trace VIB intermediates (xc -> mu -> logvar -> kl_elem)
 
 import torch
 

@@ -11,9 +11,17 @@ makes a bottleneck a pass-through (identity) — used to get the DPO reference l
 """
 from __future__ import annotations
 
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+def _finmax(t):
+    """'<finite?>|<max|abs|>' for the VIB debug trace."""
+    ok = bool(torch.isfinite(t).all())
+    return f"{ok}|{(float(t.abs().max()) if ok else float('nan')):.1e}"
 
 
 class ResidualBottleneck(nn.Module):
@@ -79,6 +87,10 @@ class VariationalBottleneck(nn.Module):
             z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
             kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
             self.last_kl = kl_elem.mean()                       # scalar rate for the IB loss
+            if os.environ.get("RLVIB_VIB_DEBUG"):
+                print(f"  [vibdbg] x_in={_finmax(x)} xc={_finmax(xc)} enc_in={_finmax(enc_in)} "
+                      f"h={_finmax(h)} mu={_finmax(mu)} logvar={_finmax(logvar)} "
+                      f"kl_elem={_finmax(kl_elem)} encW={_finmax(self.enc.weight)}", flush=True)
             self.last_kl_per_token = kl_elem.sum(dim=-1).detach()  # per-token rate -> saliency map
             delta = self.out(z)
             self.last_residual_per_token = delta.detach().norm(dim=-1)    # ||edit|| per token
