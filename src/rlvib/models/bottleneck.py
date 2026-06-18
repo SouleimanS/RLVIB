@@ -98,9 +98,13 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
     for p in model.model.parameters():
         p.requires_grad_(False)
 
-    # fp16 backbones (e.g. VideoLLaMA2) have a narrow range; keep the VIB in fp32 there so
-    # its internal Linears can't overflow to inf (then 0*inf = NaN). bf16/fp32 unchanged.
-    vib_dtype = torch.float32 if getattr(model, "dtype", None) == torch.float16 else model.dtype
+    # Compute the VIB in fp32 for fp16 backbones AND massive-/large-activation backbones
+    # (normalize_input, e.g. VideoLLaMA2 run in bf16): bf16's 8-bit mantissa makes the KL
+    # (mu^2 / exp(logvar)) and z blow up to inf even on normalized O(1) inputs -> 0*inf = NaN.
+    # Qwen-Omni (bf16, normalize_input=False) stays bf16 and is byte-for-byte unchanged.
+    vib_dtype = (torch.float32
+                 if (getattr(model, "dtype", None) == torch.float16 or normalize_input)
+                 else model.dtype)
     kw = {"normalize_input": normalize_input} if cls is VariationalBottleneck else {}
     bottlenecks = nn.ModuleDict(
         {"audio": cls(dim, **kw), "vision": cls(dim, **kw)}
