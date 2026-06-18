@@ -29,8 +29,12 @@ def answer_logp_vec(model, messages, use_audio_in_video: bool = True):
 
 
 def letter_id(model, letter: str) -> int:
-    """Token id for a bare MCQ letter (diag confirmed the model emits the bare letter)."""
-    return model.processor.tokenizer(letter, add_special_tokens=False).input_ids[0]
+    """Token id for a bare MCQ letter (diag confirmed the model emits the bare letter).
+
+    Qwen wrappers expose the tokenizer via `processor.tokenizer`; VideoLLaMA2 holds it
+    directly as `model.tokenizer` (its `processor` is a dict of preprocessors)."""
+    tok = getattr(model, "tokenizer", None) or model.processor.tokenizer
+    return tok(letter, add_special_tokens=False).input_ids[0]
 
 
 def answer_logprob(model, messages, letter: str, use_audio_in_video: bool = True):
