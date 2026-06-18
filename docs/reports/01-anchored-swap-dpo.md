@@ -121,38 +121,46 @@ runs on the **held-out benchmarks**, never the proxy.
 
 ## 5. Experiment 2 — results (anchored swap-DPO)
 
-The run reached all 150 steps **with no collapse alarm**. Probe (balanced yes/no, held-out clips):
+The run reached all 150 steps **with no catastrophic collapse** — the anchors do prevent the instant
+displacement of Exp 1 (no CMM-PA → 0.007). The in-loop probe stayed balanced (`frac_yes` 0.53 → 0.55,
+probe acc 0.97). But **model selection across checkpoints reveals a capability/grounding tradeoff** that
+the probe missed — because the probe is on AVE-audio yes/no, a *different distribution* from the CMM
+visual-hallucination probes (the lesson: the in-loop probe is necessary, not sufficient — gate on the
+held-out benchmarks). Per-step held-out eval (`qwen3-omni`, n=300; DAVE not yet run per-step):
 
-| | base | step 150 |
-|---|---|---|
-| `frac_yes` | 0.53 | **0.55** (stayed balanced) |
-| probe accuracy | — | **0.97** (audio used correctly) |
+| ckpt | AVHBench | CMM_PA | CMM_HR | guard (PA≥.90, HR≥.70) |
+|---|---|---|---|---|
+| base | 0.643 | 0.953 | 0.780 | — |
+| **step30** | 0.657 | **0.960** | **0.780** | **ok** |
+| step60 | 0.660 | 0.873 | 0.587 | FAIL |
+| step90 | 0.643 | 0.940 | 0.627 | FAIL (HR) |
+| step120 | 0.677 | 0.893 | 0.573 | FAIL |
+| step150 | **0.763** | 0.793 | 0.247 | FAIL |
 
-Held-out benchmarks, `qwen3-omni` base vs. anchored bottleneck (`_bn`):
+**Honest reading:** CMM hallucination-resistance (HR) **drifts down monotonically** with steps
+(0.780 → 0.247) while AVHBench rises (0.643 → 0.763). The headline `step150` AVHBench of 0.763 (+12) is
+**contaminated** — it is bought with a CMM-HR collapse (0.780 → 0.247), i.e. the model is over-affirming
+(hallucinating), not grounding better. The *only* checkpoint that preserves both CMM axes is **step30**
+(PA 0.960, HR 0.780 = base), and its AVHBench gain (+1.4) is **within noise**. So at the
+capability-preserving operating point the clean grounding gain is currently ~0.
 
-| Benchmark | Base | **Collapsed (Exp 1)** | **Anchored (Exp 2)** |
-|---|---|---|---|
-| CMM perception (PA) | 0.953 | 0.007 | **0.940** |
-| CMM hallucination-resist (HR) | 0.780 | ~0.99 | **0.787** |
-| CMM overall acc | 0.867 | — | **0.863** |
-| DAVE audio-visual MCQ | 0.380 | 0.18 | **0.380** |
-| AVHBench overall | 0.643 | — | **0.677** |
-| ↳ AV Matching | 0.568 | — | **0.636** (+6.8) |
-| ↳ Video→Audio Hallucination | 0.679 | — | **0.729** (+5.0) |
-| ↳ Audio→Video Hallucination | 0.667 | — | 0.625 (−4.2) |
-
-**Reading:** capability is fully preserved (CMM, DAVE at/near base — the collapse is gone), and there is
-a coherent **on-target gain on AVHBench** (+3.4 overall), concentrated exactly on the audio-grounding
-axes — *AV Matching* and *not hallucinating audio from video*. The probe accuracy of 0.97 with balanced
-labels is direct evidence the bottleneck **uses audio correctly** rather than sitting idle. Gains are
-within small-n noise on the AVHBench splits (n=72–140) but the direction is consistent.
+**Why the residual drift:** the KL-to-base anchor only covers **AVE matched-MCQ + yes/no** inputs, so
+**CMM-style visual-hallucination behavior is unprotected** and drifts. The anchor input distribution is
+too narrow, and at λ_kl=1.0 it is too weak to hold by step 150.
 
 ## 6. Conclusion & next steps
 
-The *same* method that collapsed CMM-PA to 0.007 now lands at 0.940 **plus** a real grounding gain —
-a clean confirmation of the diagnosis: the collapse was a missing output anchor, not a flaw in the
-swap-preference idea. The two anchors (chosen-likelihood floor + KL-to-base on general inputs) are
-necessary and sufficient to make frozen-base + adapter swap-DPO stable.
+The anchors convert the *catastrophic* collapse of Exp 1 (CMM-PA → 0.007 in a few steps) into a
+**gradual, controllable drift** with a usable knob (step / λ) — that is real progress, and it confirms
+the diagnosis (missing output anchor). But it is **not yet a clean win**: a grounding gain that survives
+the capability guards requires a stronger, broader anchor.
+
+Next:
+1. **Broaden + strengthen the anchor** — diversify the KL-to-base anchor inputs beyond AVE clips (so it
+   protects CMM-style behavior, not just AVE yes/no), and raise `λ_kl` (1.0 → 3–4). Re-train, re-select.
+2. **Select with the full guard** — gate on CMM **HR as well as PA** (step90 passes PA but fails HR);
+   prefer the earliest checkpoint that clears both, and treat large AVHBench jumps as suspect until the
+   CMM guards confirm them.
 
 Next:
 1. **Model selection** across the 15 checkpoints — pick best AVHBench s.t. CMM-PA ≥ 0.90, DAVE ≥ 0.36.

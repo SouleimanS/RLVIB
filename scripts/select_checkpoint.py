@@ -57,6 +57,7 @@ def main() -> int:
     ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--split", default="ego4d")
     ap.add_argument("--min-pa", type=float, default=0.90, help="CMM perception-accuracy guard")
+    ap.add_argument("--min-hr", type=float, default=0.70, help="CMM hallucination-resistance guard")
     ap.add_argument("--min-dave", type=float, default=0.36, help="DAVE accuracy guard (skipped if unevaluated)")
     args = ap.parse_args()
 
@@ -74,7 +75,8 @@ def main() -> int:
         avh = _avh(args.model, tag)
         pa, hr = _cmm(args.model, tag)
         dave = _dave(args.model, tag, args.split)
-        ok = (pa is None or pa >= args.min_pa) and (dave is None or dave >= args.min_dave)
+        ok = ((pa is None or pa >= args.min_pa) and (hr is None or hr >= args.min_hr)
+              and (dave is None or dave >= args.min_dave))
         guard = "" if name == "base" else ("ok" if ok else "FAIL")
         print(f"{name:>8}  {_fmt(avh):>8}  {_fmt(pa):>7}  {_fmt(hr):>7}  {_fmt(dave):>6}  {guard}")
         if name != "base" and isinstance(avh, float) and ok:
