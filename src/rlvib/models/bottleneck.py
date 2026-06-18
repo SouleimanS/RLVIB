@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ResidualBottleneck(nn.Module):
@@ -42,7 +43,7 @@ class VariationalBottleneck(nn.Module):
     `last_kl` = KL(N(mu, sigma^2) || N(0, I)) (mean over tokens+dims) for the IB loss term.
     """
 
-    def __init__(self, dim: int = 2048, hidden: int | None = None):
+    def __init__(self, dim: int = 2048, hidden: int | None = None, normalize_input: bool = False):
         super().__init__()
         hidden = hidden or dim
         self.enc = nn.Linear(dim, hidden)
@@ -52,6 +53,11 @@ class VariationalBottleneck(nn.Module):
         self.out = nn.Linear(hidden, dim)
         nn.init.zeros_(self.out.weight)
         nn.init.zeros_(self.out.bias)
+        # Parameter-free LayerNorm on the ENCODER input only (the residual still carries the
+        # raw x), so mu/logvar -> KL rate are scale-invariant. Needed for backbones with
+        # "massive activations" (VideoLLaMA2, ~1e9 features); off by default so normal-scale
+        # backbones (Qwen-Omni) are byte-for-byte unchanged. (See docs/research.)
+        self.normalize_input = normalize_input
         self.bypass = False
         self.last_kl = None
         self.last_kl_per_token = None  # (..., T) bits the bottleneck allocates per token
@@ -66,7 +72,8 @@ class VariationalBottleneck(nn.Module):
         # (fp16 backbones): otherwise enc()/mu overflow bf16 and the KL rate blows up to inf.
         with torch.autocast(x.device.type, enabled=False):
             xc = torch.nan_to_num(x.to(pd))     # guard inf/nan backbone feats (enc() spreads NaN)
-            h = self.act(self.enc(xc))
+            enc_in = F.layer_norm(xc, (xc.shape[-1],)) if self.normalize_input else xc
+            h = self.act(self.enc(enc_in))
             mu = self.to_mu(h)
             logvar = self.to_logvar(h).clamp(-8.0, 8.0)
             z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
@@ -79,9 +86,11 @@ class VariationalBottleneck(nn.Module):
         return x + delta.to(x.dtype)
 
 
-def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
+def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
+                       normalize_input: bool = False):
     """Freeze the model; attach trainable bottlenecks (`cls`) on the audio + vision
-    adapters via forward hooks. `dim` defaults to `model.hidden_dim`.
+    adapters via forward hooks. `dim` defaults to `model.hidden_dim`. `normalize_input`
+    LayerNorms the VIB encoder input (for massive-activation backbones, e.g. VideoLLaMA2).
 
     Returns (ModuleDict, handles). Detach with: for h in handles: h.remove().
     """
@@ -92,8 +101,9 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
     # fp16 backbones (e.g. VideoLLaMA2) have a narrow range; keep the VIB in fp32 there so
     # its internal Linears can't overflow to inf (then 0*inf = NaN). bf16/fp32 unchanged.
     vib_dtype = torch.float32 if getattr(model, "dtype", None) == torch.float16 else model.dtype
+    kw = {"normalize_input": normalize_input} if cls is VariationalBottleneck else {}
     bottlenecks = nn.ModuleDict(
-        {"audio": cls(dim), "vision": cls(dim)}
+        {"audio": cls(dim, **kw), "vision": cls(dim, **kw)}
     ).to(model.device, vib_dtype)
 
     handles = []
@@ -133,7 +143,8 @@ def load_attached(model, ckpt_path):
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cls = {"VariationalBottleneck": VariationalBottleneck,
            "ResidualBottleneck": ResidualBottleneck}.get(ck.get("cls"), VariationalBottleneck)
-    bottlenecks, handles = attach_bottlenecks(model, dim=ck.get("dim"), cls=cls)
+    bottlenecks, handles = attach_bottlenecks(model, dim=ck.get("dim"), cls=cls,
+                                              normalize_input=ck.get("normalize_input", False))
     bottlenecks.load_state_dict(ck["state_dict"])
     bottlenecks.eval()
     return bottlenecks, handles

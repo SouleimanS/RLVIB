@@ -172,6 +172,7 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
         (lam_kl * gkl).backward()
         gkls.append(float(gkl.detach()))
 
+    torch.nn.utils.clip_grad_norm_(bottlenecks.parameters(), max_norm=1.0)  # spike insurance
     optimizer.step()
     n, m = max(1, len(swap_batch)), max(1, len(anchor_batch))
     return {"loss": sum(losses) / n, "margin": sum(margins) / n, "p_chosen": sum(prefs) / n,

@@ -95,12 +95,17 @@ def main() -> int:
     ap.add_argument("--swap-dir", default="data/AVE/swapped")
     ap.add_argument("--save-dir", default=None, help="default: runs/anchored_<model>")
     ap.add_argument("--seed", type=int, default=0, help="training seed (data order + init) for repeats")
+    ap.add_argument("--normalize-input", action="store_true",
+                    help="LayerNorm the VIB input (auto-on for videollama2's massive activations)")
     args = ap.parse_args()
     args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
     torch.manual_seed(args.seed)
+    # massive-activation backbones (VideoLLaMA2) need the scale-invariant VIB input;
+    # Qwen-Omni (normal scale) stays off so its results are unchanged.
+    nin = args.normalize_input or args.model == "videollama2"
 
     m = get_model(args.model)
-    bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck)
+    bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck, normalize_input=nin)
     opt = torch.optim.AdamW(bns.parameters(), lr=args.lr)
     os.makedirs(args.save_dir, exist_ok=True)
 
@@ -142,7 +147,8 @@ def main() -> int:
                 bns.train()
                 ckpt = os.path.join(args.save_dir, f"bottleneck_step{step}.pt")
                 torch.save({"state_dict": bns.state_dict(), "dim": m.hidden_dim,
-                            "cls": "VariationalBottleneck", "model": args.model}, ckpt)
+                            "cls": "VariationalBottleneck", "model": args.model,
+                            "normalize_input": nin}, ckpt)
                 flag = "  <-- COLLAPSE ALARM" if (fy < 0.15 or fy > 0.85) else ""
                 print(f"[probe step {step}] frac_yes={fy:.2f} (base {base_yes:.2f}) acc={ac:.2f}  "
                       f"saved {os.path.basename(ckpt)}{flag}", flush=True)

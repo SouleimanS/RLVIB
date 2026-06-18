@@ -24,6 +24,18 @@ class VideoLLaMA2:
 
         disable_torch_init()
         self.model, self.processor, self.tokenizer = model_init(model_id)
+        # VideoLLaMA2 loads fp16 for inference, but is TRAINED in bf16 (every finetune script:
+        # --bf16 True --fp16 False). A differentiable fp16 forward overflows attention
+        # (Q.K^T > 65504 -> NaN), and an fp16 + bf16-autocast hybrid mis-scales the frozen
+        # projector. So run the whole stack in bf16 (the LLaVA recipe). Also force-load the
+        # delay_load SigLIP tower (model_init already does; this is belt-and-suspenders).
+        try:
+            vt = self.model.get_model().get_vision_tower()
+            if not getattr(vt, "is_loaded", True):
+                vt.load_model()
+        except Exception:  # noqa: BLE001 -- best-effort; model_init force-loads vision anyway
+            pass
+        self.model = self.model.to(torch.bfloat16)
         self.model.eval()
 
     @property
@@ -71,9 +83,9 @@ class VideoLLaMA2:
             raise ValueError("VideoLLaMA2 build_inputs needs a video or audio input")
 
         if isinstance(media, dict):                       # AV model: {"video","audio"} feats
-            media = {k: v.half().to(self.device) for k, v in media.items()}
+            media = {k: v.to(self.device, self.dtype) for k, v in media.items()}
         else:
-            media = media.half().to(self.device)
+            media = media.to(self.device, self.dtype)
         images = [(media, modal)]
 
         conv = [{"role": "system", "content": self._SYS},
@@ -88,17 +100,13 @@ class VideoLLaMA2:
     @torch.no_grad()
     def generate(self, message: dict, use_audio_in_video: bool = True,
                  max_new_tokens: int = 256) -> str:
-        from videollama2 import mm_infer
-
-        video, audio = message.get("video"), message.get("audio")
-        prompt = message.get("prompt", "")
-        if video is not None:
-            tensor = self.processor["video"](video, va=use_audio_in_video)
-            modal = "video"
-        elif audio is not None:
-            tensor = self.processor["audio"](audio)
-            modal = "audio"
-        else:
-            raise ValueError("VideoLLaMA2 needs a video or audio input")
-        return mm_infer(tensor, prompt, model=self.model, tokenizer=self.tokenizer,
-                        modal=modal, do_sample=False).strip()
+        # Reuse build_inputs (bf16 media) so eval matches training; mm_infer hardcodes
+        # .half() (fp16), which would mismatch the bf16 model.
+        inputs = self.build_inputs(message, use_audio_in_video)
+        out = self.model.generate(
+            inputs["input_ids"], attention_mask=inputs["attention_mask"],
+            images=inputs["images"], do_sample=False, max_new_tokens=max_new_tokens,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+        new = out[:, inputs["input_ids"].shape[1]:]
+        return self.tokenizer.batch_decode(new, skip_special_tokens=True)[0].strip()
