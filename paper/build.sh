@@ -11,8 +11,17 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Prefer tectonic: self-contained, fetches packages on demand, no fmtutil/format-file
+# pain (conda's texlive-core is notoriously broken here). Install: conda install -c
+# conda-forge tectonic
+if command -v tectonic >/dev/null 2>&1; then
+  tectonic main.tex
+  echo "-> $(pwd)/main.pdf"; exit 0
+fi
+
 if ! command -v pdflatex >/dev/null 2>&1; then
-  echo "no pdflatex on PATH -- see the install hints at the top of this script." >&2
+  echo "no tectonic and no pdflatex on PATH -- see the install hints at the top of this script." >&2
+  echo "quickest: paste main.tex into https://overleaf.com" >&2
   exit 1
 fi
 
