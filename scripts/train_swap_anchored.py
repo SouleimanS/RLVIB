@@ -26,15 +26,28 @@ from rlvib.models.bottleneck import VariationalBottleneck, attach_bottlenecks, s
 from rlvib.train.dpo import anchored_dpo_step, answer_logp_vec, letter_id
 
 
+# Diverse anchor prompts so the KL-to-base covers the behaviors CMM/AVHBench actually
+# test -- audio-presence AND visual-presence (the CMM hallucination axis) + MCQ + open-
+# ended -- not just the matched MCQ. Visual-presence with an ABSENT category is the key
+# addition: it anchors "don't claim to see things that aren't there" to the frozen base.
+_ANCHOR_KINDS = ["mcq", "hear", "see", "describe", "whatav"]
+
+
 def _anchor_msg(model, it, cats, rng):
-    """A general, non-swap prompt (matched MCQ or yes/no) where the adapter should match base."""
-    if rng.random() < 0.5:
+    """A diverse general (non-swap) prompt where the adapter should match the frozen base."""
+    v = it["video_path"]
+    kind = rng.choice(_ANCHOR_KINDS)
+    if kind == "mcq":
         mcq = ave.make_mcq(it["category"], cats, rng=rng)
-        return model.message(video=it["video_path"],
-                             prompt=ave.format_mcq(mcq["question"], mcq["options"]))
-    cat = it["category"] if rng.random() < 0.5 else rng.choice([c for c in cats if c != it["category"]])
-    return model.message(video=it["video_path"],
-                         prompt=f"Do you HEAR the sound of {cat} in this clip? Answer yes or no.")
+        return model.message(video=v, prompt=ave.format_mcq(mcq["question"], mcq["options"]))
+    if kind in ("hear", "see"):
+        present = rng.random() < 0.5
+        cat = it["category"] if present else rng.choice([c for c in cats if c != it["category"]])
+        verb = "HEAR the sound of" if kind == "hear" else "SEE"
+        return model.message(video=v, prompt=f"Do you {verb} {cat} in this clip? Answer yes or no.")
+    if kind == "describe":
+        return model.message(video=v, prompt="Describe what happens in this clip in one sentence.")
+    return model.message(video=v, prompt="What do you see and hear in this clip?")
 
 
 def _yesno_probe(model, items, cats, rng):
