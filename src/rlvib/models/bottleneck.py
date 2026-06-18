@@ -58,12 +58,16 @@ class VariationalBottleneck(nn.Module):
         self.last_residual_per_token = None    # (..., T) ||out(z)|| -> actual edit magnitude
         self.last_input_norm_per_token = None  # (..., T) ||x||      -> for the relative edit
 
+    def _modulate(self, h):
+        """Hook for subclasses to condition the hidden activation; identity here."""
+        return h
+
     def forward(self, x):
         if self.bypass:
             return x
         pd = self.enc.weight.dtype          # fp32 on fp16 backbones -> no overflow / 0*inf NaN
         xc = x.to(pd)
-        h = self.act(self.enc(xc))
+        h = self._modulate(self.act(self.enc(xc)))
         mu = self.to_mu(h)
         logvar = self.to_logvar(h).clamp(-8.0, 8.0)
         z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
@@ -74,6 +78,41 @@ class VariationalBottleneck(nn.Module):
         self.last_residual_per_token = delta.detach().norm(dim=-1)    # ||edit|| per token
         self.last_input_norm_per_token = xc.detach().norm(dim=-1)     # ||token|| (relative edit)
         return x + delta.to(x.dtype)
+
+
+class QueryConditionedVIB(VariationalBottleneck):
+    """VIB whose compression is FiLM-modulated by a pooled query/prompt embedding `self.q`.
+
+    Identical to VariationalBottleneck plus a query-conditioned FiLM on the hidden
+    activation: the pooled query vector q generates per-channel (gamma, beta) that modulate
+    h = act(enc(x)) before mu/logvar, so *what the bottleneck keeps depends on what is asked*.
+    Set `self.q` (shape (dim_q,) or (B, dim_q)) on each bottleneck before the model forward;
+    the adapter hook calls forward(x), which reads it.
+
+      q = None  -> behaves EXACTLY like VariationalBottleneck (unconditional). So the bypassed
+                   reference path and any unconditional checkpoint are unaffected.
+
+    FiLM is zero-init (gamma=beta=0 -> h unchanged) and `out` stays zero-init, so an untrained
+    QueryConditionedVIB is still exact identity (y = x) with or without q -- preserving the
+    `bypass`->frozen-base reference the (anchored) DPO loss relies on.
+    """
+
+    def __init__(self, dim: int = 2048, hidden: int | None = None, dim_q: int | None = None):
+        super().__init__(dim, hidden)
+        hidden = hidden or dim
+        self.dim_q = dim_q or dim
+        self.film = nn.Linear(self.dim_q, 2 * hidden)   # query -> (gamma, beta)
+        nn.init.zeros_(self.film.weight)   # gamma=beta=0 at init -> no-op modulation
+        nn.init.zeros_(self.film.bias)
+        self.q = None   # pooled query embedding, set externally per forward
+
+    def _modulate(self, h):
+        if self.q is None:
+            return h
+        gamma, beta = self.film(self.q.to(h.dtype)).chunk(2, dim=-1)
+        while gamma.dim() < h.dim():        # insert token axis -> (..., 1, hidden)
+            gamma, beta = gamma.unsqueeze(-2), beta.unsqueeze(-2)
+        return (1.0 + gamma) * h + beta     # per-channel affine from the query
 
 
 def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
@@ -129,6 +168,7 @@ def load_attached(model, ckpt_path):
 
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cls = {"VariationalBottleneck": VariationalBottleneck,
+           "QueryConditionedVIB": QueryConditionedVIB,
            "ResidualBottleneck": ResidualBottleneck}.get(ck.get("cls"), VariationalBottleneck)
     bottlenecks, handles = attach_bottlenecks(model, dim=ck.get("dim"), cls=cls)
     bottlenecks.load_state_dict(ck["state_dict"])
