@@ -23,10 +23,10 @@ for S in $STEPS; do
     if [ ! -f "$BN" ]; then echo "!! missing $BN -- skipping"; continue; fi
     TAG="${EXP:+_$EXP}_step${S}"
     echo ">> checkpoint step $S  ($BN)"
-    qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_avhbench.qsub
-    qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_cmm.qsub
+    qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,BOTTLENECK=$BN,TAG=$TAG,CONDA_ENV=${CONDA_ENV:-rlvib}" scripts/eval_avhbench.qsub
+    qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,BOTTLENECK=$BN,TAG=$TAG,CONDA_ENV=${CONDA_ENV:-rlvib}" scripts/eval_cmm.qsub
     if [ "$WITH_DAVE" = 1 ]; then
-        qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,MODE=audio_visual_alignment,DAVE_SPLIT=$DAVE_SPLIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_dave.qsub
+        qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,MODE=audio_visual_alignment,DAVE_SPLIT=$DAVE_SPLIT,BOTTLENECK=$BN,TAG=$TAG,CONDA_ENV=${CONDA_ENV:-rlvib}" scripts/eval_dave.qsub
     fi
 done
 
