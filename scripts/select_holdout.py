@@ -39,9 +39,11 @@ def _avh(recs):
     for i, r in enumerate(recs):
         ok = int((r["pred"] or "") == str(r["label"]).strip().lower())
         if i in val:
-            vc += ok; vn += 1
+            vc += ok
+            vn += 1
         else:
-            tc += ok; tn += 1
+            tc += ok
+            tn += 1
     return (vc / max(vn, 1), tc / max(tn, 1), (vc + tc) / max(vn + tn, 1))
 
 
@@ -59,7 +61,8 @@ def _cmm(recs):
         agg[key][0] += int(r["pred"] == a)
 
     def acc(*keys):
-        c = sum(agg[k][0] for k in keys); n = sum(agg[k][1] for k in keys)
+        c = sum(agg[k][0] for k in keys)
+        n = sum(agg[k][1] for k in keys)
         return c / n if n else float("nan")
     return {"val_pa": acc("vy"), "val_hr": acc("vn"),
             "test_pa": acc("ty"), "test_hr": acc("tn"),
@@ -96,7 +99,8 @@ def main() -> int:
         c = _records(f"runs/cmm_{args.model}{xt}_step{s}.json")
         if a is None or c is None:
             continue
-        av = _avh(a); cm = _cmm(c)
+        av = _avh(a)
+        cm = _cmm(c)
         rows[s] = (av, cm)
         ok = cm["val_pa"] >= g_pa and cm["val_hr"] >= g_hr
         print(f"{s:>6}{av[0]:>9.3f}{av[1]:>9.3f}{cm['val_pa']:>8.3f}{cm['val_hr']:>8.3f}"
