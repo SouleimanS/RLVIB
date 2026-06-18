@@ -9,7 +9,19 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from rlvib.models.bottleneck import QueryConditionedVIB, VariationalBottleneck  # noqa: E402
+from rlvib.models.bottleneck import (  # noqa: E402
+    QueryConditionedVIB,
+    VariationalBottleneck,
+    _prompt_text,
+)
+
+
+def test_prompt_text_extracts_question():
+    msgs = [{"role": "user", "content": [
+        {"type": "video", "video": "x.mp4"},
+        {"type": "text", "text": "What do you hear?"}]}]
+    assert _prompt_text(msgs) == "What do you hear?"
+    assert _prompt_text([{"role": "user", "content": []}]) == ""    # no text content -> ""
 
 
 def _trained(b):

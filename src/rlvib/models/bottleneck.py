@@ -142,6 +142,7 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
             return bn(output)
 
         handles.append(adapter.register_forward_hook(hook))
+    model._bottlenecks = bottlenecks   # let build_inputs reach them to set the per-prompt q
     return bottlenecks, handles
 
 
@@ -155,6 +156,41 @@ def set_bypass(bottlenecks, on: bool) -> None:
     """Toggle pass-through (identity) on all bottlenecks — used for the DPO reference."""
     for b in bottlenecks.values():
         b.bypass = on
+
+
+def _prompt_text(messages) -> str:
+    """The user's question text from a wrapper `message(...)` (last text content)."""
+    text = ""
+    seq = messages if isinstance(messages, (list, tuple)) else [messages]
+    for msg in seq:
+        for c in (msg.get("content", []) if isinstance(msg, dict) else []):
+            if isinstance(c, dict) and c.get("type") == "text":
+                text = c.get("text", "")
+    return text
+
+
+@torch.no_grad()
+def condition_bottlenecks(model, messages) -> None:
+    """Set each query-conditioned VIB's `q` from the prompt text (no-op otherwise).
+
+    Pools the FROZEN input embeddings of the question -> (hidden,). Called from each
+    wrapper's build_inputs, so BOTH training (answer_logp_vec) and eval (generate)
+    condition with no other call sites. Unconditional VIBs have no `q` attr -> skipped.
+    """
+    bns = getattr(model, "_bottlenecks", None)
+    if not bns or not any(hasattr(b, "q") for b in bns.values()):
+        return
+    tok = getattr(model, "tokenizer", None) or model.processor.tokenizer
+    lm = getattr(model.model, "thinker", model.model)
+    ids = tok(_prompt_text(messages), add_special_tokens=False, return_tensors="pt").input_ids
+    ids = ids.to(model.device)
+    if ids.numel() == 0:
+        q = torch.zeros(getattr(model, "hidden_dim", 2048), device=model.device)
+    else:
+        q = lm.get_input_embeddings()(ids).mean(dim=1)[0]   # (hidden,)
+    for b in bns.values():
+        if hasattr(b, "q"):
+            b.q = q.to(b.enc.weight.dtype)
 
 
 def load_attached(model, ckpt_path):

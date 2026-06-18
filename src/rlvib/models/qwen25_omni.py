@@ -70,6 +70,8 @@ class Qwen25Omni:
         for k, v in list(inputs.items()):
             if torch.is_tensor(v) and torch.is_floating_point(v):
                 inputs[k] = v.to(self.dtype)
+        from rlvib.models.bottleneck import condition_bottlenecks
+        condition_bottlenecks(self, messages)  # no-op unless a QueryConditionedVIB is attached
         return inputs
 
     @torch.no_grad()

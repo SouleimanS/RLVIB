@@ -22,7 +22,12 @@ import torch
 from rlvib.data import ave
 from rlvib.data.pairs import make_swap_examples
 from rlvib.models import get_model
-from rlvib.models.bottleneck import VariationalBottleneck, attach_bottlenecks, set_bypass
+from rlvib.models.bottleneck import (
+    QueryConditionedVIB,
+    VariationalBottleneck,
+    attach_bottlenecks,
+    set_bypass,
+)
 from rlvib.train.dpo import anchored_dpo_step, answer_logp_vec, letter_id
 
 
@@ -95,12 +100,21 @@ def main() -> int:
     ap.add_argument("--swap-dir", default="data/AVE/swapped")
     ap.add_argument("--save-dir", default=None, help="default: runs/anchored_<model>")
     ap.add_argument("--seed", type=int, default=0, help="training seed (data order + init) for repeats")
+    ap.add_argument("--cond", default="none", choices=["none", "query"],
+                    help="'query' = FiLM the VIB on the pooled prompt; 'none' = unconditional")
     args = ap.parse_args()
     args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
     torch.manual_seed(args.seed)
 
+    if args.cond == "query" and args.model == "videollama2":
+        raise SystemExit("--cond query is not wired for videollama2 (eval uses mm_infer, which "
+                         "does not call condition_bottlenecks) -- it would silently train "
+                         "UNCONDITIONAL. Use qwen3-omni / qwen2.5-omni, or wire the mm_infer path.")
+
     m = get_model(args.model)
-    bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck)
+    cls = QueryConditionedVIB if args.cond == "query" else VariationalBottleneck
+    print(f"bottleneck: {cls.__name__} (cond={args.cond})", flush=True)
+    bns, handles = attach_bottlenecks(m, cls=cls)
     opt = torch.optim.AdamW(bns.parameters(), lr=args.lr)
     os.makedirs(args.save_dir, exist_ok=True)
 
@@ -142,7 +156,7 @@ def main() -> int:
                 bns.train()
                 ckpt = os.path.join(args.save_dir, f"bottleneck_step{step}.pt")
                 torch.save({"state_dict": bns.state_dict(), "dim": m.hidden_dim,
-                            "cls": "VariationalBottleneck", "model": args.model}, ckpt)
+                            "cls": cls.__name__, "model": args.model}, ckpt)
                 flag = "  <-- COLLAPSE ALARM" if (fy < 0.15 or fy > 0.85) else ""
                 print(f"[probe step {step}] frac_yes={fy:.2f} (base {base_yes:.2f}) acc={ac:.2f}  "
                       f"saved {os.path.basename(ckpt)}{flag}", flush=True)
