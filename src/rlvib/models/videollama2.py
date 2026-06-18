@@ -42,6 +42,49 @@ class VideoLLaMA2:
     def message(video=None, audio=None, prompt: str = "") -> dict:
         return {"video": video, "audio": audio, "prompt": prompt}
 
+    # System prompt for the chat template; mirrors mm_infer's eval-time prompt. Verify
+    # against the installed videollama2 package if the answers look off.
+    _SYS = ("You are a helpful language and vision assistant. You are able to understand "
+            "the visual content that the user provides, and assist the user with a variety "
+            "of tasks using natural language.")
+
+    def build_inputs(self, message: dict, use_audio_in_video: bool = True) -> dict:
+        """Teacher-forced inputs for a forward that returns answer-position logits.
+
+        Mirrors mm_infer's preprocessing but targets model.forward (keeps grad): the
+        bottleneck hooks on the mm projectors fire during multimodal embedding, and
+        logits[:, -1, :] is the next-token (answer) distribution. Runs in the rlvib_vl2
+        env; UNTESTED on GPU -- validate and iterate.
+        """
+        from videollama2.constants import DEFAULT_AUDIO_TOKEN, DEFAULT_VIDEO_TOKEN
+        from videollama2.mm_utils import tokenizer_multimodal_token
+
+        video, audio = message.get("video"), message.get("audio")
+        prompt = message.get("prompt", "")
+        if video is not None:
+            media = self.processor["video"](video, va=use_audio_in_video)
+            modal, modal_token = "video", DEFAULT_VIDEO_TOKEN
+        elif audio is not None:
+            media = self.processor["audio"](audio)
+            modal, modal_token = "audio", DEFAULT_AUDIO_TOKEN
+        else:
+            raise ValueError("VideoLLaMA2 build_inputs needs a video or audio input")
+
+        if isinstance(media, dict):                       # AV model: {"video","audio"} feats
+            media = {k: v.half().to(self.device) for k, v in media.items()}
+        else:
+            media = media.half().to(self.device)
+        images = [(media, modal)]
+
+        conv = [{"role": "system", "content": self._SYS},
+                {"role": "user", "content": modal_token + "\n" + prompt}]
+        text = self.tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=True)
+        input_ids = tokenizer_multimodal_token(text, self.tokenizer, modal_token,
+                                               return_tensors="pt").unsqueeze(0).to(self.device)
+        return {"input_ids": input_ids,
+                "attention_mask": torch.ones_like(input_ids),
+                "images": images}
+
     @torch.no_grad()
     def generate(self, message: dict, use_audio_in_video: bool = True,
                  max_new_tokens: int = 256) -> str:
