@@ -62,7 +62,7 @@ class VariationalBottleneck(nn.Module):
         if self.bypass:
             return x
         pd = self.enc.weight.dtype          # fp32 on fp16 backbones -> no overflow / 0*inf NaN
-        xc = x.to(pd)
+        xc = torch.nan_to_num(x.to(pd))     # guard inf/nan backbone feats (else enc() spreads NaN)
         h = self.act(self.enc(xc))
         mu = self.to_mu(h)
         logvar = self.to_logvar(h).clamp(-8.0, 8.0)
