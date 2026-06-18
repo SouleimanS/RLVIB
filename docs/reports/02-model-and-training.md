@@ -104,11 +104,15 @@ AVHBench 0.643→**0.680 (+3.7)** with CMM near base (PA 0.933, HR 0.740) — bo
 steps (120/150) degrade, so we **select mid-training**. Small real cost for a small real gain (modest at
 n=300; wants confirmation).
 
-### v3 — broad anchor, λ_kl = 2 (broadened coverage)  ⏳ in flight
+### v3 — broad anchor, λ_kl = 2 (broadened coverage)  ✅ best  ← **CURRENTLY HELD**
 Same as v2 but the general anchor inputs are **broadened** (`_anchor_msg`) to span **MCQ + audio-presence
 + VISUAL-presence (asking about *absent* categories) + open-ended** — so the KL-to-base now protects the
 *visual-hallucination* behavior CMM actually tests, not just AVE audio yes/no. λ_kl=2, `EXP=broad`.
-**Status:** training/selection in progress. Tests whether **coverage** beats raw **strength** (v2).
+**Result — the bet paid off.** **step60: AVHBench 0.643→0.703 (+6.0)** with **CMM_PA 0.927** (within
+tolerance) and **CMM_HR 0.853 — *above* base (0.780).** Because HR went *up* while AVHBench rose, the gain
+is **real grounding, not a yes-bias** (a bias artifact tanks HR). Beats v2's step60 on both axes
+(AVHBench 0.703 vs 0.680, HR 0.853 vs 0.740). Drift still appears late (HR craters by step90), so
+**select mid-training (step60)**.
 
 ---
 
@@ -123,20 +127,20 @@ artifact, not grounding; **DAVE** = sanity guard.
 | base | — | 0.643 | 0.953 | 0.780 | reference |
 | v0 plain DPO | — | — | **0.007** | ~0.99 | catastrophic collapse (constant "no") |
 | v1 λ_kl=1 | step30 | 0.657 | 0.960 | 0.780 | clean but gain ≈ noise; later steps crater HR→0.247 |
-| **v2 λ_kl=4** | **step60** | **0.680** | **0.933** | **0.740** | **first clean gain (+3.7), capability within tolerance** |
-| v3 broad | — | — | — | — | in flight |
+| v2 λ_kl=4 | step60 | 0.680 | 0.933 | 0.740 | clean gain +3.7, small HR dip |
+| **v3 broad** | **step60** | **0.703** | **0.927** | **0.853** | **best: +6.0 AND HR *above* base → real grounding ← HELD** |
 
 ---
 
 ## 5. Current status — what is held
 
-- **Held recipe:** **v2** — anchored swap-DPO with the chosen anchor + KL-to-base, **λ_kl = 4**,
-  **select mid-training (step60)**. It is the only procedure so far that lifts AVHBench while keeping
-  both CMM axes within tolerance.
-- **Held checkpoint:** `runs/anchored_qwen3-omni/bottleneck_step60.pt` (AVHBench 0.680, PA 0.933, HR 0.740).
-- **In flight:** **v3 broad** (does broadened coverage beat strength?). Then, if a recipe gives a
-  confirmed clean gain, replicate to **Qwen2.5-Omni** (trained, selection parked) and implement the
-  **VideoLLaMA2** training-forward to bring in the third arm.
+- **Held recipe:** **v3 broad** — anchored swap-DPO with the chosen anchor + the **broadened**
+  KL-to-base (MCQ + audio- & visual-presence + open-ended), **λ_kl = 2**, **select mid-training (step60)**.
+  Best clean gain: **AVHBench +6.0 with CMM_HR *above* base** — real grounding, no bias artifact.
+- **Held checkpoint:** `runs/anchored_qwen3-omni_broad/bottleneck_step60.pt` (AVHBench 0.703, PA 0.927, HR 0.853).
+- **Next:** confirm/repeat to bank the gain (n=300, +6.0 is credible but modest), then replicate the broad
+  recipe to **Qwen2.5-Omni** (trained, selection parked) and implement the **VideoLLaMA2** training-forward
+  for the third arm.
 
 **Monitoring/selection discipline (so collapse is caught early):** per-step `frac_yes` probe +
 `chosen_minus_ref` (anchor floor, ≥0) + `gen_kl`; model selection on the **held-out benchmarks** with the

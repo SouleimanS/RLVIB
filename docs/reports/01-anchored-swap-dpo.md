@@ -151,16 +151,18 @@ too narrow, and at λ_kl=1.0 it is too weak to hold by step 150.
 ## 6. Conclusion & next steps
 
 The anchors convert the *catastrophic* collapse of Exp 1 (CMM-PA → 0.007 in a few steps) into a
-**gradual, controllable drift** with a usable knob (step / λ) — that is real progress, and it confirms
-the diagnosis (missing output anchor). But it is **not yet a clean win**: a grounding gain that survives
-the capability guards requires a stronger, broader anchor.
+**gradual, controllable drift**, confirming the diagnosis (missing output anchor). Two follow-ups then
+turned it into a **clean win** (full procedure log in
+[02-model-and-training.md](02-model-and-training.md)): **raising the anchor strength** (λ_kl 1→4)
+controlled the drift (step60: AVHBench +3.7, capability within tolerance), and **broadening the anchor
+coverage** to visual-presence / hallucination prompts (the *broad* run, λ_kl=2) did better still —
+**step60: AVHBench 0.643 → 0.703 (+6.0) with CMM_HR 0.853, *above* base.** Because HR rose while AVHBench
+rose, the gain is **real grounding, not a yes-bias.** Held recipe: **broad anchor, λ_kl=2, select
+mid-training (step60).**
 
-Next:
-1. **Broaden + strengthen the anchor** — diversify the KL-to-base anchor inputs beyond AVE clips (so it
-   protects CMM-style behavior, not just AVE yes/no), and raise `λ_kl` (1.0 → 3–4). Re-train, re-select.
-2. **Select with the full guard** — gate on CMM **HR as well as PA** (step90 passes PA but fails HR);
-   prefer the earliest checkpoint that clears both, and treat large AVHBench jumps as suspect until the
-   CMM guards confirm them.
+Still open: the +6.0 is credible but modest (n=300) — confirm/repeat to bank it; the drift still appears
+at late steps, so selection stays mid-training; then replicate the broad recipe to the Qwen2.5 and
+VideoLLaMA2 arms.
 
 Next:
 1. **Model selection** across the 15 checkpoints — pick best AVHBench s.t. CMM-PA ≥ 0.90, DAVE ≥ 0.36.
