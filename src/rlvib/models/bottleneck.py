@@ -62,17 +62,20 @@ class VariationalBottleneck(nn.Module):
         if self.bypass:
             return x
         pd = self.enc.weight.dtype          # fp32 on fp16 backbones -> no overflow / 0*inf NaN
-        xc = torch.nan_to_num(x.to(pd))     # guard inf/nan backbone feats (else enc() spreads NaN)
-        h = self.act(self.enc(xc))
-        mu = self.to_mu(h)
-        logvar = self.to_logvar(h).clamp(-8.0, 8.0)
-        z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
-        kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
-        self.last_kl = kl_elem.mean()                       # scalar rate for the IB loss
-        self.last_kl_per_token = kl_elem.sum(dim=-1).detach()  # per-token rate -> saliency map
-        delta = self.out(z)
-        self.last_residual_per_token = delta.detach().norm(dim=-1)    # ||edit|| per token
-        self.last_input_norm_per_token = xc.detach().norm(dim=-1)     # ||token|| (relative edit)
+        # Force the VIB to compute in its param dtype even under an outer bf16 autocast
+        # (fp16 backbones): otherwise enc()/mu overflow bf16 and the KL rate blows up to inf.
+        with torch.autocast(x.device.type, enabled=False):
+            xc = torch.nan_to_num(x.to(pd))     # guard inf/nan backbone feats (enc() spreads NaN)
+            h = self.act(self.enc(xc))
+            mu = self.to_mu(h)
+            logvar = self.to_logvar(h).clamp(-8.0, 8.0)
+            z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
+            kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
+            self.last_kl = kl_elem.mean()                       # scalar rate for the IB loss
+            self.last_kl_per_token = kl_elem.sum(dim=-1).detach()  # per-token rate -> saliency map
+            delta = self.out(z)
+            self.last_residual_per_token = delta.detach().norm(dim=-1)    # ||edit|| per token
+            self.last_input_norm_per_token = xc.detach().norm(dim=-1)     # ||token|| (relative edit)
         return x + delta.to(x.dtype)
 
 
