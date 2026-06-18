@@ -61,7 +61,9 @@ class VariationalBottleneck(nn.Module):
     def forward(self, x):
         if self.bypass:
             return x
-        h = self.act(self.enc(x))
+        pd = self.enc.weight.dtype          # fp32 on fp16 backbones -> no overflow / 0*inf NaN
+        xc = x.to(pd)
+        h = self.act(self.enc(xc))
         mu = self.to_mu(h)
         logvar = self.to_logvar(h).clamp(-8.0, 8.0)
         z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
@@ -70,8 +72,8 @@ class VariationalBottleneck(nn.Module):
         self.last_kl_per_token = kl_elem.sum(dim=-1).detach()  # per-token rate -> saliency map
         delta = self.out(z)
         self.last_residual_per_token = delta.detach().norm(dim=-1)    # ||edit|| per token
-        self.last_input_norm_per_token = x.detach().norm(dim=-1)      # ||token|| (relative edit)
-        return x + delta
+        self.last_input_norm_per_token = xc.detach().norm(dim=-1)     # ||token|| (relative edit)
+        return x + delta.to(x.dtype)
 
 
 def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
@@ -84,9 +86,12 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
     for p in model.model.parameters():
         p.requires_grad_(False)
 
+    # fp16 backbones (e.g. VideoLLaMA2) have a narrow range; keep the VIB in fp32 there so
+    # its internal Linears can't overflow to inf (then 0*inf = NaN). bf16/fp32 unchanged.
+    vib_dtype = torch.float32 if getattr(model, "dtype", None) == torch.float16 else model.dtype
     bottlenecks = nn.ModuleDict(
         {"audio": cls(dim), "vision": cls(dim)}
-    ).to(model.device, model.dtype)
+    ).to(model.device, vib_dtype)
 
     handles = []
     for name, adapter in model.adapter_modules().items():
