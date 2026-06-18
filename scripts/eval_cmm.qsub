@@ -31,8 +31,8 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 CMM_JSON="${CMM_JSON:-$PWD/data/CMM/cmm.json}"
 CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
-BN_ARG=""; TAG=""
-if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="_bn"; fi
+BN_ARG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
 
 echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none} ==="
 nvidia-smi -L

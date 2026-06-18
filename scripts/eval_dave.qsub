@@ -31,8 +31,8 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 DAVE_SPLIT="${DAVE_SPLIT:-ego4d}"
 MODE="${MODE:-audio_visual_alignment}"
-BN_ARG=""; TAG=""
-if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="_bn"; fi
+BN_ARG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
 
 echo "=== Node: $(hostname)  Date: $(date)  split=$DAVE_SPLIT mode=$MODE bottleneck=${BOTTLENECK:-none} ==="
 nvidia-smi -L

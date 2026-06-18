@@ -36,8 +36,8 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 AVHBENCH_QA="${AVHBENCH_QA:-$PWD/data/AVHBench/qa.json}"
 AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$PWD/data/AVHBench/videos}"
-BN_ARG=""; TAG=""
-if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="_bn"; fi
+BN_ARG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
 
 echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none} ==="
 nvidia-smi -L
