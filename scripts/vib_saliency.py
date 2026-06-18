@@ -1,18 +1,15 @@
 #!/usr/bin/env python
-"""Per-token information map of a trained VIB -- interpretability readout (option 1).
+"""Per-token information + edit map of a trained VIB -- interpretability readout.
 
-For each clip we run ONE forward pass with the held bottleneck attached and read each
-modality VIB's `last_kl_per_token`: the KL "bits" it spends per token (the code's built-in
-saliency map, models/bottleneck.py). This shows WHERE the VIB invests its information
-budget -- audio vs vision, and concentrated on a few tokens vs spread thin -- i.e. what the
-trained bottleneck is actually doing to the media tokens. Forward-pass only, no training.
+Forward-pass only. For each clip we read, per modality VIB:
+  * the KL "rate" map  (last_kl_per_token, bits/token) -- where it spends information;
+  * the EDIT map       (||out(z)|| per token, and relative to ||x||) -- how much it
+    actually changes the tokens. KL is the rate, not the edit: a big rate can still be a
+    small perturbation, so we report both.
+Note each VIB is per-modality (vision sees only the video tokens, audio only the audio
+tokens), so its transform is necessarily unconditional w.r.t. the other modality.
 
-  python scripts/vib_saliency.py \
-      --bottleneck runs/anchored_qwen3-omni_broad/bottleneck_step60.pt --n 8
-
-`tot` = total bits the VIB adds over all tokens (near 0 => near-identity / barely editing);
-`mean` = bits/token; `top10%` = share of the bits in the top 10% of tokens (high => the VIB
-focuses on a few tokens; ~10% => diffuse).
+  python scripts/vib_saliency.py --bottleneck runs/anchored_qwen3-omni_broad/bottleneck_step60.pt --n 8
 """
 from __future__ import annotations
 
@@ -34,18 +31,20 @@ def _stats(bn):
     kpt = getattr(bn, "last_kl_per_token", None)
     if kpt is None:
         return None
-    v = kpt.detach().float().flatten() * NAT2BIT          # nats -> bits, per token
-    n = v.numel()
-    tot = float(v.sum())
+    kb = kpt.detach().float().flatten() * NAT2BIT                 # bits/token
+    rpt = bn.last_residual_per_token.detach().float().flatten()   # ||out(z)|| per token
+    ipt = bn.last_input_norm_per_token.detach().float().flatten().clamp(min=1e-6)
+    n = kb.numel()
+    tot = float(kb.sum())
     k = max(1, n // 10)
-    top = float(v.topk(k).values.sum())
-    return {"T": n, "total": tot, "mean": tot / n, "max": float(v.max()),
-            "top10": top / tot if tot > 0 else 0.0}
+    return {"T": n, "bits_mean": tot / n,
+            "top10": float(kb.topk(k).values.sum()) / tot if tot > 0 else 0.0,
+            "edit": float(rpt.mean()), "rel": float((rpt / ipt).mean())}
 
 
 @torch.no_grad()
 def probe(model, bns, msg):
-    answer_logp_vec(model, msg)                            # forward; hooks fill last_kl_per_token
+    answer_logp_vec(model, msg)                                   # forward; hooks fill the maps
     return {name: _stats(bns[name]) for name in ("audio", "vision")}
 
 
@@ -63,29 +62,27 @@ def main() -> int:
 
     items = ave.load_ave("train")
     random.Random(0).shuffle(items)
-    items = items[: args.n]
+    sel = items[: args.n]
 
-    sums = {"audio": [0.0, 0.0], "vision": [0.0, 0.0]}    # [sum total, sum mean] over clips
-    for i, it in enumerate(items):
+    agg = {"audio": [0.0, 0.0], "vision": [0.0, 0.0]}            # [bits_mean, rel]
+    for i, it in enumerate(sel):
         st = probe(m, bns, m.message(video=it["video_path"], prompt=args.prompt))
         v, a = st["vision"], st["audio"]
-        print(f"clip {i:2d} {it['category']:>18}  "
-              f"VISION T={v['T']:4d} tot={v['total']:7.1f} mean={v['mean']:.3f} "
-              f"max={v['max']:5.2f} top10%={v['top10']:.0%}   "
-              f"AUDIO T={a['T']:4d} tot={a['total']:7.1f} mean={a['mean']:.3f} "
-              f"max={a['max']:5.2f} top10%={a['top10']:.0%}", flush=True)
+        print(f"clip {i:2d} {it['category']:>16}  "
+              f"VIS T={v['T']:4d} bits/tok={v['bits_mean']:7.2f} edit={v['edit']:6.2f} "
+              f"rel={v['rel']:6.1%} top10%={v['top10']:.0%}   "
+              f"AUD bits/tok={a['bits_mean']:.3f} rel={a['rel']:.1%}", flush=True)
         for nm, s in (("vision", v), ("audio", a)):
-            sums[nm][0] += s["total"]
-            sums[nm][1] += s["mean"]
+            agg[nm][0] += s["bits_mean"]
+            agg[nm][1] += s["rel"]
 
-    k = max(1, len(items))
-    vt, vm = sums["vision"][0] / k, sums["vision"][1] / k
-    at, am = sums["audio"][0] / k, sums["audio"][1] / k
-    print(f"\nSUMMARY (n={k})  mean per clip:")
-    print(f"  VISION  total={vt:7.1f} bits   per-token={vm:.3f}")
-    print(f"  AUDIO   total={at:7.1f} bits   per-token={am:.3f}")
-    print(f"  -> the VIB invests more bits/token in "
-          f"{'VISION' if vm > am else 'AUDIO'} (mean {max(vm, am):.3f} vs {min(vm, am):.3f})", flush=True)
+    k = max(1, len(sel))
+    print(f"\nSUMMARY (n={k})")
+    print(f"  VISION  bits/tok={agg['vision'][0]/k:7.2f}   rel-edit={agg['vision'][1]/k:.1%}")
+    print(f"  AUDIO   bits/tok={agg['audio'][0]/k:7.3f}   rel-edit={agg['audio'][1]/k:.1%}")
+    print("  rel-edit = mean ||out(z)|| / ||x|| : the fraction of each token's magnitude the VIB "
+          "actually changes.\n  (big bits + big rel = heavy rewrite; big bits + tiny rel = encodes "
+          "a lot but perturbs little.)", flush=True)
 
     for h in handles:
         h.remove()

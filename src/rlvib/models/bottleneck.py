@@ -55,6 +55,8 @@ class VariationalBottleneck(nn.Module):
         self.bypass = False
         self.last_kl = None
         self.last_kl_per_token = None  # (..., T) bits the bottleneck allocates per token
+        self.last_residual_per_token = None    # (..., T) ||out(z)|| -> actual edit magnitude
+        self.last_input_norm_per_token = None  # (..., T) ||x||      -> for the relative edit
 
     def forward(self, x):
         if self.bypass:
@@ -66,7 +68,10 @@ class VariationalBottleneck(nn.Module):
         kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
         self.last_kl = kl_elem.mean()                       # scalar rate for the IB loss
         self.last_kl_per_token = kl_elem.sum(dim=-1).detach()  # per-token rate -> saliency map
-        return x + self.out(z)
+        delta = self.out(z)
+        self.last_residual_per_token = delta.detach().norm(dim=-1)    # ||edit|| per token
+        self.last_input_norm_per_token = x.detach().norm(dim=-1)      # ||token|| (relative edit)
+        return x + delta
 
 
 def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck):
