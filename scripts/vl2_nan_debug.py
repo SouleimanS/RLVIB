@@ -1,7 +1,12 @@
 #!/usr/bin/env python
-"""Pinpoint VideoLLaMA2 NaN: a clean clip forwards fine, so test the ACTUAL training
-inputs. Probes (all active VIB + grad) a clean+open-ended, a clean+MCQ, and a
-SWAPPED+MCQ input -> tells us whether it's the swapped media or the MCQ prompt.
+"""VideoLLaMA2 finiteness diagnostic (matches the VL2 training config: normalize_input=True).
+
+Reports, per real training input (clean+open / clean+MCQ / swapped+MCQ), with the VIB
+active + grad:
+  model dtype  -- did the bf16 cast take? (should be torch.bfloat16)
+  logits_finite -- is the LLM forward finite? (bf16 should fix attention overflow)
+  vis_featmax  -- magnitude of the mm_projector features into the VIB (~1e9 = massive acts)
+  vis_kl       -- the VIB KL rate + finiteness (normalize_input should keep it O(1))
 
   CONDA_ENV=rlvib_vl2 ... :  PYTHONPATH=src python scripts/vl2_nan_debug.py
 """
@@ -17,22 +22,33 @@ from rlvib.train.dpo import answer_logp_vec
 
 
 def fin(t):
-    return bool(torch.isfinite(t).all()) if t is not None else None
+    if t is None:
+        return None
+    return bool(torch.isfinite(t if torch.is_tensor(t) else torch.tensor(float(t))).all())
+
+
+def _max(t):
+    return float(t.max()) if t is not None else float("nan")
 
 
 def probe(m, bns, video, prompt, tag):
     set_bypass(bns, False)
     bns.train()
     lp = answer_logp_vec(m, m.message(video=video, prompt=prompt))
-    print(f"[{tag:11s}] logits_finite={fin(lp)}  "
-          f"vis_x={fin(bns['vision'].last_input_norm_per_token)} "
-          f"aud_x={fin(bns['audio'].last_input_norm_per_token)}", flush=True)
+    v, a = bns["vision"], bns["audio"]
+    print(f"[{tag:11s}] logits_fin={fin(lp)}  "
+          f"vis_featmax={_max(v.last_input_norm_per_token):.2e} "
+          f"vis_kl={float(v.last_kl):.2e}({fin(v.last_kl)})  "
+          f"aud_featmax={_max(a.last_input_norm_per_token):.2e} "
+          f"aud_kl={float(a.last_kl):.2e}({fin(a.last_kl)})", flush=True)
 
 
 def main() -> int:
     m = get_model("videollama2")
     print("model dtype:", m.dtype, flush=True)
-    bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck)
+    bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck, normalize_input=True)
+    print("vib param dtype:", next(bns["vision"].parameters()).dtype,
+          "| normalize_input:", bns["vision"].normalize_input, flush=True)
 
     cats = ave.categories()
     items = ave.load_ave("train")
