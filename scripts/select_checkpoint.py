@@ -59,15 +59,17 @@ def main() -> int:
     ap.add_argument("--min-pa", type=float, default=0.90, help="CMM perception-accuracy guard")
     ap.add_argument("--min-hr", type=float, default=0.70, help="CMM hallucination-resistance guard")
     ap.add_argument("--min-dave", type=float, default=0.36, help="DAVE accuracy guard (skipped if unevaluated)")
+    ap.add_argument("--exp", default="", help="experiment label, e.g. broad (matches select_checkpoint.sh EXP)")
     args = ap.parse_args()
+    xt = f"_{args.exp}" if args.exp else ""
 
     steps = sorted({int(m.group(1))
-                    for p in glob.glob(f"runs/avhbench_{args.model}_step*.json")
+                    for p in glob.glob(f"runs/avhbench_{args.model}{xt}_step*.json")
                     for m in [re.search(r"_step(\d+)\.json$", p)] if m})
     if not steps:
         print("No per-step AVHBench JSONs found in runs/. Run scripts/select_checkpoint.sh first.")
         return 1
-    rows = [("base", "")] + [(f"step{s}", f"_step{s}") for s in steps]
+    rows = [("base", "")] + [(f"step{s}", f"{xt}_step{s}") for s in steps]
 
     print(f"{'ckpt':>8}  {'AVHBench':>8}  {'CMM_PA':>7}  {'CMM_HR':>7}  {'DAVE':>6}  guard")
     cand = []

@@ -21,7 +21,7 @@ WITH_DAVE="${WITH_DAVE:-0}"
 for S in $STEPS; do
     BN="$CKPT_DIR/bottleneck_step${S}.pt"
     if [ ! -f "$BN" ]; then echo "!! missing $BN -- skipping"; continue; fi
-    TAG="_step${S}"
+    TAG="${EXP:+_$EXP}_step${S}"
     echo ">> checkpoint step $S  ($BN)"
     qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_avhbench.qsub
     qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_cmm.qsub
