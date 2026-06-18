@@ -35,6 +35,7 @@ def build_prompt(choices: list[str]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3-omni")
+    ap.add_argument("--bottleneck", default=None, help="attach a trained bottleneck checkpoint")
     ap.add_argument("--json", required=True)
     ap.add_argument("--media-root", required=True)
     ap.add_argument("--mode", default="audio_visual_alignment", choices=list(MODE_SPEC))
@@ -44,6 +45,10 @@ def main() -> int:
     args = ap.parse_args()
 
     model = get_model(args.model)
+    if args.bottleneck:
+        from rlvib.models.bottleneck import load_attached
+        _bn, _h = load_attached(model, args.bottleneck)
+        print(f"attached bottleneck <- {args.bottleneck}", flush=True)
     ds = DaveDataset(args.json, args.media_root, mode=args.mode)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     out = args.out or f"runs/dave_{args.mode}.json"

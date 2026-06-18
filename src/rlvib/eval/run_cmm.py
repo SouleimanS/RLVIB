@@ -35,6 +35,7 @@ def _scores(pairs: list) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3-omni")
+    ap.add_argument("--bottleneck", default=None, help="attach a trained bottleneck checkpoint")
     ap.add_argument("--json-path", required=True)
     ap.add_argument("--data-root", required=True)
     ap.add_argument("--subsets", nargs="*", default=None, help="sub_category filter; default all")
@@ -44,6 +45,10 @@ def main() -> int:
     args = ap.parse_args()
 
     model = get_model(args.model)
+    if args.bottleneck:
+        from rlvib.models.bottleneck import load_attached
+        _bn, _h = load_attached(model, args.bottleneck)
+        print(f"attached bottleneck <- {args.bottleneck}", flush=True)
     ds = CMMDataset(args.json_path, args.data_root, sub_categories=args.subsets)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"CMM: {n}/{len(ds)} questions | subsets={args.subsets or 'all'}", flush=True)

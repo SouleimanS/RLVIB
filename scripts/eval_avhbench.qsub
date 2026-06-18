@@ -36,16 +36,18 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 AVHBENCH_QA="${AVHBENCH_QA:-$PWD/data/AVHBench/qa.json}"
 AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$PWD/data/AVHBench/videos}"
+BN_ARG=""; TAG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="_bn"; fi
 
-echo "=== Node: $(hostname)  Date: $(date) ==="
+echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none} ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline${TAG}_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_avhbench \
     --model "${MODEL:-qwen3-omni}" \
     --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
-    --limit "${LIMIT:-100}" \
-    --out "runs/avhbench_${MODEL:-qwen3-omni}.json"
+    --limit "${LIMIT:-100}" $BN_ARG \
+    --out "runs/avhbench_${MODEL:-qwen3-omni}${TAG}.json"
 
 echo "=== Done $(date) ==="

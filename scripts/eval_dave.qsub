@@ -31,17 +31,19 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 DAVE_SPLIT="${DAVE_SPLIT:-ego4d}"
 MODE="${MODE:-audio_visual_alignment}"
+BN_ARG=""; TAG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="_bn"; fi
 
-echo "=== Node: $(hostname)  Date: $(date)  split=$DAVE_SPLIT mode=$MODE ==="
+echo "=== Node: $(hostname)  Date: $(date)  split=$DAVE_SPLIT mode=$MODE bottleneck=${BOTTLENECK:-none} ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/dave_${DAVE_SPLIT}_${MODE}_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/dave_${DAVE_SPLIT}_${MODE}${TAG}_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_dave \
     --model "${MODEL:-qwen3-omni}" \
     --json "$PWD/data/DAVE/${DAVE_SPLIT}.json" \
     --media-root "$PWD/data/DAVE/${DAVE_SPLIT}" \
-    --mode "$MODE" --limit "${LIMIT:-100}" \
-    --out "runs/dave_${DAVE_SPLIT}_${MODEL:-qwen3-omni}_${MODE}.json"
+    --mode "$MODE" --limit "${LIMIT:-100}" $BN_ARG \
+    --out "runs/dave_${DAVE_SPLIT}_${MODEL:-qwen3-omni}_${MODE}${TAG}.json"
 
 echo "=== Done $(date) ==="

@@ -106,3 +106,21 @@ def set_bypass(bottlenecks, on: bool) -> None:
     """Toggle pass-through (identity) on all bottlenecks — used for the DPO reference."""
     for b in bottlenecks.values():
         b.bypass = on
+
+
+def load_attached(model, ckpt_path):
+    """Attach a TRAINED bottleneck checkpoint to `model` for inference (eval mode).
+
+    Reads the saved class + dim, attaches via forward hooks (freezing the model), loads
+    the weights, switches to eval (deterministic z=mu). Returns (bottlenecks, handles) —
+    keep the reference alive for the duration of inference.
+    """
+    import torch
+
+    ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    cls = {"VariationalBottleneck": VariationalBottleneck,
+           "ResidualBottleneck": ResidualBottleneck}.get(ck.get("cls"), VariationalBottleneck)
+    bottlenecks, handles = attach_bottlenecks(model, dim=ck.get("dim"), cls=cls)
+    bottlenecks.load_state_dict(ck["state_dict"])
+    bottlenecks.eval()
+    return bottlenecks, handles

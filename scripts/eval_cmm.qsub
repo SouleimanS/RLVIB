@@ -31,16 +31,18 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
 CMM_JSON="${CMM_JSON:-$PWD/data/CMM/cmm.json}"
 CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
+BN_ARG=""; TAG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="_bn"; fi
 
-echo "=== Node: $(hostname)  Date: $(date) ==="
+echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none} ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/cmm_baseline_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/cmm_baseline${TAG}_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_cmm \
     --model "${MODEL:-qwen3-omni}" \
     --json-path "$CMM_JSON" --data-root "$CMM_ROOT" \
-    --limit "${LIMIT:-100}" \
-    --out "runs/cmm_${MODEL:-qwen3-omni}.json"
+    --limit "${LIMIT:-100}" $BN_ARG \
+    --out "runs/cmm_${MODEL:-qwen3-omni}${TAG}.json"
 
 echo "=== Done $(date) ==="

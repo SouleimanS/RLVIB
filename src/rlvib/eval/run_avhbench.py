@@ -23,6 +23,7 @@ YN_SUFFIX = " Answer with a single word: Yes or No."
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3-omni")
+    ap.add_argument("--bottleneck", default=None, help="attach a trained bottleneck checkpoint")
     ap.add_argument("--qa-json", required=True)
     ap.add_argument("--video-root", required=True)
     ap.add_argument("--tasks", nargs="*", default=list(BINARY_TASKS))
@@ -32,6 +33,10 @@ def main() -> int:
     args = ap.parse_args()
 
     model = get_model(args.model)
+    if args.bottleneck:
+        from rlvib.models.bottleneck import load_attached
+        _bn, _h = load_attached(model, args.bottleneck)
+        print(f"attached bottleneck <- {args.bottleneck}", flush=True)
     ds = AVHBenchDataset(args.qa_json, args.video_root, tasks=args.tasks)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"AVHBench: {n}/{len(ds)} samples | tasks={args.tasks}", flush=True)
