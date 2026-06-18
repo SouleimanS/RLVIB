@@ -80,8 +80,9 @@ def main() -> int:
     ap.add_argument("--lam-kl", type=float, default=1.0)
     ap.add_argument("--eval-every", type=int, default=10)
     ap.add_argument("--swap-dir", default="data/AVE/swapped")
-    ap.add_argument("--save-dir", default="runs/anchored")
+    ap.add_argument("--save-dir", default=None, help="default: runs/anchored_<model>")
     args = ap.parse_args()
+    args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
 
     m = get_model(args.model)
     bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck)

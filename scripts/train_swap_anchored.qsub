@@ -27,7 +27,7 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 echo "=== Node: $(hostname)  Date: $(date) ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_${MODEL:-qwen3-omni}_out.txt") 2>&1
 
 python -u scripts/train_swap_anchored.py --model "${MODEL:-qwen3-omni}" \
     --pairs "${PAIRS:-300}" --epochs "${EPOCHS:-2}" --accum "${ACCUM:-4}" \

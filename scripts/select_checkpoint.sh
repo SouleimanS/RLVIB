@@ -10,7 +10,8 @@ cd "$(dirname "$0")/.."
 
 LIMIT="${LIMIT:-300}"
 STEPS="${STEPS:-30 60 90 120 150}"
-CKPT_DIR="${CKPT_DIR:-$PWD/runs/anchored}"
+MODEL="${MODEL:-qwen3-omni}"
+CKPT_DIR="${CKPT_DIR:-$PWD/runs/anchored_$MODEL}"
 CMM_JSON="${CMM_JSON:-$PWD/data/CMM/all_data_final_reorg.json}"
 CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
 DAVE_SPLIT="${DAVE_SPLIT:-ego4d}"
@@ -21,10 +22,10 @@ for S in $STEPS; do
     if [ ! -f "$BN" ]; then echo "!! missing $BN -- skipping"; continue; fi
     TAG="_step${S}"
     echo ">> checkpoint step $S  ($BN)"
-    qsub -v "MODEL=qwen3-omni,LIMIT=$LIMIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_avhbench.qsub
-    qsub -v "MODEL=qwen3-omni,LIMIT=$LIMIT,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_cmm.qsub
+    qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_avhbench.qsub
+    qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_cmm.qsub
     if [ "$WITH_DAVE" = 1 ]; then
-        qsub -v "MODEL=qwen3-omni,LIMIT=$LIMIT,MODE=audio_visual_alignment,DAVE_SPLIT=$DAVE_SPLIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_dave.qsub
+        qsub -v "MODEL=$MODEL,LIMIT=$LIMIT,MODE=audio_visual_alignment,DAVE_SPLIT=$DAVE_SPLIT,BOTTLENECK=$BN,TAG=$TAG" scripts/eval_dave.qsub
     fi
 done
 
