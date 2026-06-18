@@ -35,9 +35,10 @@ converges to a near-constant answer. We attribute this to likelihood displacemen
 any constraint on the model's output distribution. We then add two anchors --- a term that holds the
 chosen answer's likelihood at or above the frozen base, and an explicit KL penalty to the base on a set
 of general inputs --- and an ablation shows that both are required: the first alone still loses
-perception accuracy and the second alone loses hallucination-resistance. With both, on Qwen3-Omni the
-audio--visual hallucination benchmark AVHBench improves from $0.643$ to $0.688\pm0.014$ across three
-seeds, while the two CMM capability axes stay within tolerance of the base. We report a sweep over the
+perception accuracy and the second alone loses hallucination-resistance. With both, on Qwen3-Omni and under a
+leakage-controlled protocol (checkpoints selected on a held-out validation split, reported on a disjoint
+test split), the audio--visual hallucination benchmark AVHBench improves from $0.647$ to $0.694\pm0.023$
+across three seeds, while the two CMM capability axes stay within tolerance of the base. We report a sweep over the
 information-bottleneck rate weight $\beta_{kl}$, a per-token analysis of the trained bottleneck, and
 partial results on Qwen2.5-Omni. Results on VideoLLaMA2 are pending a numerical fix and are marked
 \note{**} throughout. All gains are modest and measured on $300$-example benchmark subsets; limitations
@@ -148,116 +149,124 @@ two VIBs trained. \textbf{Training data:} audio-swapped AVE clips (300 pairs, 2 
 $\lambda_a{=}1$, $\lambda_{kl}{=}2$, $\beta_{kl}{=}0.01$ unless stated). \textbf{Benchmarks (held-out,
 $n{=}300$ subset each):} AVHBench~\cite{avhbench} (audio--visual hallucination, overall accuracy);
 CMM~\cite{cmm} perception accuracy (PA; correctly affirms present content) and hallucination resistance
-(HR; correctly denies absent content); DAVE~\cite{dave} audio--visual multiple choice. \textbf{Guards:}
-$\text{PA}\ge0.90$ and $\text{HR}\ge0.70$ (absolute, tuned to Qwen3's base); we note where these are
-mis-calibrated for other backbones. Selected checkpoint = highest AVHBench passing the guards.
+(HR; correctly denies absent content); DAVE~\cite{dave} audio--visual multiple choice. \textbf{Selection protocol (leakage control):} each benchmark's $300$ per-example records are split,
+by a fixed seed, into a validation half and a disjoint test half; checkpoints (and the recipe and
+$\beta_{kl}$) are selected on the validation half and \emph{all reported numbers are on the test half}.
+The selection rule is the highest validation AVHBench subject to capability guards
+$\text{PA}\ge\text{PA}_{\text{base}}-0.05$ and $\text{HR}\ge\text{HR}_{\text{base}}-0.05$ (relative to
+each backbone's base, computed on validation). Reported metrics are therefore on $n{=}150$.
 
 \subsection{The collapse and the anchor ablation (Qwen3-Omni)}
 \label{sec:abl}
 Table~\ref{tab:abl} reports the selected checkpoint for the four objectives; Table~\ref{tab:collapse}
 reports the end-of-training (step 150) CMM axes to show the collapse dynamics. The naive objective
-(Eq.~\ref{eq:naive}) reduces CMM perception from $0.953$ to $0.013$ by step 150 and the model answers a
-near-constant ``no'' (hallucination-resistance inflates to $0.993$ because denying everything trivially
-avoids hallucination). The chosen anchor alone delays but does not prevent the perception loss
-($0.220$ at step 150). The KL-to-base alone keeps perception near base but loses hallucination-resistance
-($0.620$). Only with both terms does the selected checkpoint keep both axes within tolerance, and it
+(Eq.~\ref{eq:naive}) reduces CMM perception (test) from $0.939$ to $0.015$ by step 150 and the model
+answers a near-constant ``no'' (hallucination-resistance inflates to $1.000$ because denying everything
+trivially avoids hallucination). The chosen anchor alone delays but does not prevent the perception loss
+($0.227$ at step 150). The KL-to-base alone keeps perception near base but loses hallucination-resistance
+($0.655$). Only with both terms does the selected checkpoint keep both axes within tolerance, and it
 also attains the highest AVHBench. All four objectives drift if trained to step 150; selection is
 mid-training.
 
 \begin{table}[t]\centering\small
-\caption{Anchor ablation on Qwen3-Omni. Selected checkpoint (highest AVHBench with $\text{PA}\ge0.90$,
-$\text{HR}\ge0.70$). Higher is better for all columns.}
+\caption{Anchor ablation on Qwen3-Omni (val-selected, test-reported, $n{=}150$). Selected checkpoint =
+highest validation AVHBench with PA and HR within $0.05$ of base on validation. Higher is better.}
 \label{tab:abl}
 \begin{tabular}{lcccccc}
 \toprule
 Objective & $\lambda_a$ & $\lambda_{kl}$ & sel.\ step & AVHBench & CMM-PA & CMM-HR \\
 \midrule
-Frozen base & --- & --- & --- & 0.643 & 0.953 & 0.780 \\
-Naive swap-DPO (Eq.~\ref{eq:naive}) & 0 & 0 & 30 & 0.667 & 0.953 & 0.767 \\
-\quad + chosen anchor only & 1 & 0 & 30 & 0.657 & 0.960 & 0.773 \\
-\quad + KL-to-base only & 0 & 2 & 60 & 0.650 & 0.940 & 0.787 \\
-\quad + both (anchored, ``broad'') & 1 & 2 & 60 & \textbf{0.703} & 0.927 & 0.853 \\
+Frozen base & --- & --- & --- & 0.647 & 0.939 & 0.810 \\
+Naive swap-DPO (Eq.~\ref{eq:naive}) & 0 & 0 & 30 & 0.673 & 0.939 & 0.774 \\
+\quad + chosen anchor only & 1 & 0 & 30 & 0.660 & 0.939 & 0.798 \\
+\quad + KL-to-base only & 0 & 2 & 60 & 0.647 & 0.924 & 0.810 \\
+\quad + both (anchored, ``broad'') & 1 & 2 & 60 & \textbf{0.707} & 0.909 & 0.869 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]\centering\small
-\caption{End-of-training (step 150) CMM axes on Qwen3-Omni, showing the collapse without both anchors.
-PA$\to$0.013 under naive DPO is a near-constant ``no''.}
+\caption{End-of-training (step 150) CMM axes on Qwen3-Omni (test split), showing the collapse without
+both anchors. PA$\to$0.015 under naive DPO is a near-constant ``no'' (HR $\to$ 1.0 by denying everything).}
 \label{tab:collapse}
 \begin{tabular}{lcc}
 \toprule
 Objective (step 150) & CMM-PA & CMM-HR \\
 \midrule
-Naive swap-DPO & 0.013 & 0.993 \\
-\quad + chosen anchor only & 0.220 & 0.847 \\
-\quad + KL-to-base only & 0.900 & 0.620 \\
-\quad + both (anchored) & 0.867 & 0.447 \\
+Naive swap-DPO & 0.015 & 1.000 \\
+\quad + chosen anchor only & 0.227 & 0.893 \\
+\quad + KL-to-base only & 0.879 & 0.655 \\
+\quad + both (anchored) & 0.848 & 0.476 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Held recipe, seed variation, and rate sweep (Qwen3-Omni)}
 \label{sec:results}
-Table~\ref{tab:seeds} reports the anchored recipe across three seeds: the selected-checkpoint AVHBench is
-$0.688\pm0.014$ (mean$\pm$std) versus a base of $0.643$, with every seed above base and the CMM axes within
-tolerance (HR is at or above base in all three). Table~\ref{tab:beta} sweeps the bottleneck rate weight
-$\beta_{kl}$: increasing it from $0.01$ to $0.1$ raises the selected AVHBench to $0.720$ and makes more
-checkpoints pass the guards (4/5 vs 2/5), and $\beta_{kl}{=}1.0$ makes all 5 pass; the $\beta_{kl}{=}0.01$
-run, by contrast, drifts after step 60. This is consistent with the rate analysis in
-Section~\ref{sec:interp} (the rate penalty at $0.01$ is weak).
+Table~\ref{tab:seeds} reports the anchored recipe across three seeds: the test AVHBench at the
+validation-selected checkpoint is $0.694\pm0.023$ versus a test base of $0.647$, with every seed above base
+and HR at or above base in all three. Table~\ref{tab:beta} sweeps the bottleneck rate weight $\beta_{kl}$:
+the test AVHBench is comparable across $\{0.01,0.1,1.0\}$ (all $\approx0.70$), but the number of
+checkpoints passing the validation guards increases with $\beta_{kl}$ (2/5, 4/5, 5/5), i.e. larger
+$\beta_{kl}$ stabilizes training. This is consistent with the rate analysis in Section~\ref{sec:interp}
+(the rate penalty at $0.01$ is weak). The apparent AVHBench advantage of $\beta_{kl}{=}0.1$ under full-set
+(leaky) selection did not survive the val/test split.
 
 \begin{table}[t]\centering\small
-\caption{Anchored recipe across seeds (Qwen3-Omni). Selected checkpoint per seed; base AVHBench $=0.643$.}
+\caption{Anchored recipe across seeds (Qwen3-Omni, val-selected, test-reported). Base (test) AVHBench
+$=0.647$, PA $=0.939$, HR $=0.810$.}
 \label{tab:seeds}
 \begin{tabular}{lcccc}
 \toprule
 seed & sel.\ step & AVHBench & CMM-PA & CMM-HR \\
 \midrule
-0 & 60 & 0.703 & 0.927 & 0.853 \\
-1 & 90 & 0.677 & 0.907 & 0.780 \\
-2 & 60 & 0.683 & 0.947 & 0.807 \\
+0 & 60 & 0.707 & 0.909 & 0.869 \\
+1 & 90 & 0.667 & 0.864 & 0.810 \\
+2 & 60 & 0.707 & 0.924 & 0.833 \\
 \midrule
-mean$\pm$std & --- & $0.688\pm0.014$ & $0.927\pm0.020$ & $0.813\pm0.037$ \\
+mean$\pm$std & --- & $0.694\pm0.023$ & $0.899\pm0.031$ & $0.837\pm0.030$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]\centering\small
-\caption{Rate-weight sweep $\beta_{kl}$ (Qwen3-Omni, anchored ``broad'', seed 0). ``guards pass'' counts
-how many of the 5 saved checkpoints satisfy both guards.}
+\caption{Rate-weight sweep $\beta_{kl}$ (Qwen3-Omni, anchored ``broad'', seed 0; val-selected,
+test-reported). ``guards pass'' counts how many of the 5 saved checkpoints satisfy both validation
+guards. The test AVHBench is comparable across $\beta_{kl}$ (the apparent $\beta_{kl}{=}0.1$ advantage
+under full-set selection was selection bias), but larger $\beta_{kl}$ is more stable.}
 \label{tab:beta}
 \begin{tabular}{lccccc}
 \toprule
 $\beta_{kl}$ & sel.\ step & AVHBench & CMM-PA & CMM-HR & guards pass \\
 \midrule
-0.01 & 60  & 0.703 & 0.927 & 0.853 & 2/5 \\
-0.1  & 150 & \textbf{0.720} & 0.907 & 0.847 & 4/5 \\
-1.0  & 150 & 0.710 & 0.933 & 0.813 & 5/5 \\
+0.01 & 60  & 0.707 & 0.909 & 0.869 & 2/5 \\
+0.1  & 150 & 0.700 & 0.879 & 0.857 & 4/5 \\
+1.0  & 150 & 0.707 & 0.909 & 0.869 & 5/5 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Multi-model results}
-Table~\ref{tab:models} reports all three backbones. On Qwen2.5-Omni AVHBench rises from $0.620$ to
-$0.663$ and perception is unchanged ($0.960$), but hallucination-resistance drifts down from $0.653$ to
-$\sim0.61$; note the absolute HR guard ($0.70$) is above Qwen2.5's \emph{base} HR ($0.653$), so the guards
-must be set relative to each model's base for this backbone. VideoLLaMA2 entries are base-only and marked
-\note{**}: a numerical bug (uninitialized bottleneck weights induced by the loader, plus a float16 forward)
-prevented training; the fixes are in place but the trained result is not yet validated.
+Table~\ref{tab:models} reports all three backbones. On Qwen2.5-Omni (test split) AVHBench rises from
+$0.620$ to $0.673$ and perception is unchanged ($0.939$), while hallucination-resistance drifts down
+slightly ($0.619$ to $0.583$); the relative guard (Section~\ref{sec:setup}) is required here because
+Qwen2.5's base HR is below the absolute $0.70$ threshold used for Qwen3. VideoLLaMA2 entries are
+base-only and marked \note{**}: a numerical bug (uninitialized bottleneck weights induced by the loader's
+\texttt{disable\_torch\_init}, plus a float16 forward) prevented training; the fixes are in place but the
+trained result is not yet validated.
 
 \begin{table}[t]\centering\small
-\caption{All backbones. Base and best capability-preserving checkpoint (anchored recipe). DAVE shown for
-the base only (not swept). VideoLLaMA2 is base-only, pending validation.}
+\caption{All backbones (AVHBench/CMM val-selected, test-reported; DAVE is the full-set base, not swept).
+VideoLLaMA2 is base-only, pending validation (\note{**}).}
 \label{tab:models}
 \begin{tabular}{lcccc}
 \toprule
 & AVHBench & CMM-PA & CMM-HR & DAVE \\
 \midrule
-Qwen3-Omni base        & 0.643 & 0.953 & 0.780 & 0.380 \\
-Qwen3-Omni anchored    & 0.703 & 0.927 & 0.853 & --- \\
-Qwen2.5-Omni base      & 0.620 & 0.960 & 0.653 & 0.307 \\
-Qwen2.5-Omni anchored  & 0.663 & 0.960 & 0.613 & --- \\
+Qwen3-Omni base        & 0.647 & 0.939 & 0.810 & 0.380 \\
+Qwen3-Omni anchored    & 0.707 & 0.909 & 0.869 & --- \\
+Qwen2.5-Omni base      & 0.620 & 0.939 & 0.619 & 0.307 \\
+Qwen2.5-Omni anchored  & 0.673 & 0.939 & 0.583 & --- \\
 VideoLLaMA2 base\note{**}     & 0.677 & 0.720 & 0.087 & 0.357 \\
 VideoLLaMA2 anchored\note{**} & ** & ** & ** & ** \\
 \bottomrule
@@ -290,17 +299,19 @@ audio  & $\sim$0.17 & $\sim$11\% (constant bias) & --- \\
 \end{table}
 
 \section{Limitations}
-The evaluation uses $300$-example subsets of each benchmark; confidence intervals are reported only over
-three training seeds for one recipe on one backbone. The grounding gain is modest ($+0.045$ AVHBench mean
-over seeds on Qwen3-Omni) and is the selected checkpoint under capability guards, not a monotone training
-improvement --- all recipes drift if trained longer. The capability guards are tuned to Qwen3-Omni's base
-and are mis-calibrated for Qwen2.5-Omni (whose base HR is below the absolute threshold); a per-model
-relative guard is needed. On Qwen2.5-Omni hallucination-resistance drifts below base, so the
-HR-preserving behavior seen on Qwen3-Omni does not transfer cleanly. VideoLLaMA2 results are not yet
-available (\note{**}). DAVE was evaluated at the base and held checkpoint only, not swept. The
-information-bottleneck framing is partly nominal: at $\beta_{kl}{=}0.01$ the rate penalty is weak and the
-bottleneck does not compress. Finally, the audio-swap signal is synthetic and the benchmarks are
-yes/no-heavy, which interacts with the likelihood-displacement failure mode.
+The evaluation uses $300$-example subsets of each benchmark, split $150/150$ into a validation half (for
+selection) and a test half (for reporting); test metrics are therefore on $n{=}150$ and are noisier than
+the $\pm$ ranges alone suggest, and confidence intervals are over only three seeds for one recipe on one
+backbone. The grounding gain is modest ($+0.047$ test AVHBench mean over seeds on Qwen3-Omni) and is the
+validation-selected checkpoint, not a monotone training improvement --- all recipes drift if trained
+longer. While the checkpoint, recipe and $\beta_{kl}$ are selected on the validation half, the
+\emph{design} of the broad anchor was informed by observing the CMM failure on the held-out benchmarks ---
+a residual form of test-informed design. On Qwen2.5-Omni hallucination-resistance drifts below base, so the
+HR-preserving behavior on Qwen3-Omni does not transfer cleanly. VideoLLaMA2 results are not yet available
+(\note{**}). DAVE was evaluated at the base only, not swept. The information-bottleneck framing is partly
+nominal: at $\beta_{kl}{=}0.01$ the rate penalty is weak. We audit clip-id overlap between the AVE training
+pool and the three benchmarks to check dataset-level leakage. Finally, the audio-swap signal is synthetic
+and the benchmarks are yes/no-heavy, which interacts with the likelihood-displacement failure mode.
 
 \section{Conclusion}
 A frozen AV-LLM can be adapted toward audio grounding by training only a small per-modality information
