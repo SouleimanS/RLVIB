@@ -2,7 +2,6 @@
 
 **Status:** working result, 2026-06-18 · **Model:** Qwen3-Omni (frozen) + per-modality VIB bottleneck
 · **Code:** `scripts/train_swap_anchored.py`, `src/rlvib/train/dpo.py::anchored_dpo_step`
-· **Figures:** `scripts/plot_anchored.py` → `docs/reports/figs/`
 · **Background research:** [`docs/research/dpo-collapse-and-fixes.md`](../research/dpo-collapse-and-fixes.md)
 
 ## Summary
@@ -148,12 +147,6 @@ axes — *AV Matching* and *not hallucinating audio from video*. The probe accur
 labels is direct evidence the bottleneck **uses audio correctly** rather than sitting idle. Gains are
 within small-n noise on the AVHBench splits (n=72–140) but the direction is consistent.
 
-**Figures** (regenerate with `python scripts/plot_anchored.py` on the cluster after a run):
-
-- `figs/fig_probe.png` — `frac_yes` vs step, base line + collapse zones: stays at base (no collapse).
-- `figs/fig_train.png` — `p_chosen` / `chosen_minus_ref` / `gen_kl` vs step (learning while anchors hold).
-- `figs/fig_bench.png` — base vs collapsed vs anchored bars (the headline).
-
 ## 6. Conclusion & next steps
 
 The *same* method that collapsed CMM-PA to 0.007 now lands at 0.940 **plus** a real grounding gain —
@@ -165,7 +158,6 @@ Next:
 1. **Model selection** across the 15 checkpoints — pick best AVHBench s.t. CMM-PA ≥ 0.90, DAVE ≥ 0.36.
 2. **Scale the gain** — more pairs (300 → 600+), and a touch more grounding pressure
    (`λ_anchor=2.0` or `λ_kl=0.5`), then re-select.
-3. **Qualitative frames** — add a swap-clip example (frame + base vs anchored answer) for the writeup.
 
 ## Sources
 

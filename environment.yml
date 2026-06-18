@@ -24,7 +24,6 @@ dependencies:
   # --- scientific stack ---
   - numpy
   - scipy
-  - matplotlib       # report figures (scripts/plot_anchored.py)
 
   # --- config / utilities ---
   - pyyaml
