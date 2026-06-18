@@ -94,8 +94,10 @@ def main() -> int:
     ap.add_argument("--eval-every", type=int, default=10)
     ap.add_argument("--swap-dir", default="data/AVE/swapped")
     ap.add_argument("--save-dir", default=None, help="default: runs/anchored_<model>")
+    ap.add_argument("--seed", type=int, default=0, help="training seed (data order + init) for repeats")
     args = ap.parse_args()
     args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
+    torch.manual_seed(args.seed)
 
     m = get_model(args.model)
     bns, handles = attach_bottlenecks(m, cls=VariationalBottleneck)
@@ -104,7 +106,7 @@ def main() -> int:
 
     cats = ave.categories()
     items = ave.load_ave("train")
-    rng = random.Random(0)
+    rng = random.Random(args.seed)
     rng.shuffle(items)
     swap = make_swap_examples(items, args.pairs, args.swap_dir, cats, rng=rng)
     anchor_items = items[:400]
