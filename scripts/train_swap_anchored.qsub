@@ -1,0 +1,36 @@
+#!/bin/bash
+#PBS -N rlvib_train_anchored
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=03:00:00
+#PBS -j oe
+#PBS -o rlvib_train_anchored.qsub.log
+
+# Collapse-resistant anchored swap-DPO (the rebuild). See train_swap_anchored.py and
+# docs/research/dpo-collapse-and-fixes.md.
+#   qsub scripts/train_swap_anchored.qsub
+#   PAIRS=400 EPOCHS=3 LAMKL=2.0 qsub -v PAIRS,EPOCHS,LAMKL scripts/train_swap_anchored.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_out.txt") 2>&1
+
+python -u scripts/train_swap_anchored.py --model "${MODEL:-qwen3-omni}" \
+    --pairs "${PAIRS:-300}" --epochs "${EPOCHS:-2}" --accum "${ACCUM:-4}" \
+    --lam-kl "${LAMKL:-1.0}" --lam-anchor "${LAMANCHOR:-1.0}" --delta "${DELTA:-0.0}"
+
+echo "=== Done $(date) ==="

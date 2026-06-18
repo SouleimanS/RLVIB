@@ -113,3 +113,56 @@ def dpo_step(model, bottlenecks, optimizer, batch, beta: float = 0.1,
     n = max(1, len(batch))
     return {"loss": sum(losses) / n, "margin": sum(margins) / n,
             "kl": sum(kls) / n, "p_chosen": sum(prefs) / n}
+
+
+def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
+                      beta: float = 0.1, beta_kl: float = 0.01, lam_anchor: float = 1.0,
+                      delta: float = 0.0, lam_kl: float = 1.0) -> dict:
+    """Collapse-resistant swap-DPO (see docs/research/dpo-collapse-and-fixes.md).
+
+    Adds the two anchors plain DPO lacked:
+      1. mDPO chosen anchor  -log sigmoid(beta*(cp - cr) - delta): pins the chosen letter's
+         policy log-prob at/above the frozen base, blocking likelihood displacement.
+      2. General KL-to-base   KL(base || policy) on `anchor_batch` (normal, non-swap prompts):
+         penalizes the always-on adapter for drifting from the frozen model's answer
+         distribution where it should be identity -- the input-blind constraint DPO omits.
+    `chosen_minus_ref` (= cp - cr) should stay >= 0; `gen_kl` should stay small.
+    """
+    optimizer.zero_grad()
+    losses, margins, prefs, anchors, cmr, gkls = [], [], [], [], [], []
+    for ex in swap_batch:
+        c, r = letter_id(model, ex["chosen_letter"]), letter_id(model, ex["rejected_letter"])
+        set_bypass(bottlenecks, False)
+        lp = answer_logp_vec(model, ex["messages"])
+        kl = total_kl(bottlenecks)
+        cp, rp = lp[c], lp[r]
+        with torch.no_grad():
+            set_bypass(bottlenecks, True)
+            lr = answer_logp_vec(model, ex["messages"])
+            cr, rr = lr[c], lr[r]
+            set_bypass(bottlenecks, False)
+        margin = beta * ((cp - cr) - (rp - rr))
+        anchor = -F.logsigmoid(beta * (cp - cr) - delta)   # pin chosen >= ref (mDPO L_AncPO)
+        loss = -F.logsigmoid(margin) + lam_anchor * anchor + beta_kl * kl
+        loss.backward()
+        losses.append(float(loss.detach()))
+        margins.append(float(margin.detach()))
+        prefs.append(float((cp > rp).detach()))
+        anchors.append(float(anchor.detach()))
+        cmr.append(float((cp - cr).detach()))
+
+    for ex in anchor_batch:                                # general KL-to-base anchor
+        set_bypass(bottlenecks, False)
+        lp_pol = answer_logp_vec(model, ex["messages"])
+        with torch.no_grad():
+            set_bypass(bottlenecks, True)
+            lp_base = answer_logp_vec(model, ex["messages"])
+            set_bypass(bottlenecks, False)
+        gkl = (lp_base.exp() * (lp_base - lp_pol)).sum()   # KL(base || policy) at the answer pos
+        (lam_kl * gkl).backward()
+        gkls.append(float(gkl.detach()))
+
+    optimizer.step()
+    n, m = max(1, len(swap_batch)), max(1, len(anchor_batch))
+    return {"loss": sum(losses) / n, "margin": sum(margins) / n, "p_chosen": sum(prefs) / n,
+            "anchor": sum(anchors) / n, "chosen_minus_ref": sum(cmr) / n, "gen_kl": sum(gkls) / m}
