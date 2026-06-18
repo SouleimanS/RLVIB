@@ -145,3 +145,34 @@ artifact, not grounding; **DAVE** = sanity guard.
 **Monitoring/selection discipline (so collapse is caught early):** per-step `frac_yes` probe +
 `chosen_minus_ref` (anchor floor, ≥0) + `gen_kl`; model selection on the **held-out benchmarks** with the
 PA & HR guards — never on the in-distribution proxy.
+
+---
+
+## 7. What the held VIB actually does (interpretability)
+
+A forward-pass probe (`scripts/vib_saliency.py`) of the held checkpoint reads each VIB's per-token KL
+rate (`last_kl_per_token`) and edit magnitude (`‖out(z)‖ / ‖x‖`). Over 8 clips:
+
+| modality | KL rate (bits/token) | rel-edit `‖out(z)‖/‖x‖` | concentration (top-10%) |
+|---|---|---|---|
+| **vision** | ~640 | **~59%** | ~27% (diffuse) |
+| audio | ~0.17 | ~11% (constant bias only) | — |
+
+**The held model grounds by heavily and uniformly rewriting the vision token stream** — ~59% of each
+token's magnitude, spread diffusely across all ~1.6k+ vision tokens, and strikingly *consistent* across
+clips/categories (58–61% for Bus, Cat, Ukulele, …) ⇒ a **generic re-projection** of the vision
+representation, not content-specific suppression. **Audio is essentially untouched**: rate ≈ 0 (no
+input-dependent information), and its ~11% edit is just the trained constant bias `b_out`
+(`z ≈ 0 ⇒ out(z) ≈ b_out`).
+
+Because each VIB is **per-modality** (vision sees only the video tokens), this rewrite is
+**unconditional** — the "trust audio when it conflicts with video" is resolved by the *frozen LLM* on the
+reshaped vision inputs, not by the bottleneck. The heavy rewrite tracks the benchmark movements: slightly
+less genuine visual perception (CMM_PA 0.953→0.927), less visual hallucination (HR ↑), better audio
+grounding (AVHBench ↑).
+
+**Caveat / next experiment:** the IB *rate* penalty barely bites (loss uses `mean` KL over 2048 dims ×
+β_kl=0.01 ≈ 0.002), so the VIB rewrote vision essentially **uncompressed** — the "bottleneck" is nominal,
+really a lightly-regularized vision re-encoder. A natural follow-up is a **much larger β_kl** (real
+compression pressure) to test whether a lighter, more selective vision edit retains more capability for
+the same grounding.
