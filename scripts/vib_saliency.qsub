@@ -1,0 +1,34 @@
+#!/bin/bash
+#PBS -N rlvib_vib_saliency
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o rlvib_vib_saliency.qsub.log
+
+# Per-token VIB information map (interpretability readout). See scripts/vib_saliency.py.
+#   qsub scripts/vib_saliency.qsub
+#   BN=runs/anchored_qwen3-omni_broad/bottleneck_step60.pt N=12 qsub -v BN,N scripts/vib_saliency.qsub
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/vib_saliency_out.txt") 2>&1
+
+python -u scripts/vib_saliency.py --model "${MODEL:-qwen3-omni}" \
+    --bottleneck "${BN:-runs/anchored_qwen3-omni_broad/bottleneck_step60.pt}" --n "${N:-8}"
+
+echo "=== Done $(date) ==="
