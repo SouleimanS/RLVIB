@@ -61,6 +61,17 @@ class VariationalBottleneck(nn.Module):
         self.out = nn.Linear(hidden, dim)
         nn.init.zeros_(self.out.weight)
         nn.init.zeros_(self.out.bias)
+        # VideoLLaMA2's disable_torch_init() no-ops nn.Linear.reset_parameters process-wide,
+        # so enc/to_mu/to_logvar can come out UNINITIALIZED (garbage ~1e34 -> inf KL, nan z,
+        # NaN logits). Re-init any Linear whose weight/bias is non-finite or absurdly large
+        # (proper Kaiming is ~1/sqrt(fan) << 10); a backbone with a working default init
+        # (Qwen-Omni) leaves these well below threshold, so it is untouched.
+        for lin in (self.enc, self.to_mu, self.to_logvar):
+            w, b = lin.weight, lin.bias
+            if (not torch.isfinite(w).all() or float(w.abs().max()) > 10.0
+                    or not torch.isfinite(b).all() or float(b.abs().max()) > 10.0):
+                nn.init.kaiming_uniform_(lin.weight, a=5 ** 0.5)
+                nn.init.zeros_(lin.bias)
         # Parameter-free LayerNorm on the ENCODER input only (the residual still carries the
         # raw x), so mu/logvar -> KL rate are scale-invariant. Needed for backbones with
         # "massive activations" (VideoLLaMA2, ~1e9 features); off by default so normal-scale
