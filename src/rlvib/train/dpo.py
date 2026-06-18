@@ -24,7 +24,13 @@ def answer_logp_vec(model, messages, use_audio_in_video: bool = True):
     many candidate answers as needed (e.g. chosen & rejected) from the same result."""
     inputs = model.build_inputs(messages, use_audio_in_video=use_audio_in_video)
     lm = getattr(model.model, "thinker", model.model)  # Qwen3 -> .thinker; Qwen2.5 -> itself
-    logits = lm(**inputs).logits[:, -1, :]             # next-token logits at the gen position
+    if getattr(model, "dtype", None) == torch.float16:
+        # fp16 backbones (VideoLLaMA2) overflow in attention (Q.K^T > 65504) -> NaN logits;
+        # compute the forward in bf16 (same range as fp32). bf16/fp32 backbones unchanged.
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            logits = lm(**inputs).logits[:, -1, :]
+    else:
+        logits = lm(**inputs).logits[:, -1, :]         # next-token logits at the gen position
     return torch.log_softmax(logits.float(), dim=-1)[0]
 
 
