@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -N rlvib_vl2_nandebug
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -o rlvib_vl2_nandebug.qsub.log
+
+#   qsub scripts/vl2_nan_debug.qsub      (defaults CONDA_ENV=rlvib_vl2)
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib_vl2}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/vl2_nandebug_out.txt") 2>&1
+python -u scripts/vl2_nan_debug.py
+echo "=== Done $(date) ==="
