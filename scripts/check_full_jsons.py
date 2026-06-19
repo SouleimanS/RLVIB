@@ -2,37 +2,53 @@
 """Health-check the full-set eval JSONs (the '_full' tagged outputs).
 
 Why: re-running scripts/launch_full_evals.sh while a batch is still running can put
-two jobs on the SAME runs/*_full*.json. Each job's _write() does a full overwrite
-(open(out,"w") + json.dump of its whole in-memory records), so the survivor converges
-the file to a clean, self-consistent state -- the only way to be left bad is a torn
-concurrent write (caught here as a JSON parse error) or duplicate/short records.
+two jobs on the SAME runs/*_full*.json. The real question is only whether that left a
+file damaged. It cannot leave EXTRA records: every resume path truncates to [:n]
+(run_cmm.py:62, run_avhbench.py:51, run_dave.py:63), so a file can never grow past the
+dataset size however many jobs wrote it. The only damage mode is a torn concurrent
+write -> invalid JSON, which a still-running job overwrites on its next save.
 
-This checks every runs/*_full*.json for: (1) it parses; (2) len(records) == results
-.overall.n; (3) no duplicate record keys (a concurrent-resume artifact); and prints
-the headline score + parse_rate so you can eyeball progress. Exit code is nonzero if
-ANY file is not OK, so it is safe to gate on.
+So the two signals that actually matter are: (1) the file PARSES, and (2) len(records)
+equals the reported n (internal consistency). This reports both, plus the headline
+score + parse_rate, reading each benchmark's own schema:
+  - AVHBench / CMM : metrics under results.overall  (accuracy|acc, n, parse_rate)
+  - DAVE          : metrics at the TOP level         (accuracy, n, parse_rate)
+It deliberately does NOT try to count "duplicate" records: CMM/DAVE records carry no
+per-clip id and CMM reuses the same question across many clips, so any content key
+collides on legitimately-distinct items (that was a false alarm in the first cut).
+
+Exit code is nonzero if any file fails to parse or is count-inconsistent.
 
   python scripts/check_full_jsons.py                 # all runs/*_full*.json
-  python scripts/check_full_jsons.py runs/cmm_qwen3-omni_full.json   # specific files
+  python scripts/check_full_jsons.py runs/cmm_qwen3-omni_full.json
 """
 from __future__ import annotations
 
+import collections
 import glob
 import json
+import os
 import sys
 
 
-def _key(rec: dict):
-    """A stable identity for a record, schema-tolerant across CMM / AVHBench / DAVE."""
-    for ks in (("video_path", "task", "text"),     # AVHBench
-               ("sub_category", "question"),        # CMM
-               ("question",), ("text",), ("video_path",)):
-        if all(k in rec for k in ks):
-            return tuple(str(rec.get(k)) for k in ks)
-    return json.dumps({k: rec.get(k) for k in sorted(rec)}, sort_keys=True)
+def _metrics(blob: dict):
+    """(n, score, parse_rate) tolerant of AVHBench/CMM (results.overall) vs DAVE (top level)."""
+    res = blob.get("results")
+    if isinstance(res, dict) and isinstance(res.get("overall"), dict):
+        o = res["overall"]
+        return o.get("n"), o.get("accuracy", o.get("acc")), o.get("parse_rate")
+    return blob.get("n"), blob.get("accuracy"), blob.get("parse_rate")  # DAVE
 
 
-def check(path: str) -> bool:
+def _benchmark(path: str) -> str:
+    b = os.path.basename(path)
+    for p in ("avhbench", "cmm", "dave"):
+        if b.startswith(p):
+            return p
+    return "other"
+
+
+def check(path: str, counts: dict) -> bool:
     try:
         with open(path) as f:
             blob = json.load(f)
@@ -40,24 +56,17 @@ def check(path: str) -> bool:
         print(f"  CORRUPT  {path}\n           !! does not parse: {e}")
         return False
     recs = blob.get("records", [])
-    overall = (blob.get("results") or {}).get("overall", {})
-    n = overall.get("n")
-    score = overall.get("accuracy", overall.get("acc"))
-    pr = overall.get("parse_rate")
-    keys = [_key(r) for r in recs]
-    dupes = len(keys) - len(set(keys))
+    n, score, pr = _metrics(blob)
+    counts[_benchmark(path)].add(len(recs))
 
     flags = []
     if n is not None and len(recs) != n:
-        flags.append(f"records={len(recs)} != overall.n={n}")
-    if dupes:
-        flags.append(f"{dupes} DUPLICATE record(s)")
+        flags.append(f"records={len(recs)} != reported n={n} (partial/torn write -- re-check after the job's next save)")
     ok = not flags
-    status = "OK     " if ok else "CHECK  "
     score_s = f"{score:.3f}" if isinstance(score, (int, float)) else "  -  "
     pr_s = f"{pr:.2f}" if isinstance(pr, (int, float)) else " - "
-    print(f"  {status}{path}\n           n={len(recs):<5} score={score_s} parse={pr_s}"
-          + ("".join(f"\n           !! {m}" for m in flags) if flags else ""))
+    print(f"  {'OK    ' if ok else 'CHECK '} {path}\n           n={len(recs):<5} score={score_s} parse={pr_s}"
+          + "".join(f"\n           !! {m}" for m in flags))
     return ok
 
 
@@ -67,9 +76,18 @@ def main() -> int:
         print("no runs/*_full*.json found (cwd must be the repo root).")
         return 0
     print(f"checking {len(paths)} file(s):")
-    allok = all([check(p) for p in paths])  # list (not generator) so every file is checked
-    print("\nall clean." if allok else "\n^ files flagged CHECK/CORRUPT need a look "
-          "(a still-running job will self-heal them on its next 25-item save).")
+    counts: dict = collections.defaultdict(set)
+    allok = all([check(p, counts) for p in paths])  # list, not generator -> every file checked
+
+    print("\nrecord counts per benchmark (all files of one benchmark should match WHEN FINISHED;")
+    print("while jobs run, lower counts are just in-progress -- not an error):")
+    for b in sorted(counts):
+        cs = sorted(counts[b])
+        note = "  <- converged" if len(cs) == 1 else "  <- still spread (jobs running / resuming)"
+        print(f"  {b:9s} {cs}{note}")
+
+    print("\nall files parse and are count-consistent." if allok else
+          "\n^ a file failed to parse or is count-inconsistent -- a running job self-heals it on its next save.")
     return 0 if allok else 1
 
 
