@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N rlvib_visual_attn
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=00:40:00
+#PBS -j oe
+#PBS -o rlvib_visual_attn.qsub.log
+# Visual saliency (base vs ours) on one clip. Sets the single-GPU + libstdc++ env.
+#   CKPT=runs/anchored_qwen3-omni_broad/bottleneck_step60.pt \
+#   VIDEO=data/AVHBench/videos/02301.mp4 \
+#   PROMPT="Is the power tool visible in the video? Answer yes or no." \
+#     qsub -v CKPT,VIDEO,PROMPT,POS,NEG scripts/visual_attention.qsub
+set -euo pipefail
+cd "$PBS_O_WORKDIR"; mkdir -p "$PBS_O_WORKDIR/runs/attn"
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+echo "=== Node: $(hostname)  Date: $(date) ==="; nvidia-smi -L
+exec > >(tee -a "$PBS_O_WORKDIR/runs/visual_attn_out.txt") 2>&1
+python -u scripts/visual_attention.py --model "${MODEL:-qwen3-omni}" \
+    --ckpt "${CKPT:-runs/anchored_qwen3-omni_broad/bottleneck_step60.pt}" \
+    --video "${VIDEO:?set VIDEO}" --prompt "${PROMPT:-Answer yes or no.}" \
+    --pos "${POS:-Yes}" --neg "${NEG:-No}" --out "${OUT:-runs/attn}"
+echo "=== Done $(date) ==="
