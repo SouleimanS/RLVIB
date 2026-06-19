@@ -1,0 +1,305 @@
+% RLVIB progress talk.  Build:  cd paper && tectonic slides.tex   (or: pdflatex slides.tex x2)
+% Reuses paper/figures/*.jpg (the extracted frames); \frm shows a placeholder box if a frame is absent,
+% so it compiles regardless. UNTESTED locally (no LaTeX here) -- paste any error and I'll fix.
+\documentclass[aspectratio=169,11pt]{beamer}
+\usetheme{default}
+\usecolortheme{seahorse}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamercolor{frametitle}{fg=blue!45!black}
+
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\graphicspath{{figures/}}
+\definecolor{frz}{RGB}{40,95,175}     % frozen
+\definecolor{trn}{RGB}{210,120,20}    % trained
+
+% frame thumbnail, with a build-safe fallback box
+\newcommand{\frm}[1]{\IfFileExists{figures/#1}{\includegraphics[height=15mm]{figures/#1}}%
+  {\fcolorbox{gray}{gray!12}{\parbox[c][14mm][c]{20mm}{\centering\tiny\ttfamily #1}}}}
+\newcommand{\frmrow}[1]{\frm{#1_1.jpg}\hspace{1pt}\frm{#1_2.jpg}\hspace{1pt}\frm{#1_3.jpg}}
+% one example row: prefix, context, question, base answer, our answer
+\newcommand{\exrow}[5]{%
+  \begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.6mm]}]
+    \node[draw=black!30,rounded corners=2pt,inner sep=1.5pt] (im) {\frmrow{#1}};
+    \node[anchor=west,align=left,text width=58mm,inner sep=0pt] (c) at ([xshift=7mm]im.east)
+      {#2\\[2pt]\emph{#3}};
+    \draw[->,black!45] (im.east) -- (c.west);
+    \node[draw=red!60!black,fill=red!8,rounded corners=2pt,inner sep=2.5pt,anchor=north west]
+      (b) at ([yshift=-3pt]c.south west) {\color{red!72!black}base: #4 $\boldsymbol{\times}$};
+    \node[draw=green!45!black,fill=green!12,rounded corners=2pt,inner sep=2.5pt,anchor=west]
+      (o) at ([xshift=3mm]b.east) {\color{green!48!black}ours: #5 $\boldsymbol{\checkmark}$};
+  \end{tikzpicture}}
+
+\title{\textbf{Cheap Audio Grounding for Frozen AV--LLMs}}
+\subtitle{Preference-optimization collapse, a two-anchor fix, and an honest result}
+\author{Souleiman Sbais}
+\date{\today}
+
+\begin{document}
+
+% --- 1. Title + TL;DR ---
+{\setbeamertemplate{footline}{}
+\begin{frame}
+\titlepage
+\vspace{-2em}
+\begin{block}{TL;DR --- a progress update}
+\small Train a \textbf{tiny adapter} on a \textbf{frozen} audio--visual model to make it use audio more.
+Na\"ive DPO \textbf{collapses} it completely; a \textbf{two-part fix} prevents that. Honest result: the fix
+works cleanly \emph{as a fix}, but the grounding gain is \textbf{small} and shows up on \textbf{one of three}
+models. The last third is decisions I want your input on.
+\end{block}
+\end{frame}}
+
+% --- 2. The problem ---
+\begin{frame}{The problem: a known modality bias}
+\begin{itemize}
+\item AV-LLMs \textbf{over-trust what they see}, \textbf{under-use what they hear}.
+\item They hallucinate a sound the image implies; they ignore audio that contradicts the video.
+\end{itemize}
+\vfill
+\begin{center}\large\itshape
+Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze everything, bolt on something tiny?
+\end{center}
+\end{frame}
+
+% --- 3. The idea: architecture ---
+\begin{frame}{The idea: freeze the model, train two tiny modules}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=3.5mm and 6mm,
+  enc/.style={draw,rounded corners,fill=frz!12,minimum width=12mm,minimum height=7mm,align=center},
+  vib/.style={draw,very thick,rounded corners,fill=trn!25,draw=trn!70!black,minimum width=10mm,minimum height=7mm,align=center},
+  llm/.style={draw,rounded corners,fill=frz!12,minimum width=14mm,minimum height=20mm,align=center},
+  io/.style={align=center}]
+  \node[io] (vin) {video};
+  \node[enc,right=of vin] (venc) {vision\\encoder};
+  \node[enc,right=of venc] (vproj) {vision\\adapter};
+  \node[vib,right=of vproj] (vvib) {VIB$_v$};
+  \node[io,below=9mm of vin] (ain) {audio};
+  \node[enc,right=of ain] (aenc) {audio\\encoder};
+  \node[enc,right=of aenc] (aproj) {audio\\adapter};
+  \node[vib,right=of aproj] (avib) {VIB$_a$};
+  \node[llm,right=8mm of vvib,yshift=-9mm] (llm) {frozen\\LLM};
+  \node[io,right=of llm] (ans) {answer};
+  \draw[->] (vin)--(venc); \draw[->] (venc)--(vproj); \draw[->] (vproj)--(vvib); \draw[->] (vvib.east)--(llm.west);
+  \draw[->] (ain)--(aenc); \draw[->] (aenc)--(aproj); \draw[->] (aproj)--(avib); \draw[->] (avib.east)--(llm.west);
+  \draw[->] (llm.east)--(ans);
+  \node[font=\tiny,below=1mm of ain] {\textcolor{frz}{$\blacksquare$ frozen}\quad\textcolor{trn}{$\blacksquare$ trained}};
+\end{tikzpicture}
+\begin{itemize}\small
+\item Two adapters (audio, vision) on the token streams --- the \textbf{only} trainable parameters.
+\item \textbf{Zero-init} $\Rightarrow$ starts \emph{exactly} as the base. \textbf{Bypass switch} $\Rightarrow$ base predictions for free (no 2nd copy).
+\end{itemize}
+\end{frame}
+
+% --- 4. Setup / what was actually run ---
+\begin{frame}{Setup (so the numbers are concrete)}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+\textbf{Training}
+\begin{itemize}\small
+\item Data: \textbf{300 audio-swapped AVE clips}, \textbf{2 epochs}.
+\item Loss weights: $\beta{=}0.1$, $\lambda_a{=}1$, $\lambda_{kl}{=}2$, $\beta_{kl}{=}0.01$.
+\item Only the two adapters update; backbone frozen.
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+\textbf{Evaluation}
+\begin{itemize}\small
+\item \textbf{AVHBench} --- the target (AV hallucination).
+\item \textbf{CMM} --- capability: \textbf{PA} + \textbf{HR}.
+\item \textbf{DAVE} --- diagnostic (base only).
+\item $300$-example subsets; \textbf{150 val} (select) / \textbf{150 test} (report); \textbf{paired} tests.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+% --- 5. The training signal (the core trick) ---
+\begin{frame}{The core trick: manufacture an audio--vision conflict}
+\centering
+\begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},
+  clip/.style={draw,rounded corners,fill=gray!12,align=center,minimum width=34mm,minimum height=17mm},
+  good/.style={draw,rounded corners,fill=green!14,align=center,minimum width=46mm,minimum height=10mm},
+  bad/.style={draw,rounded corners,fill=red!14,align=center,minimum width=46mm,minimum height=10mm}]
+  \node[clip] (clip) {\textbf{audio-swapped clip}\\[1mm]\emph{see}: a dog\\\emph{hear}: a bell};
+  \node[bad,right=16mm of clip,yshift=9mm] (bad) {``a dog barking'' \ {\scriptsize ignores audio} $\boldsymbol{\times}$};
+  \node[good,right=16mm of clip,yshift=-9mm] (good) {``a bell'' \ {\scriptsize uses audio} $\boldsymbol{\checkmark}$};
+  \draw[->] (clip.east) to[out=25,in=180] (bad.west);
+  \draw[->] (clip.east) to[out=-25,in=180] (good.west);
+\end{tikzpicture}
+\vfill
+\small Swap a clip's audio $\Rightarrow$ seen $\neq$ heard. Both answers are scored on the \emph{same} clip,
+so preferring the \textbf{heard} answer is only possible by \textbf{attending to the audio}.
+\end{frame}
+
+% --- 6. What broke ---
+\begin{frame}{What broke: na\"ive DPO collapses the model}
+\begin{itemize}
+\item Standard DPO $\Rightarrow$ perception accuracy \textbf{0.95 $\to$ 0.01}; converges to a near-constant ``no''.
+\end{itemize}
+\vfill
+\begin{center}
+\setbeamercolor{block body}{bg=red!8}
+\begin{block}{The trap}
+Answering ``no'' to everything looks \textbf{perfect} on a hallucination metric --- you never affirm anything
+false. \textbf{Watch the wrong metric and the collapse is invisible.} (Back to this on the benchmarks slide.)
+\end{block}
+\end{center}
+\end{frame}
+
+% --- 7. Why it broke ---
+\begin{frame}{Why it broke (a documented failure mode, not a bug)}
+\begin{itemize}
+\item \textbf{Likelihood displacement}: DPO grows the chosen$-$rejected gap by pushing \emph{both} down ---
+the answer you wanted gets \emph{less} likely.
+\item \textbf{No anchor}: nothing constrained the output distribution, so it was free to drift to a degenerate
+constant answer.
+\end{itemize}
+\end{frame}
+
+% --- 8. The fix ---
+\begin{frame}{The fix: two anchors}
+\centering
+\begin{tikzpicture}[font=\small,
+  box/.style={draw,rounded corners,align=center,minimum height=11mm,minimum width=52mm}]
+  \node[box,fill=frz!8] (dpo) {swap-DPO term \ {\scriptsize prefer heard over seen}};
+  \node[box,fill=trn!16,below=3.5mm of dpo] (a1) {\textbf{chosen anchor}: pin chosen $\ge$ frozen base};
+  \node[box,fill=trn!16,below=3.5mm of a1] (a2) {\textbf{KL-to-base} on ordinary (non-swap) inputs};
+  \node[right=5mm of a1,align=left,font=\footnotesize] {protects the answer I promote $\Rightarrow$ \textbf{PA}};
+  \node[right=5mm of a2,align=left,font=\footnotesize] {protects everything else $\Rightarrow$ \textbf{HR}};
+\end{tikzpicture}
+\vfill
+\small One anchor protects the \textbf{promoted answer}; the other protects \textbf{everything else}.
+\end{frame}
+
+% --- 9. Ablation (strongest result) ---
+\begin{frame}{Ablation: both anchors are necessary (the solid core)}
+\centering
+\begin{tabular}{lccc}
+\toprule
+objective & AVHBench & CMM-PA & CMM-HR \\
+\midrule
+frozen base            & 0.647 & 0.939 & 0.810 \\
+na\"ive swap-DPO       & 0.673 & 0.939 & 0.774 \\
+\;+ chosen anchor only & 0.660 & 0.939 & 0.798 \\
+\;+ KL-to-base only    & 0.647 & 0.924 & 0.810 \\
+\;+ \textbf{both}      & \textbf{0.707} & 0.909 & 0.869 \\
+\bottomrule
+\end{tabular}
+\vfill
+\small Trained longer, each \emph{alone} fails differently: chosen-only loses perception (PA$\to$0.30),
+KL-only loses resistance (HR$\to$0.66). \textbf{Only both} stay healthy on both axes \emph{and} score best.
+\end{frame}
+
+% --- 10. Benchmarks: what the numbers mean ---
+\begin{frame}{What the metrics mean (and why the collapse hid)}
+\begin{itemize}\small
+\item \textbf{AVHBench} = the \textbf{target} (audio--visual hallucination).
+\item \textbf{CMM} = capability check: \textbf{PA} (affirm present) and \textbf{HR} (deny absent).
+\end{itemize}
+\vfill
+\begin{block}{The collapse, in metric terms}
+\small All-``no'' $\Rightarrow$ \textbf{HR $\to$ 1.0} (deny everything) but \textbf{PA $\to$ 0}. HR alone would
+say the model is perfect. \textbf{Watch both} --- and they map one-to-one onto the anchors:
+chosen$\leftrightarrow$PA, KL$\leftrightarrow$HR.
+\end{block}
+\end{frame}
+
+% --- 11. Qualitative: AVHBench (BEFORE the numbers) ---
+\begin{frame}{What the AVHBench failures look like (real, base vs ours)}
+\centering
+\begin{tabular}{@{}c@{}}
+\exrow{avh_a2v}{\textbf{audio $\to$ video}}{``Is the power tool visible?'' --- it is not.}{``Yes''}{``No''} \\[2.5mm]
+\exrow{avh_v2a}{\textbf{video $\to$ audio}}{``Is the bird making sound?'' --- it is silent.}{``Yes''}{``No''} \\[2.5mm]
+\exrow{avh_match}{\textbf{AV matching}}{``Do audio and video match?'' --- they do not.}{``Yes''}{``No''}
+\end{tabular}
+\end{frame}
+
+% --- 12. Qualitative: audio-swap mechanism (BEFORE the numbers) ---
+\begin{frame}{The mechanism on real clips (audio swapped in)}
+\centering
+\begin{tabular}{@{}c@{}}
+\exrow{as_flute}{\emph{see} flute, \textbf{hear (overlaid) train horn}}{``Which event do you hear?''}{``flute''}{``train horn''} \\[2.5mm]
+\exrow{as_airplane}{\emph{see} airplane, \textbf{hear (overlaid) clock}}{``Which event do you hear?''}{``airplane''}{``clock''}
+\end{tabular}
+\vfill
+\small Base names what it \emph{sees}; ours names what it \emph{hears}.
+\end{frame}
+
+% --- 13. Does it actually help ---
+\begin{frame}{Does it help? (the honest version)}
+\begin{itemize}
+\item Qwen3-Omni: AVHBench \textbf{0.647 $\to$ 0.707}.
+\item \textbf{Paired} tests (same items, base vs ours) --- not two noisy averages.
+\item Per seed: \textbf{marginal} ($p\approx0.06$). Significant \textbf{only pooled} across 3 seeds.
+\end{itemize}
+\vfill
+\begin{center}\itshape Real, repeatable \emph{direction}; \textbf{modest} size; \textbf{fragile} significance.
+(Pooling has a flaw --- open issues.)\end{center}
+\end{frame}
+
+% --- 14. Generalization ---
+\begin{frame}{Generalization: uneven across backbones}
+\centering
+\begin{tabular}{lccc}
+\toprule
+backbone & AVHBench (base $\to$ ours) & paired & verdict \\
+\midrule
+Qwen3-Omni    & 0.647 $\to$ \textbf{0.707} & $p{=}0.007$ pooled & positive \\
+Qwen2.5-Omni  & 0.620 $\to$ 0.673          & $p{=}0.13$ (n.s.)  & trend \\
+VideoLLaMA2   & 0.667 $\to$ 0.613          & $p{=}0.29$         & null \\
+\bottomrule
+\end{tabular}
+\vfill
+\small The null is \textbf{informative}: VideoLLaMA2 barely uses audio (its audio tokens are prunable with
+near-zero loss), so the swap signal has \textbf{nothing to grab}. Needs a backbone that uses audio.
+\end{frame}
+
+% --- 15. What the module actually learned ---
+\begin{frame}{The twist: what the module actually learned}
+\centering
+\begin{tikzpicture}[font=\small]
+  \node[draw,rounded corners,fill=trn!22,minimum width=68mm,minimum height=11mm,align=center] (v)
+    {\textbf{vision module}: rewrites $\sim$59\% of each vision token};
+  \node[draw,rounded corners,fill=gray!12,minimum width=68mm,minimum height=11mm,align=center,below=4mm of v] (a)
+    {\textbf{audio module}: $\approx$ pass-through (does almost nothing)};
+\end{tikzpicture}
+\begin{itemize}\small
+\item ``Audio grounding'' is achieved by \textbf{reshaping the vision stream}; the frozen LM resolves the conflict.
+\item The information bottleneck barely compresses at these settings.
+\item $\Rightarrow$ two framing nouns (``\emph{audio}'', ``\emph{information bottleneck}'') don't describe what happens. A real finding --- how to frame it?
+\end{itemize}
+\end{frame}
+
+% --- 16. Methodology I trust ---
+\begin{frame}{Methodology (so you trust the numbers)}
+\begin{itemize}\small
+\item \textbf{Val/test split} per benchmark: choose checkpoints on val, report on a disjoint test half.
+\item \textbf{Paired} significance tests (McNemar + bootstrap), not bare averages.
+\item \textbf{Constant-answer detector} confirms the selected model didn't quietly collapse.
+\item Caught + fixed a \textbf{parser bug} (scored one model's prose answers as errors); \textbf{no change} to the
+Qwen models $\Rightarrow$ the fix is cleanly isolated.
+\end{itemize}
+\end{frame}
+
+% --- 17. Open issues ---
+\begin{frame}{Open issues --- I want your input}
+\begin{enumerate}\small
+\item \textbf{Pooled significance} treats the same 150 items across seeds as independent (they aren't) ---
+inflates the result; need a clustered / seed-level test.
+\item Given the probe, \textbf{drop the information-bottleneck framing} and rename around what it does?
+\item \textbf{Residual leak}: the KL-anchor was designed after seeing CMM failures $\Rightarrow$ CMM is a
+\emph{development} signal, not a clean test.
+\item Confirm the VideoLLaMA2 story by running the \textbf{probe on it} (deferred).
+\end{enumerate}
+\vfill
+\begin{center}\large Which of these is most urgent?\end{center}
+\end{frame}
+
+\end{document}
