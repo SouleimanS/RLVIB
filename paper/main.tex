@@ -20,8 +20,21 @@
 \newcommand{\KL}{\mathrm{KL}}
 \newcommand{\note}[1]{\textsuperscript{\textbf{#1}}}
 % frame thumbnail with a build-safe fallback box if the image hasn't been extracted yet
-\newcommand{\frm}[1]{\IfFileExists{figures/#1}{\includegraphics[height=13mm]{figures/#1}}%
-  {\fbox{\parbox[c][12mm][c]{16mm}{\centering\scriptsize\ttfamily #1}}}}
+\newcommand{\frm}[1]{\IfFileExists{figures/#1}{\includegraphics[height=14mm]{figures/#1}}%
+  {\fbox{\parbox[c][13mm][c]{17mm}{\centering\scriptsize\ttfamily #1}}}}
+\newcommand{\frmrow}[1]{\frm{#1_1.jpg}\hspace{1.2pt}\frm{#1_2.jpg}\hspace{1.2pt}\frm{#1_3.jpg}}
+% one styled example row: #1 frame-prefix, #2 context line, #3 question, #4 base answer, #5 our answer.
+\newcommand{\exrow}[5]{%
+  \begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.8mm]}]
+    \node[draw=black!30,rounded corners=2.5pt,inner sep=1.6pt,line width=0.5pt] (im) {\frmrow{#1}};
+    \node[anchor=west,align=left,text width=52mm,inner sep=0pt] (c)
+      at ([xshift=8mm]im.east) {#2\\[2.5pt]\emph{#3}};
+    \draw[->,black!45,line width=0.7pt] (im.east) -- (c.west);
+    \node[draw=red!60!black,fill=red!8,rounded corners=3pt,inner sep=3pt,anchor=north west]
+      (b) at ([yshift=-4pt]c.south west) {\color{red!72!black}\,base: #4 \,$\boldsymbol{\times}$\,};
+    \node[draw=green!45!black,fill=green!12,rounded corners=3pt,inner sep=3pt,anchor=west]
+      (o) at ([xshift=3mm]b.east) {\color{green!48!black}\,ours: #5 \,$\boldsymbol{\checkmark}$\,};
+  \end{tikzpicture}}
 
 \title{\textbf{Preference-Optimization Collapse in Frozen Audio--Visual LLMs\\
 and a Two-Anchor Mitigation}}
@@ -402,22 +415,13 @@ adapted model reports the actual overlaid sound.
 
 \begin{figure}[t]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}ccc >{\raggedright\arraybackslash}p{0.46\linewidth}@{}}
-\frm{as_flute_1.jpg} & \frm{as_flute_2.jpg} & \frm{as_flute_3.jpg} &
-\footnotesize \emph{see:} flute,\quad\textbf{heard (overlaid): train horn.}\newline
-\emph{``Which event do you hear?''}\newline
-{\color{red!70!black}base: ``flute'' ($\times$ from vision)}\quad
-{\color{green!55!black}ours: ``train horn'' ($\checkmark$ from audio)} \\[1.5mm]
-\frm{as_airplane_1.jpg} & \frm{as_airplane_2.jpg} & \frm{as_airplane_3.jpg} &
-\footnotesize \emph{see:} airplane,\quad\textbf{heard (overlaid): clock.}\newline
-\emph{``Which event do you hear?''}\newline
-{\color{red!70!black}base: ``airplane'' ($\times$ from vision)}\quad
-{\color{green!55!black}ours: ``clock'' ($\checkmark$ from audio)} \\[1.5mm]
-\frm{as_mandolin_1.jpg} & \frm{as_mandolin_2.jpg} & \frm{as_mandolin_3.jpg} &
-\footnotesize \emph{see:} mandolin,\quad\textbf{heard (overlaid): horse.}\newline
-\emph{``Which event do you hear?''}\newline
-{\color{red!70!black}base: ``mandolin'' ($\times$ from vision)}\quad
-{\color{green!55!black}ours: ``horse'' ($\checkmark$ from audio)} \\
+\begin{tabular}{@{}c@{}}
+\exrow{as_flute}{\emph{see:} flute\quad\textbf{heard (overlaid): train horn}}%
+  {``Which event do you hear?''}{``flute''}{``train horn''} \\[3mm]
+\exrow{as_airplane}{\emph{see:} airplane\quad\textbf{heard (overlaid): clock}}%
+  {``Which event do you hear?''}{``airplane''}{``clock''} \\[3mm]
+\exrow{as_mandolin}{\emph{see:} mandolin\quad\textbf{heard (overlaid): horse}}%
+  {``Which event do you hear?''}{``mandolin''}{``horse''}
 \end{tabular}
 \caption{The audio-grounding failure our method targets, on held-out AVE clips. We overlay a different
 event's audio so the seen event (the video, shown as frames) differs from the heard event (the overlaid
@@ -432,19 +436,13 @@ On the benchmark itself, Figure~\ref{fig:avhqual} gives one corrected example pe
 
 \begin{figure}[t]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}ccc >{\raggedright\arraybackslash}p{0.46\linewidth}@{}}
-\frm{avh_a2v_1.jpg} & \frm{avh_a2v_2.jpg} & \frm{avh_a2v_3.jpg} &
-\footnotesize \textbf{audio$\to$video.} \emph{``Is the power tool visible?''} --- it is not.\newline
-{\color{red!70!black}base: ``Yes'' ($\times$ infers the object from its sound)}\quad
-{\color{green!55!black}ours: ``No'' ($\checkmark$)} \\[1.5mm]
-\frm{avh_v2a_1.jpg} & \frm{avh_v2a_2.jpg} & \frm{avh_v2a_3.jpg} &
-\footnotesize \textbf{video$\to$audio.} \emph{``Is the bird making sound?''} --- it is silent.\newline
-{\color{red!70!black}base: ``Yes'' ($\times$ infers the sound from the sight)}\quad
-{\color{green!55!black}ours: ``No'' ($\checkmark$)} \\[1.5mm]
-\frm{avh_match_1.jpg} & \frm{avh_match_2.jpg} & \frm{avh_match_3.jpg} &
-\footnotesize \textbf{AV matching.} \emph{``Do the audio and video match?''} --- they do not.\newline
-{\color{red!70!black}base: ``Yes'' ($\times$)}\quad
-{\color{green!55!black}ours: ``No'' ($\checkmark$)} \\
+\begin{tabular}{@{}c@{}}
+\exrow{avh_a2v}{\textbf{audio $\to$ video}}%
+  {``Is the power tool visible?'' --- it is not.}{``Yes''}{``No''} \\[3mm]
+\exrow{avh_v2a}{\textbf{video $\to$ audio}}%
+  {``Is the bird making sound?'' --- it is silent.}{``Yes''}{``No''} \\[3mm]
+\exrow{avh_match}{\textbf{audio--video matching}}%
+  {``Do the audio and video match?'' --- they do not.}{``Yes''}{``No''}
 \end{tabular}
 \caption{AVHBench cross-modal hallucinations our method corrects, one per task (held-out clips; frozen
 base vs.\ the selected Qwen3-Omni checkpoint). In each the gold answer is ``No'' but the base answers
