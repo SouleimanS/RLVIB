@@ -326,6 +326,32 @@ $\beta_{kl}$ & sel.\ step & AVHBench & CMM-PA & CMM-HR & guards pass \\
 \end{tabular}
 \end{table}
 
+Table~\ref{tab:avhtask} breaks the Qwen3-Omni AVHBench gain down by hallucination type. The improvement is
+positive on all three tasks and concentrates where audio grounding matters most --- the video-driven
+\emph{audio}-hallucination task ($V\!\to\!A$: is the queried sound actually audible?) and audio--video
+matching --- while the audio-driven \emph{video}-hallucination task ($A\!\to\!V$) barely moves, consistent
+with a signal that teaches the model to report the \emph{heard} event. Per-task $n$ is small ($34/68/48$),
+so no single task is individually significant; the breakdown shows where the (pooled-significant) gain
+lives, not per-task significance.
+
+\begin{table}[t]\centering\small
+\caption{Qwen3-Omni AVHBench gain by hallucination type (val-selected step~$60$, test split; paired McNemar
+vs.\ base on identical items). Per-task $n$ is small, so this shows \emph{where} the gain concentrates, not
+per-task significance --- the overall/pooled result carries the significance (Table~\ref{tab:seeds}).}
+\label{tab:avhtask}
+\begin{tabular}{llcccc}
+\toprule
+AVHBench task & probes & base & adapted & $\Delta$ & McNemar $p$ \\
+\midrule
+$A\!\to\!V$ (audio-driven video hall.) & object visible?    & 0.647 & 0.676 & $+0.029$ & $1.00$ \\
+$V\!\to\!A$ (video-driven audio hall.) & sound audible?     & 0.721 & 0.779 & $+0.059$ & $0.34$ \\
+AV-matching                            & audio/video match? & 0.542 & 0.625 & $+0.083$ & $0.22$ \\
+\midrule
+overall                                & ---                & 0.647 & 0.707 & $+0.060$ & $0.06$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Multi-model results}
 Table~\ref{tab:models} reports all three backbones under the same paired protocol. On Qwen2.5-Omni
 AVHBench rises $0.620\to0.673$, but the paired test is \emph{not} significant (McNemar $b{=}7$, $c{=}15$,
