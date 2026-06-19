@@ -52,6 +52,9 @@ def main() -> int:
                     help="comma-separated clip-name substrings to skip WITHOUT calling generate() "
                          "-- a hard backstop for clips that wedge the decoder below the Python level "
                          "(where --gen-timeout's signal can't reach). '' to disable.")
+    ap.add_argument("--skip-file", default="runs/cmm_skip_clips.txt",
+                    help="optional file of extra clip substrings (comma/newline separated) to skip, "
+                         "e.g. the output of scripts/scan_bad_clips.py. Merged with --skip-clips.")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -85,6 +88,10 @@ def main() -> int:
         return res
 
     skip = [s for s in args.skip_clips.split(",") if s]
+    if args.skip_file and os.path.exists(args.skip_file):
+        with open(args.skip_file) as f:
+            skip += [s.strip() for s in f.read().replace("\n", ",").split(",") if s.strip()]
+    skip = sorted(set(skip))
     if skip:
         print(f"skip-clips (hard backstop): {skip}", flush=True)
     start, t0 = len(records), time.time()
