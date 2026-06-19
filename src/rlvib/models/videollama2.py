@@ -108,5 +108,6 @@ class VideoLLaMA2:
             images=inputs["images"], do_sample=False, max_new_tokens=max_new_tokens,
             pad_token_id=self.tokenizer.eos_token_id,
         )
-        new = out[:, inputs["input_ids"].shape[1]:]
-        return self.tokenizer.batch_decode(new, skip_special_tokens=True)[0].strip()
+        # VideoLLaMA2.generate runs the LM on inputs_embeds, so `out` is ONLY the new tokens
+        # (no prompt prefix to slice off) -- decode it directly, as mm_infer does.
+        return self.tokenizer.batch_decode(out, skip_special_tokens=True)[0].strip()
