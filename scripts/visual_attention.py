@@ -102,11 +102,14 @@ def main() -> int:
             target = (logits[0, pos_id] - logits[0, neg_id]).float()
             lm.zero_grad(set_to_none=True)
             target.backward()
-        v, g = saved["v"][0], saved["v"].grad[0]            # (T_v, d)
+        v, g = saved["v"], saved["v"].grad                  # Qwen vision tower: (T_v, d), no batch
+        if v.dim() == 3:                                    # (batch, T_v, d) -> drop batch if present
+            v, g = v[0], g[0]
         sal = (g * v).sum(-1).abs().detach().float().cpu().numpy()
         tv = int(sal.shape[0])
-        print(f"{name}: T_v={tv}  grid(t,h,w)=({gt},{gh},{gw})  merge={ms} -> ({gt},{hm},{wm}) "
-              f"= {gt * hm * wm}  pred={a.pos if float(target) > 0 else a.neg}", flush=True)
+        print(f"{name}: v.shape={tuple(saved['v'].shape)}  T_v={tv}  grid(t,h,w)=({gt},{gh},{gw})  "
+              f"merge={ms} -> ({gt},{hm},{wm})={gt * hm * wm}  "
+              f"pred={a.pos if float(target) > 0 else a.neg}", flush=True)
         if tv == gt * hm * wm:
             sal = sal.reshape(gt, hm, wm).mean(0)           # mean over frames -> (hm, wm)
         else:
