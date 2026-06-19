@@ -14,6 +14,18 @@ load-bearing citations (incl. the three 2026 papers) were re-verified individual
 what is attributed. Exact per-model benchmark decimals remain medium-confidence; mechanisms are
 high-confidence.
 
+> **Outcome (resolved).** The §1 metric-audit hypothesis was correct: VideoLLaMA2's near-floor CMM-HR
+> was a **harness parsing artifact**, not the model. The eval's yes/no parser matched only a standalone
+> "no" and so scored VideoLLaMA2's verbose absence answers (e.g. "I did not see a tree") as wrong,
+> flooring HR to ~0.05. With a negation-aware parser and all metrics re-derived from the saved raw
+> outputs (`scripts/audit_cmm_hr.py`, `scripts/rederive_preds.py`), VideoLLaMA2 base HR is **0.917**, not
+> 0.087 — and the VIB **preserves** it (0.929). The fix is a verified no-op on Qwen2.5/Qwen3 (their
+> numbers, incl. the β_kl sweep and seed table, reproduce byte-for-byte). The residual VideoLLaMA2 finding
+> is **capability-safe but grounding-neutral**: no AVHBench gain (val-selected 0.613 vs base 0.667, within
+> noise), exactly as the §2–3 mechanism predicts for a backbone that under-uses audio. So the *grounding*
+> diagnosis below stands; the *collapse* framing was the measurement bug. The fixes in §4 remain relevant
+> only if one wants to *add* grounding on VideoLLaMA2 (currently absent), not to prevent a collapse.
+
 ---
 
 ## TL;DR
