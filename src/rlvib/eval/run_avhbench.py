@@ -30,6 +30,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="0 = all")
     ap.add_argument("--max-new-tokens", type=int, default=8)
     ap.add_argument("--out", default="runs/avhbench_baseline.json")
+    ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
+    ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -41,10 +43,32 @@ def main() -> int:
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"AVHBench: {n}/{len(ds)} samples | tasks={args.tasks}", flush=True)
 
+    # Resume a partial run (API evals are long/flaky): reload saved records and continue.
     per_task = collections.defaultdict(lambda: {"preds": [], "golds": []})
     records = []
-    t0 = time.time()
-    for i in range(n):
+    if not args.no_resume and os.path.exists(args.out):
+        with open(args.out) as f:
+            records = json.load(f).get("records", [])[:n]
+        for r in records:
+            per_task[r["task"]]["preds"].append(r["pred"])
+            per_task[r["task"]]["golds"].append(str(r["label"]).strip().lower())
+        if records:
+            print(f"resuming from {len(records)} saved records in {args.out}", flush=True)
+
+    def _write():
+        res, ap_, ag_ = {}, [], []
+        for task, d in per_task.items():
+            res[task] = accuracy(d["preds"], d["golds"])
+            ap_ += d["preds"]
+            ag_ += d["golds"]
+        res["overall"] = accuracy(ap_, ag_)
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w") as f:
+            json.dump({"results": res, "records": records}, f, indent=2)
+        return res
+
+    start, t0 = len(records), time.time()
+    for i in range(start, n):
         item = ds[i]
         gold = str(item["label"]).strip().lower()  # "yes" / "no"
         msg = model.message(video=item["video_path"], prompt=item["text"] + YN_SUFFIX)
@@ -59,21 +83,14 @@ def main() -> int:
             "video_path": item["video_path"], "task": item["task"],
             "text": item["text"], "label": item["label"], "answer": ans, "pred": pred,
         })
-        if (i + 1) % 20 == 0:
-            print(f"  {i + 1}/{n}  ({(time.time() - t0) / (i + 1):.1f}s/it)", flush=True)
+        done = i + 1
+        if done - start <= 3 or done % 10 == 0 or done == n:  # early feedback, then every 10
+            print(f"  {done}/{n}  ({(time.time() - t0) / max(done - start, 1):.1f}s/it)", flush=True)
+        if args.save_every and done % args.save_every == 0:
+            _write()                                          # checkpoint so a crash loses <= N items
 
-    results, all_preds, all_golds = {}, [], []
-    for task, d in per_task.items():
-        results[task] = accuracy(d["preds"], d["golds"])
-        all_preds += d["preds"]
-        all_golds += d["golds"]
-    results["overall"] = accuracy(all_preds, all_golds)
-
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w") as f:
-        json.dump({"results": results, "records": records}, f, indent=2)
-
-    print("\n=== AVHBench baseline (frozen Qwen3-Omni) ===")
+    results = _write()
+    print("\n=== AVHBench baseline ===")
     for task, m in results.items():
         print(f"  {task:28s} acc={m['accuracy']:.3f}  (n={m['n']}, parse={m['parse_rate']:.2f})")
     print(f"wrote {args.out}", flush=True)

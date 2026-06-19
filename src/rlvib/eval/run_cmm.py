@@ -42,6 +42,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-new-tokens", type=int, default=8)
     ap.add_argument("--out", default="runs/cmm_baseline.json")
+    ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
+    ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -53,10 +55,29 @@ def main() -> int:
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"CMM: {n}/{len(ds)} questions | subsets={args.subsets or 'all'}", flush=True)
 
-    by_sub = collections.defaultdict(list)
-    records = []
-    t0 = time.time()
-    for i in range(n):
+    # Resume a partial run (API evals are long/flaky): reload saved records and continue.
+    records, by_sub = [], collections.defaultdict(list)
+    if not args.no_resume and os.path.exists(args.out):
+        with open(args.out) as f:
+            records = json.load(f).get("records", [])[:n]
+        for r in records:
+            by_sub[r["sub_category"]].append((r["answer"], r["pred"]))
+        if records:
+            print(f"resuming from {len(records)} saved records in {args.out}", flush=True)
+
+    def _write():
+        res = {sub: _scores(p) for sub, p in by_sub.items()}
+        res["overall"] = _scores([pr for p in by_sub.values() for pr in p])
+        audio = [pr for sub, p in by_sub.items() if sub in AUDIO_SUBSETS for pr in p]
+        if audio:
+            res["audio_subsets"] = _scores(audio)
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w") as f:
+            json.dump({"results": res, "records": records}, f, indent=2)
+        return res
+
+    start, t0 = len(records), time.time()
+    for i in range(start, n):
         item = ds[i]
         gold = item["answer"]
         v, a = item["video_path"], item["audio_path"]
@@ -73,20 +94,14 @@ def main() -> int:
             "sub_category": item["sub_category"], "modality": item.get("modality"),
             "question": item["question"], "answer": gold, "pred": pred, "raw": ans,
         })
-        if (i + 1) % 20 == 0:
-            print(f"  {i + 1}/{n} ({(time.time() - t0) / (i + 1):.1f}s/it)", flush=True)
+        done = i + 1
+        if done - start <= 3 or done % 10 == 0 or done == n:  # early feedback, then every 10
+            print(f"  {done}/{n} ({(time.time() - t0) / max(done - start, 1):.1f}s/it)", flush=True)
+        if args.save_every and done % args.save_every == 0:
+            _write()                                          # checkpoint so a crash loses <= N items
 
-    results = {sub: _scores(p) for sub, p in by_sub.items()}
-    results["overall"] = _scores([pr for p in by_sub.values() for pr in p])
-    audio_pairs = [pr for sub, p in by_sub.items() if sub in AUDIO_SUBSETS for pr in p]
-    if audio_pairs:
-        results["audio_subsets"] = _scores(audio_pairs)
-
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w") as f:
-        json.dump({"results": results, "records": records}, f, indent=2)
-
-    print("\n=== CMM baseline (frozen Qwen3-Omni) ===")
+    results = _write()
+    print("\n=== CMM baseline ===")
     for sub, m in results.items():
         print(f"  {sub:34s} PA={m['PA']:.3f} HR={m['HR']:.3f} acc={m['acc']:.3f} "
               f"(n={m['n']}, parse={m['parse_rate']:.2f})")
