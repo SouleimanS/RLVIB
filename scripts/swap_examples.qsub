@@ -1,0 +1,37 @@
+#!/bin/bash
+#PBS -N rlvib_swap_examples
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=00:40:00
+#PBS -j oe
+#PBS -o rlvib_swap_examples.qsub.log
+
+# Generate audio-swap figure examples (base vs adapted on swapped clips). See swap_examples.py.
+# Sets the single-GPU + libstdc++ env the interactive shell lacks.
+#   CKPT=runs/anchored_qwen3-omni_broad/bottleneck_step60.pt N=12 \
+#     qsub -v CKPT,N scripts/swap_examples.qsub
+# Result is teed to runs/swap_examples_<model>_out.txt
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-rlvib}"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"   # conda libstdc++ (CXXABI_1.3.15)
+export CUDA_VISIBLE_DEVICES=0                                     # single GPU: no MoE cross-device shard
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/swap_examples_${MODEL:-qwen3-omni}_out.txt") 2>&1
+
+python -u scripts/swap_examples.py --model "${MODEL:-qwen3-omni}" \
+    --ckpt "${CKPT:-runs/anchored_qwen3-omni_broad/bottleneck_step60.pt}" \
+    --n "${N:-12}" --split "${SPLIT:-test}" --seed "${SEED:-0}"
+
+echo "=== Done $(date) ==="
