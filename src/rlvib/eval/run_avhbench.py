@@ -15,6 +15,7 @@ import time
 
 from rlvib.data.avhbench import BINARY_TASKS, AVHBenchDataset
 from rlvib.eval.metrics import accuracy, parse_yes_no
+from rlvib.eval.timeout import time_limit
 from rlvib.models import get_model
 
 YN_SUFFIX = " Answer with a single word: Yes or No."
@@ -32,6 +33,9 @@ def main() -> int:
     ap.add_argument("--out", default="runs/avhbench_baseline.json")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
     ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
+    ap.add_argument("--gen-timeout", type=int, default=120,
+                    help="per-item wall-clock cap (s); a clip that hangs generate() is skipped "
+                         "(pred=None) instead of stalling the whole run. 0 disables.")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -73,9 +77,10 @@ def main() -> int:
         gold = str(item["label"]).strip().lower()  # "yes" / "no"
         msg = model.message(video=item["video_path"], prompt=item["text"] + YN_SUFFIX)
         try:
-            ans = model.generate(msg, use_audio_in_video=True, max_new_tokens=args.max_new_tokens)
+            with time_limit(args.gen_timeout):
+                ans = model.generate(msg, use_audio_in_video=True, max_new_tokens=args.max_new_tokens)
             pred = parse_yes_no(ans)
-        except Exception as e:  # noqa: BLE001 — skip bad/missing clips, keep going
+        except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging clips, keep going
             ans, pred = f"ERROR: {e}", None
         per_task[item["task"]]["preds"].append(pred)
         per_task[item["task"]]["golds"].append(gold)

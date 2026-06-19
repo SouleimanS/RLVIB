@@ -16,6 +16,7 @@ import time
 
 from rlvib.data.cmm import AUDIO_SUBSETS, CMMDataset
 from rlvib.eval.metrics import parse_yes_no
+from rlvib.eval.timeout import time_limit
 from rlvib.models import get_model
 
 
@@ -44,6 +45,9 @@ def main() -> int:
     ap.add_argument("--out", default="runs/cmm_baseline.json")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
     ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
+    ap.add_argument("--gen-timeout", type=int, default=120,
+                    help="per-item wall-clock cap (s); a clip that hangs generate() is skipped "
+                         "(pred=None) instead of stalling the whole run. 0 disables.")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -85,9 +89,10 @@ def main() -> int:
         uaiv = bool(v) and not a and item.get("modality") == "audio"
         msg = model.message(video=v, audio=a, prompt=item["question"])
         try:
-            ans = model.generate(msg, use_audio_in_video=uaiv, max_new_tokens=args.max_new_tokens)
+            with time_limit(args.gen_timeout):
+                ans = model.generate(msg, use_audio_in_video=uaiv, max_new_tokens=args.max_new_tokens)
             pred = parse_yes_no(ans)
-        except Exception as e:  # noqa: BLE001 — skip bad/missing media, keep going
+        except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging media, keep going
             ans, pred = f"ERROR: {e}", None
         by_sub[item["sub_category"]].append((gold, pred))
         records.append({
