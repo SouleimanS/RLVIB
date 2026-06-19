@@ -103,7 +103,7 @@ def main() -> int:
             lm.zero_grad(set_to_none=True)
             target.backward()
         v, g = saved["v"][0], saved["v"].grad[0]            # (T_v, d)
-        sal = (g * v).sum(-1).abs().float().cpu().numpy()
+        sal = (g * v).sum(-1).abs().detach().float().cpu().numpy()
         tv = int(sal.shape[0])
         print(f"{name}: T_v={tv}  grid(t,h,w)=({gt},{gh},{gw})  merge={ms} -> ({gt},{hm},{wm}) "
               f"= {gt * hm * wm}  pred={a.pos if float(target) > 0 else a.neg}", flush=True)
