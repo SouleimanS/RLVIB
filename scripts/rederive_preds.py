@@ -71,7 +71,9 @@ def rederive(path, dry_run=False, backup_dir="runs/_preparse_backup"):
 
     if not dry_run:
         os.makedirs(backup_dir, exist_ok=True)
-        shutil.copy2(path, os.path.join(backup_dir, os.path.basename(path)))
+        bak = os.path.join(backup_dir, os.path.basename(path))
+        if not os.path.exists(bak):           # keep the PRISTINE original; re-runs are idempotent
+            shutil.copy2(path, bak)
         with open(path, "w") as f:
             json.dump(blob, f, indent=2)
     return old_overall, new_overall
