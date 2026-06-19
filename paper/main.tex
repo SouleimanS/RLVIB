@@ -39,10 +39,11 @@ perception accuracy and the second alone loses hallucination-resistance. With bo
 leakage-controlled protocol (checkpoints selected on a held-out validation split, reported on a disjoint
 test split), the audio--visual hallucination benchmark AVHBench improves from $0.647$ to $0.694\pm0.023$
 across three seeds, while the two CMM capability axes stay within tolerance of the base. We report a sweep over the
-information-bottleneck rate weight $\beta_{kl}$, a per-token analysis of the trained bottleneck, and
-partial results on Qwen2.5-Omni. Results on VideoLLaMA2 are pending a numerical fix and are marked
-\note{**} throughout. All gains are modest and measured on $300$-example benchmark subsets; limitations
-are discussed in detail.
+information-bottleneck rate weight $\beta_{kl}$, a per-token analysis of the trained bottleneck, and the
+same protocol on two further backbones: on Qwen2.5-Omni AVHBench improves from $0.620$ to $0.673$ with
+perception preserved, whereas on VideoLLaMA2 the recipe preserves both capability axes but yields no
+AVHBench gain --- the audio-swap signal has little to exploit on a backbone that under-uses audio. All
+gains are modest and measured on $300$-example benchmark subsets; limitations are discussed in detail.
 \end{abstract}
 
 \section{Introduction}
@@ -144,7 +145,7 @@ default initialization process-wide). The Qwen backbones are unaffected by these
 \section{Experiments}
 \subsection{Setup}
 \label{sec:setup}
-\textbf{Backbones:} Qwen3-Omni (primary), Qwen2.5-Omni, VideoLLaMA2.1-7B-AV\note{**}; all frozen, only the
+\textbf{Backbones:} Qwen3-Omni (primary), Qwen2.5-Omni, VideoLLaMA2.1-7B-AV; all frozen, only the
 two VIBs trained. \textbf{Training data:} audio-swapped AVE clips (300 pairs, 2 epochs, $\beta{=}0.1$,
 $\lambda_a{=}1$, $\lambda_{kl}{=}2$, $\beta_{kl}{=}0.01$ unless stated). \textbf{Benchmarks (held-out,
 $n{=}300$ subset each):} AVHBench~\cite{avhbench} (audio--visual hallucination, overall accuracy);
@@ -155,6 +156,13 @@ $\beta_{kl}$) are selected on the validation half and \emph{all reported numbers
 The selection rule is the highest validation AVHBench subject to capability guards
 $\text{PA}\ge\text{PA}_{\text{base}}-0.05$ and $\text{HR}\ge\text{HR}_{\text{base}}-0.05$ (relative to
 each backbone's base, computed on validation). Reported metrics are therefore on $n{=}150$.
+\textbf{Answer parsing.} Free-text outputs are mapped to yes/no by a parser that recognizes negated
+absence answers (e.g.\ ``I did not see a tree''$\,\to\,$``no''). An earlier negation-blind parser scored
+such answers as unparseable errors, which floored VideoLLaMA2's CMM hallucination-resistance to near
+zero; VideoLLaMA2 answers in full sentences, whereas the Qwen backbones answer with a leading
+``yes''/``no'' and are unaffected. We corrected the parser and re-derived every metric from the saved raw
+outputs; the correction leaves all Qwen2.5-/Qwen3-Omni numbers unchanged, isolating the change to the one
+backbone that answered in prose.
 
 \subsection{The collapse and the anchor ablation (Qwen3-Omni)}
 \label{sec:abl}
@@ -163,7 +171,7 @@ reports the end-of-training (step 150) CMM axes to show the collapse dynamics. T
 (Eq.~\ref{eq:naive}) reduces CMM perception (test) from $0.939$ to $0.015$ by step 150 and the model
 answers a near-constant ``no'' (hallucination-resistance inflates to $1.000$ because denying everything
 trivially avoids hallucination). The chosen anchor alone delays but does not prevent the perception loss
-($0.227$ at step 150). The KL-to-base alone keeps perception near base but loses hallucination-resistance
+($0.303$ at step 150). The KL-to-base alone keeps perception near base but loses hallucination-resistance
 ($0.655$). Only with both terms does the selected checkpoint keep both axes within tolerance, and it
 also attains the highest AVHBench. All four objectives drift if trained to step 150; selection is
 mid-training.
@@ -194,8 +202,8 @@ both anchors. PA$\to$0.015 under naive DPO is a near-constant ``no'' (HR $\to$ 1
 Objective (step 150) & CMM-PA & CMM-HR \\
 \midrule
 Naive swap-DPO & 0.015 & 1.000 \\
-\quad + chosen anchor only & 0.227 & 0.893 \\
-\quad + KL-to-base only & 0.879 & 0.655 \\
+\quad + chosen anchor only & 0.303 & 0.917 \\
+\quad + KL-to-base only & 0.894 & 0.655 \\
 \quad + both (anchored) & 0.848 & 0.476 \\
 \bottomrule
 \end{tabular}
@@ -250,14 +258,24 @@ $\beta_{kl}$ & sel.\ step & AVHBench & CMM-PA & CMM-HR & guards pass \\
 Table~\ref{tab:models} reports all three backbones. On Qwen2.5-Omni (test split) AVHBench rises from
 $0.620$ to $0.673$ and perception is unchanged ($0.939$), while hallucination-resistance drifts down
 slightly ($0.619$ to $0.583$); the relative guard (Section~\ref{sec:setup}) is required here because
-Qwen2.5's base HR is below the absolute $0.70$ threshold used for Qwen3. VideoLLaMA2 entries are
-base-only and marked \note{**}: a numerical bug (uninitialized bottleneck weights induced by the loader's
-\texttt{disable\_torch\_init}, plus a float16 forward) prevented training; the fixes are in place but the
-trained result is not yet validated.
+Qwen2.5's base HR is below the absolute $0.70$ threshold used for Qwen3. On VideoLLaMA2 --- which trains
+once the numerical guards of Section~\ref{sec:impl} are applied --- the anchored recipe is
+capability-preserving but grounding-neutral: the validation-selected checkpoint leaves both CMM axes
+essentially at base (perception $0.742\!\to\!0.712$, hallucination-resistance $0.917\!\to\!0.929$) but does
+not improve AVHBench ($0.667\!\to\!0.613$). The AVHBench change is within noise --- a second checkpoint
+also passes the validation guards at $0.693$, and the two are indistinguishable on the validation half
+($0.733$ vs.\ $0.747$, $n{=}150$) --- so we read VideoLLaMA2 as no grounding gain rather than a regression.
+This is consistent with VideoLLaMA2's weak, separately-aligned audio pathway: its audio behavior largely
+inherits its vision-language base model~\cite{avllm_seehear} and its audio tokens can be pruned almost
+entirely without loss of accuracy~\cite{fastav}, so the audio-swap preference has little audio signal to
+exploit and the anchored recipe protects capability without adding grounding. (VideoLLaMA2's high base
+hallucination-resistance, $0.917$, is the corrected measurement of Section~\ref{sec:setup}, ``Answer
+parsing''; an earlier draft scored it near zero.)
 
 \begin{table}[t]\centering\small
 \caption{All backbones (AVHBench/CMM val-selected, test-reported; DAVE is the full-set base, not swept).
-VideoLLaMA2 is base-only, pending validation (\note{**}).}
+On VideoLLaMA2 the anchored VIB preserves both CMM axes but does not improve AVHBench (the change is
+within noise; see text).}
 \label{tab:models}
 \begin{tabular}{lcccc}
 \toprule
@@ -267,8 +285,8 @@ Qwen3-Omni base        & 0.647 & 0.939 & 0.810 & 0.380 \\
 Qwen3-Omni anchored    & 0.707 & 0.909 & 0.869 & --- \\
 Qwen2.5-Omni base      & 0.620 & 0.939 & 0.619 & 0.307 \\
 Qwen2.5-Omni anchored  & 0.673 & 0.939 & 0.583 & --- \\
-VideoLLaMA2 base\note{**}     & 0.677 & 0.720 & 0.087 & 0.357 \\
-VideoLLaMA2 anchored\note{**} & ** & ** & ** & ** \\
+VideoLLaMA2 base       & 0.667 & 0.742 & 0.917 & 0.357 \\
+VideoLLaMA2 anchored   & 0.613 & 0.712 & 0.929 & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -307,8 +325,10 @@ validation-selected checkpoint, not a monotone training improvement --- all reci
 longer. While the checkpoint, recipe and $\beta_{kl}$ are selected on the validation half, the
 \emph{design} of the broad anchor was informed by observing the CMM failure on the held-out benchmarks ---
 a residual form of test-informed design. On Qwen2.5-Omni hallucination-resistance drifts below base, so the
-HR-preserving behavior on Qwen3-Omni does not transfer cleanly. VideoLLaMA2 results are not yet available
-(\note{**}). DAVE was evaluated at the base only, not swept. The information-bottleneck framing is partly
+HR-preserving behavior on Qwen3-Omni does not transfer cleanly. On VideoLLaMA2 the recipe preserves
+capability but produces no AVHBench gain, so the grounding improvement does not generalize to every
+backbone --- plausibly because VideoLLaMA2 under-uses audio, leaving the audio-swap signal little to
+exploit. DAVE was evaluated at the base only, not swept. The information-bottleneck framing is partly
 nominal: at $\beta_{kl}{=}0.01$ the rate penalty is weak. We audit clip-id overlap between the AVE training
 pool and the three benchmarks to check dataset-level leakage. Finally, the audio-swap signal is synthetic
 and the benchmarks are yes/no-heavy, which interacts with the likelihood-displacement failure mode.
@@ -319,8 +339,9 @@ bottleneck, but naive preference optimization collapses it. Anchoring the chosen
 and adding an explicit KL-to-base on general inputs prevents the collapse; an ablation shows both terms
 are necessary. On Qwen3-Omni this yields a small, repeatable improvement on an audio--visual
 hallucination benchmark with capability preserved, larger and more stable at higher bottleneck-rate
-weights; results on Qwen2.5-Omni are partial and on VideoLLaMA2 pending. We release the diagnosis, the
-recipe, the monitoring/selection protocol, and the numerical fixes.
+weights; the improvement is smaller on Qwen2.5-Omni and absent on VideoLLaMA2 (which under-uses audio,
+leaving the audio-swap signal little to exploit). We release the diagnosis, the recipe, the
+monitoring/selection protocol, and the numerical fixes.
 
 {\small
 \begin{thebibliography}{99}
@@ -337,6 +358,8 @@ recipe, the monitoring/selection protocol, and the numerical fixes.
 \bibitem{avhbench} AVHBench: A Cross-Modal Hallucination Benchmark for Audio-Visual LLMs. 2024.
 \bibitem{cmm} The Curse of Multi-Modalities: Hallucination in LMMs across Language, Visual, and Audio. 2024.
 \bibitem{dave} DAVE: A Diagnostic Benchmark for Audio-Visual Evaluation. 2024.
+\bibitem{avllm_seehear} Selvakumar et al. Do Audio-Visual LLMs Really See and Hear? 2026. arXiv:2604.02605.
+\bibitem{fastav} FastAV: Efficient Token Pruning for Audio-Visual LLM Inference. 2026. arXiv:2601.13143.
 \end{thebibliography}
 }
 
