@@ -31,6 +31,9 @@ import json
 import os
 
 
+FULL_SIZE = {"avhbench": 5302, "cmm": 2400, "dave": 1572}  # this project's full-set sizes
+
+
 def _metrics(blob: dict):
     """(n, score, parse_rate) tolerant of AVHBench/CMM (results.overall) vs DAVE (top level)."""
     res = blob.get("results")
@@ -95,11 +98,19 @@ def main() -> int:
     counts: dict = collections.defaultdict(set)
     allok = all([check(p, counts, a.detail) for p in paths])  # list -> every file checked
 
-    print("\nrecord counts per benchmark (all files of one benchmark should match WHEN FINISHED;")
-    print("while jobs run, lower counts are just in-progress -- not an error):")
+    print("\nrecord counts per benchmark vs the full-set target "
+          "(COMPLETE only when every file == target):")
     for b in sorted(counts):
         cs = sorted(counts[b])
-        note = "  <- converged" if len(cs) == 1 else "  <- still spread (jobs running / resuming)"
+        tgt = FULL_SIZE.get(b)
+        if tgt is None:
+            note = "  <- all equal" if len(cs) == 1 else "  <- spread (still running)"
+        elif cs == [tgt]:
+            note = f"  <- COMPLETE ({tgt})"
+        elif len(cs) == 1:
+            note = f"  <- all at {cs[0]}, target {tgt} -> INCOMPLETE (still running / stalled)"
+        else:
+            note = f"  <- target {tgt} -> INCOMPLETE (still running)"
         print(f"  {b:9s} {cs}{note}")
 
     print("\nall files parse and are count-consistent." if allok else
