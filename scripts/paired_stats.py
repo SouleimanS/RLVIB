@@ -134,6 +134,12 @@ def _one(model, exp, step):
     print(f"\n=== {model}  exp={exp or '-'}  step={step}  (test half) ===")
     bc, ac = _paired(base_a, adt_a, keep_a, _avh_correct)
     bcd = _report("AVHBench", bc, ac, adapt_yes=_yes_rate(adt_a, keep_a))
+    for short, full in (("A->V", "Audio-driven Video Hallucination"),
+                        ("V->A", "Video-driven Audio Hallucination"),
+                        ("AV-match", "AV Matching")):           # per hallucination type
+        keep_t = {i for i in keep_a if i < len(base_a) and base_a[i].get("task") == full}
+        bt, at = _paired(base_a, adt_a, keep_t, _avh_correct)
+        _report("  " + short, bt, at)
     for axis, ans in (("CMM-PA", "yes"), ("CMM-HR", "no")):
         bc, ac = _paired(base_c, adt_c, keep_c, _cmm_correct_for(ans))
         _report(axis, bc, ac)

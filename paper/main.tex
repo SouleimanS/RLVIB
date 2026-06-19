@@ -7,6 +7,8 @@
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
 \usepackage{microtype}
 \usepackage[colorlinks=true,allcolors=blue]{hyperref}
 \usepackage{xcolor}
@@ -59,6 +61,27 @@ audio-swapped counterfactual (the original video with another clip's audio) and 
 consistent with the \emph{heard} event over the answer consistent with the \emph{seen} event. Because
 both answers are scored on the same swapped clip, preferring the heard event requires using the audio.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.6mm]},
+  clip/.style={draw,rounded corners,fill=gray!10,align=center,minimum width=28mm,minimum height=15mm},
+  good/.style={draw,rounded corners,fill=green!12,align=center,minimum width=36mm,minimum height=10mm},
+  bad/.style={draw,rounded corners,fill=red!12,align=center,minimum width=36mm,minimum height=10mm}]
+  \node[clip] (clip) {\textbf{audio-swapped clip}\\[1mm]\emph{see}: a dog\\\emph{hear}: a bell};
+  \node[bad,right=14mm of clip,yshift=8mm] (bad) {``a dog barking''\\[0.3mm]\scriptsize visual dominance: hallucinated sound};
+  \node[good,right=14mm of clip,yshift=-8mm] (good) {``a bell''\\[0.3mm]\scriptsize audio-grounded (target)};
+  \draw[->] (clip.east) to[out=25,in=180] (bad.west);
+  \draw[->] (clip.east) to[out=-25,in=180] (good.west);
+\end{tikzpicture}
+\caption{The failure we target, and how the audio-swap signal isolates it. On a clip whose audio is
+swapped so the seen event differs from the heard event, a vision-dominant model answers from the image and
+\emph{hallucinates} the seen object's typical sound (red); an audio-grounded model reports the heard event
+(green). This is the visual$\to$audio spurious correlation / visual-dominance failure catalogued by
+CMM~\cite{cmm}; AVHBench~\cite{avhbench} scores the symmetric cases as Audio-driven Video Hallucination
+($A\!\to\!V$), Video-driven Audio Hallucination ($V\!\to\!A$), and AV-matching.}
+\label{fig:halluc}
+\end{figure}
+
 We report three things. (i)~Applying DPO to this objective, while regularizing only the bottleneck's
 information rate, collapses the model (Section~\ref{sec:collapse}); we attribute the collapse to
 likelihood displacement and a missing output-distribution constraint. (ii)~A chosen-likelihood anchor and
@@ -88,6 +111,38 @@ Vittle~\cite{vittle} applies a VIB to multimodal-LLM hidden states. We use a per
 outputs and report that the rate penalty, as commonly weighted, is weak (Section~\ref{sec:interp}).
 
 \section{Method}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.6mm]},node distance=5mm and 6mm,
+  enc/.style={draw,rounded corners,fill=blue!8,minimum width=12mm,minimum height=8mm,align=center},
+  vib/.style={draw,very thick,rounded corners,fill=orange!25,draw=orange!70!black,minimum width=10mm,minimum height=8mm,align=center},
+  llm/.style={draw,rounded corners,fill=blue!8,minimum width=13mm,minimum height=22mm,align=center},
+  io/.style={align=center}]
+  \node[io] (vin) {video\\frames};
+  \node[enc,right=of vin] (venc) {vision\\encoder};
+  \node[enc,right=of venc] (vproj) {vision\\adapter};
+  \node[vib,right=of vproj] (vvib) {$\mathrm{VIB}_v$};
+  \node[io,below=9mm of vin] (ain) {audio};
+  \node[enc,right=of ain] (aenc) {audio\\encoder};
+  \node[enc,right=of aenc] (aproj) {audio\\adapter};
+  \node[vib,right=of aproj] (avib) {$\mathrm{VIB}_a$};
+  \node[llm,right=9mm of vvib,yshift=-9mm] (llm) {frozen\\LLM};
+  \node[io,right=of llm] (ans) {answer};
+  \draw[->] (vin)--(venc); \draw[->] (venc)--(vproj); \draw[->] (vproj)--(vvib); \draw[->] (vvib.east)--(llm.west);
+  \draw[->] (ain)--(aenc); \draw[->] (aenc)--(aproj); \draw[->] (aproj)--(avib); \draw[->] (avib.east)--(llm.west);
+  \draw[->] (llm.east)--(ans);
+\end{tikzpicture}
+\caption{The method. The audio--visual LLM is frozen (blue): per-modality encoders and adapters feed a
+frozen language model. We insert a small variational information bottleneck (orange, the only trained
+parameters) on each adapter's output token stream --- $z=\mu(x)+\sigma(x)\,\epsilon$,
+$y=x+W_{\text{out}}z$ with $W_{\text{out}}$ zero-initialized (identity at start). The two VIBs are trained
+with an audio-swap preference and two anchors (Section~\ref{sec:method-anchored}). A per-token probe
+(Table~\ref{tab:interp}) shows the learned transform mostly reshapes the vision stream, so the frozen
+language model resolves the audio--vision conflict.}
+\label{fig:method}
+\end{figure}
+
 \subsection{Frozen AV-LLM with a per-modality VIB}
 The base model is frozen. On each per-modality adapter output (the token sequence
 $x\in\mathbb{R}^{T\times d}$ feeding the language model) we attach a VIB via a forward hook:
