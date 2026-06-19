@@ -17,6 +17,10 @@
 \titleformat{\section}{\normalfont\large\bfseries}{\thesection}{0.6em}{}
 \titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.6em}{}
 \setlength{\parindent}{0pt}\setlength{\parskip}{0.5em}
+% Let floats fill pages instead of piling onto float-only pages / leaving big gaps.
+\renewcommand{\topfraction}{0.9}\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.08}\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}\setcounter{bottomnumber}{2}\setcounter{totalnumbers}{5}
 \newcommand{\KL}{\mathrm{KL}}
 \newcommand{\note}[1]{\textsuperscript{\textbf{#1}}}
 % frame thumbnail with a build-safe fallback box if the image hasn't been extracted yet
@@ -78,27 +82,6 @@ audio-swapped counterfactual (the original video with another clip's audio) and 
 consistent with the \emph{heard} event over the answer consistent with the \emph{seen} event. Because
 both answers are scored on the same swapped clip, preferring the heard event requires using the audio.
 
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.6mm]},
-  clip/.style={draw,rounded corners,fill=gray!10,align=center,minimum width=28mm,minimum height=15mm},
-  good/.style={draw,rounded corners,fill=green!12,align=center,minimum width=36mm,minimum height=10mm},
-  bad/.style={draw,rounded corners,fill=red!12,align=center,minimum width=36mm,minimum height=10mm}]
-  \node[clip] (clip) {\textbf{audio-swapped clip}\\[1mm]\emph{see}: a dog\\\emph{hear}: a bell};
-  \node[bad,right=14mm of clip,yshift=8mm] (bad) {``a dog barking''\\[0.3mm]\scriptsize visual dominance: hallucinated sound};
-  \node[good,right=14mm of clip,yshift=-8mm] (good) {``a bell''\\[0.3mm]\scriptsize audio-grounded (target)};
-  \draw[->] (clip.east) to[out=25,in=180] (bad.west);
-  \draw[->] (clip.east) to[out=-25,in=180] (good.west);
-\end{tikzpicture}
-\caption{The failure we target, and how the audio-swap signal isolates it. On a clip whose audio is
-swapped so the seen event differs from the heard event, a vision-dominant model answers from the image and
-\emph{hallucinates} the seen object's typical sound (red); an audio-grounded model reports the heard event
-(green). This is the visual$\to$audio spurious correlation / visual-dominance failure catalogued by
-CMM~\cite{cmm}; AVHBench~\cite{avhbench} scores the symmetric cases as Audio-driven Video Hallucination
-($A\!\to\!V$), Video-driven Audio Hallucination ($V\!\to\!A$), and AV-matching.}
-\label{fig:halluc}
-\end{figure}
-
 We report three things. (i)~Applying DPO to this objective, while regularizing only the bottleneck's
 information rate, collapses the model (Section~\ref{sec:collapse}); we attribute the collapse to
 likelihood displacement and a missing output-distribution constraint. (ii)~A chosen-likelihood anchor and
@@ -129,7 +112,7 @@ outputs and report that the rate penalty, as commonly weighted, is weak (Section
 
 \section{Method}
 
-\begin{figure}[t]
+\begin{figure}[tb]
 \centering
 \begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.6mm]},node distance=5mm and 6mm,
   enc/.style={draw,rounded corners,fill=blue!8,minimum width=12mm,minimum height=8mm,align=center},
@@ -161,7 +144,7 @@ language model resolves the audio--vision conflict.}
 \end{figure}
 
 \subsection{Frozen AV-LLM with a per-modality VIB}
-The base model is frozen. On each per-modality adapter output (the token sequence
+The base model is frozen (Figure~\ref{fig:method}). On each per-modality adapter output (the token sequence
 $x\in\mathbb{R}^{T\times d}$ feeding the language model) we attach a VIB via a forward hook:
 \begin{equation}
 z=\mu(x)+\sigma(x)\odot\epsilon,\ \epsilon\sim\mathcal N(0,I);\qquad y=x+W_{\text{out}}z,
@@ -257,7 +240,7 @@ trivially avoids hallucination). The chosen anchor alone delays but does not pre
 also attains the highest AVHBench. All four objectives drift if trained to step 150; selection is
 mid-training.
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{Anchor ablation on Qwen3-Omni (val-selected, test-reported, $n{=}150$). Selected checkpoint =
 highest validation AVHBench with PA and HR within $0.05$ of base on validation. Higher is better.}
 \label{tab:abl}
@@ -274,7 +257,7 @@ Naive swap-DPO (Eq.~\ref{eq:naive}) & 0 & 0 & 30 & 0.673 & 0.939 & 0.774 \\
 \end{tabular}
 \end{table}
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{End-of-training (step 150) CMM axes on Qwen3-Omni (test split), showing the collapse without
 both anchors. PA$\to$0.015 under naive DPO is a near-constant ``no'' (HR $\to$ 1.0 by denying everything).}
 \label{tab:collapse}
@@ -308,7 +291,7 @@ passing the validation guards increases ($2/5,4/5,5/5$), i.e.\ larger $\beta_{kl
 not accuracy --- consistent with the nominal rate penalty (Section~\ref{sec:interp}). The apparent
 $\beta_{kl}{=}0.1$ advantage under full-set (leaky) selection did not survive the val/test split.
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{Anchored recipe across three seeds (Qwen3-Omni, val-selected, test-reported, $n{=}150$). Paired
 McNemar vs.\ base on identical items: $b$=base-right/adapted-wrong, $c$=base-wrong/adapted-right. Base test
 AVHBench $=0.647\,[0.567,0.727]$, PA $=0.939$, HR $=0.810$. The $\pm$ row is seed variance only.}
@@ -326,7 +309,7 @@ mean$\pm$std & --- & $0.694\pm0.023$ & $0.899\pm0.031$ & $0.837\pm0.030$ & poole
 \end{tabular}
 \end{table}
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{Rate-weight sweep $\beta_{kl}$ (Qwen3-Omni, anchored ``broad'', seed 0; val-selected,
 test-reported). ``guards pass'' counts how many of the 5 saved checkpoints satisfy both validation
 guards. The test AVHBench is comparable across $\beta_{kl}$ (the apparent $\beta_{kl}{=}0.1$ advantage
@@ -351,7 +334,7 @@ with a signal that teaches the model to report the \emph{heard} event. Per-task 
 so no single task is individually significant; the breakdown shows where the (pooled-significant) gain
 lives, not per-task significance.
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{Qwen3-Omni AVHBench gain by hallucination type (val-selected step~$60$, test split; paired McNemar
 vs.\ base on identical items). Per-task $n$ is small, so this shows \emph{where} the gain concentrates, not
 per-task significance --- the overall/pooled result carries the significance (Table~\ref{tab:seeds}).}
@@ -389,7 +372,7 @@ for Qwen3-/Qwen2.5-Omni/VideoLLaMA2. (VideoLLaMA2's high base hallucination-resi
 corrected measurement of Section~\ref{sec:setup}, ``Answer parsing''; an earlier draft scored it near
 zero.)
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{All three backbones (AVHBench/CMM val-selected, test-reported, $n{=}150$). The anchored row is the
 validation-selected checkpoint; paired-McNemar significance is in the text (Qwen3-Omni significant pooled,
 Qwen2.5-Omni n.s., VideoLLaMA2 n.s.). DAVE is base-only and omitted (see text).}
@@ -413,7 +396,7 @@ whose audio we have swapped so the seen and heard events differ, the frozen base
 you hear?'' from the \emph{video} --- naming the object it sees and ignoring the sound --- while the
 adapted model reports the actual overlaid sound.
 
-\begin{figure}[t]\centering
+\begin{figure}[tb]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
 \begin{tabular}{@{}c@{}}
 \exrow{as_flute}{\emph{see:} flute\quad\textbf{heard (overlaid): train horn}}%
@@ -434,7 +417,7 @@ selected checkpoint).}
 
 On the benchmark itself, Figure~\ref{fig:avhqual} gives one corrected example per AVHBench task.
 
-\begin{figure}[t]\centering
+\begin{figure}[tb]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
 \begin{tabular}{@{}c@{}}
 \exrow{avh_a2v}{\textbf{audio $\to$ video}}%
@@ -464,7 +447,7 @@ the frozen language model. The vision rate ($\sim$640 bits/token) is large relat
 $\beta_{kl}{=}0.01$ applied to the \emph{mean} rate, i.e. the bottleneck is weakly compressed at this
 setting --- consistent with the $\beta_{kl}$ sweep, where larger weights stabilize training.
 
-\begin{table}[t]\centering\small
+\begin{table}[tb]\centering\small
 \caption{Per-token VIB statistics of the held Qwen3-Omni checkpoint (8 clips).}
 \label{tab:interp}
 \begin{tabular}{lccc}
