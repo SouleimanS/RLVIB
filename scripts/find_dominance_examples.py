@@ -35,11 +35,13 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=4, help="examples shown per sub_category")
     ap.add_argument("--json-path", default="data/CMM/all_data_final_reorg.json")
     ap.add_argument("--data-root", default="data/CMM")
+    ap.add_argument("--suffix", default="", help="read *_{suffix}.json (e.g. 'full' after full_eval.sh)")
     a = ap.parse_args()
     xt = f"_{a.exp}" if a.exp else ""
+    sx = f"_{a.suffix}" if a.suffix else ""
 
-    base = _recs(f"runs/cmm_{a.model}.json")
-    adt = _recs(f"runs/cmm_{a.model}{xt}_step{a.step}.json")
+    base = _recs(f"runs/cmm_{a.model}{sx}.json")
+    adt = _recs(f"runs/cmm_{a.model}{xt}{sx}_step{a.step}.json")
     if base is None or adt is None:
         print("missing base/adapted CMM JSONs (run the evals + rederive_preds first)")
         return 1

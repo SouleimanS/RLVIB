@@ -18,6 +18,9 @@
 \setlength{\parindent}{0pt}\setlength{\parskip}{0.5em}
 \newcommand{\KL}{\mathrm{KL}}
 \newcommand{\note}[1]{\textsuperscript{\textbf{#1}}}
+% frame thumbnail with a build-safe fallback box if the image hasn't been extracted yet
+\newcommand{\frm}[1]{\IfFileExists{figures/#1}{\includegraphics[height=13mm]{figures/#1}}%
+  {\fbox{\parbox[c][12mm][c]{16mm}{\centering\scriptsize\ttfamily #1}}}}
 
 \title{\textbf{Preference-Optimization Collapse in Frozen Audio--Visual LLMs\\
 and a Two-Anchor Mitigation}}
@@ -390,6 +393,35 @@ VideoLLaMA2 anchored   & 0.613 & 0.712 & 0.929 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+Beyond the aggregate numbers, Figure~\ref{fig:qual} shows three real corrections from the
+\texttt{visual-language} subset --- the failure the adapter most often fixes ($14$ of the base's $30$
+hallucinations there): on clips that do not contain the queried object, the frozen base affirms a
+frequently co-occurring object and the adapter abstains.
+
+\begin{figure}[t]\centering
+\setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}ccc p{0.40\linewidth}@{}}
+\frm{vl_flower_1.jpg} & \frm{vl_flower_2.jpg} & \frm{vl_flower_3.jpg} &
+\footnotesize\emph{``Did you see a flower in the video?''}\newline
+{\color{red!70!black}base: ``Yes, there are flowers visible.''}\newline
+{\color{green!55!black}ours: ``No, there are no flowers.''} \\[1.5mm]
+\frm{vl_tree_1.jpg} & \frm{vl_tree_2.jpg} & \frm{vl_tree_3.jpg} &
+\footnotesize\emph{``Did you see a tree in the video?''}\newline
+{\color{red!70!black}base: ``Yes, there is a tree visible.''}\newline
+{\color{green!55!black}ours: ``No.''} \\[1.5mm]
+\frm{vl_mountain_1.jpg} & \frm{vl_mountain_2.jpg} & \frm{vl_mountain_3.jpg} &
+\footnotesize\emph{``Did you see a mountain in the video?''}\newline
+{\color{red!70!black}base: ``Yes, there is a mountain visible.''}\newline
+{\color{green!55!black}ours: ``No.''} \\
+\end{tabular}
+\caption{Qualitative: the visual--language spurious correlation our adapter most often corrects. On
+Qwen3-Omni, for CMM clips that do \emph{not} contain the queried object, the frozen base affirms a
+commonly co-occurring object (red) while the audio-swap-trained adapter abstains (green). Real outputs
+(base vs.\ the selected checkpoint). The Language/Visual/Audio \emph{dominance} categories are absent from
+the $300$-example dev subset and are added from the full-set eval.}
+\label{fig:qual}
+\end{figure}
 
 \subsection{What the trained bottleneck does}
 \label{sec:interp}
