@@ -48,6 +48,10 @@ def main() -> int:
     ap.add_argument("--gen-timeout", type=int, default=120,
                     help="per-item wall-clock cap (s); a clip that hangs generate() is skipped "
                          "(pred=None) instead of stalling the whole run. 0 disables.")
+    ap.add_argument("--skip-clips", default="rEFeVc",
+                    help="comma-separated clip-name substrings to skip WITHOUT calling generate() "
+                         "-- a hard backstop for clips that wedge the decoder below the Python level "
+                         "(where --gen-timeout's signal can't reach). '' to disable.")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -80,6 +84,9 @@ def main() -> int:
             json.dump({"results": res, "records": records}, f, indent=2)
         return res
 
+    skip = [s for s in args.skip_clips.split(",") if s]
+    if skip:
+        print(f"skip-clips (hard backstop): {skip}", flush=True)
     start, t0 = len(records), time.time()
     for i in range(start, n):
         item = ds[i]
@@ -87,13 +94,16 @@ def main() -> int:
         v, a = item["video_path"], item["audio_path"]
         # separate audio file wins; else only extract audio from video for an audio probe
         uaiv = bool(v) and not a and item.get("modality") == "audio"
-        msg = model.message(video=v, audio=a, prompt=item["question"])
-        try:
-            with time_limit(args.gen_timeout):
-                ans = model.generate(msg, use_audio_in_video=uaiv, max_new_tokens=args.max_new_tokens)
-            pred = parse_yes_no(ans)
-        except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging media, keep going
-            ans, pred = f"ERROR: {e}", None
+        if any(s in (v or "") or s in (a or "") for s in skip):
+            ans, pred = "SKIPPED (skip-clips)", None        # decoder-hang clip; keep indices aligned
+        else:
+            msg = model.message(video=v, audio=a, prompt=item["question"])
+            try:
+                with time_limit(args.gen_timeout):
+                    ans = model.generate(msg, use_audio_in_video=uaiv, max_new_tokens=args.max_new_tokens)
+                pred = parse_yes_no(ans)
+            except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging media, keep going
+                ans, pred = f"ERROR: {e}", None
         by_sub[item["sub_category"]].append((gold, pred))
         records.append({
             "sub_category": item["sub_category"], "modality": item.get("modality"),
