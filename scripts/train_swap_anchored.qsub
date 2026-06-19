@@ -32,7 +32,7 @@ exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_${MODEL:-qwen3-omni}${EXP:+_
 python -u scripts/train_swap_anchored.py --model "${MODEL:-qwen3-omni}" \
     --pairs "${PAIRS:-300}" --epochs "${EPOCHS:-2}" --accum "${ACCUM:-4}" \
     --lam-kl "${LAMKL:-1.0}" --lam-anchor "${LAMANCHOR:-1.0}" --delta "${DELTA:-0.0}" \
-    --beta-kl "${BETAKL:-0.01}" --seed "${SEED:-0}" \
+    --beta-kl "${BETAKL:-0.01}" --seed "${SEED:-0}" --eval-every "${EVALEVERY:-10}" \
     --save-dir "runs/anchored_${MODEL:-qwen3-omni}${EXP:+_$EXP}"
 
 echo "=== Done $(date) ==="
