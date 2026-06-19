@@ -18,14 +18,22 @@ CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
 WITH_DAVE="${WITH_DAVE:-1}"
 DAVE_SPLIT="${DAVE_SPLIT:-ego4d}"
 WALL="${WALL:-12:00:00}"
+ONLY="${ONLY:-}"   # empty = avhbench+cmm(+dave); else a subset, e.g. ONLY=cmm or ONLY="cmm dave"
+                   # (a CMM/DAVE job resumes its _full JSON, so this is the safe way to finish
+                   #  just one benchmark without resubmitting -- and re-duplicating -- the others)
+want() { [ -z "$ONLY" ] && return 0; case " $ONLY " in *" $1 "*) return 0;; *) return 1;; esac; }
 
 submit() {  # $1=TAG  $2=BOTTLENECK(optional)
     local TAG="$1" BN="${2:-}"
-    qsub -v "MODEL=$MODEL,LIMIT=0,TAG=$TAG,CONDA_ENV=$ENV${BN:+,BOTTLENECK=$BN}" \
-        -l walltime="$WALL" scripts/eval_avhbench.qsub
-    qsub -v "MODEL=$MODEL,LIMIT=0,TAG=$TAG,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,CONDA_ENV=$ENV${BN:+,BOTTLENECK=$BN}" \
-        -l walltime="$WALL" scripts/eval_cmm.qsub
-    if [ "$WITH_DAVE" = 1 ]; then
+    if want avhbench; then
+        qsub -v "MODEL=$MODEL,LIMIT=0,TAG=$TAG,CONDA_ENV=$ENV${BN:+,BOTTLENECK=$BN}" \
+            -l walltime="$WALL" scripts/eval_avhbench.qsub
+    fi
+    if want cmm; then
+        qsub -v "MODEL=$MODEL,LIMIT=0,TAG=$TAG,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,CONDA_ENV=$ENV${BN:+,BOTTLENECK=$BN}" \
+            -l walltime="$WALL" scripts/eval_cmm.qsub
+    fi
+    if [ "$WITH_DAVE" = 1 ] && want dave; then
         qsub -v "MODEL=$MODEL,LIMIT=0,TAG=$TAG,MODE=audio_visual_alignment,DAVE_SPLIT=$DAVE_SPLIT,CONDA_ENV=$ENV${BN:+,BOTTLENECK=$BN}" \
             -l walltime="$WALL" scripts/eval_dave.qsub
     fi
