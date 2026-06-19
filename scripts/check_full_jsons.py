@@ -24,11 +24,11 @@ Exit code is nonzero if any file fails to parse or is count-inconsistent.
 """
 from __future__ import annotations
 
+import argparse
 import collections
 import glob
 import json
 import os
-import sys
 
 
 def _metrics(blob: dict):
@@ -48,7 +48,7 @@ def _benchmark(path: str) -> str:
     return "other"
 
 
-def check(path: str, counts: dict) -> bool:
+def check(path: str, counts: dict, detail: bool = False) -> bool:
     try:
         with open(path) as f:
             blob = json.load(f)
@@ -67,17 +67,33 @@ def check(path: str, counts: dict) -> bool:
     pr_s = f"{pr:.2f}" if isinstance(pr, (int, float)) else " - "
     print(f"  {'OK    ' if ok else 'CHECK '} {path}\n           n={len(recs):<5} score={score_s} parse={pr_s}"
           + "".join(f"\n           !! {m}" for m in flags))
+    if detail and isinstance(blob.get("results"), dict):
+        for k, v in blob["results"].items():       # AVHBench tasks / CMM sub_categories
+            if not isinstance(v, dict) or k == "overall":
+                continue
+            if "PA" in v:                           # CMM sub_category -> PA/HR
+                print(f"             {k:32s} PA={v['PA']:.3f} HR={v['HR']:.3f} "
+                      f"acc={v.get('acc', 0):.3f}  n={v.get('n')}")
+            elif "accuracy" in v:                   # AVHBench task
+                print(f"             {k:32s} acc={v['accuracy']:.3f}  "
+                      f"n={v.get('n')} parse={v.get('parse_rate', 0):.2f}")
     return ok
 
 
 def main() -> int:
-    paths = sys.argv[1:] or sorted(glob.glob("runs/*_full*.json"))
+    ap = argparse.ArgumentParser(
+        description="Health-check the _full eval JSONs (+ optional per-task/subcategory breakdown).")
+    ap.add_argument("paths", nargs="*", help="files to check (default: runs/*_full*.json)")
+    ap.add_argument("--detail", action="store_true",
+                    help="also print per-task (AVHBench) / per-subcategory PA-HR (CMM) accuracies")
+    a = ap.parse_args()
+    paths = a.paths or sorted(glob.glob("runs/*_full*.json"))
     if not paths:
         print("no runs/*_full*.json found (cwd must be the repo root).")
         return 0
     print(f"checking {len(paths)} file(s):")
     counts: dict = collections.defaultdict(set)
-    allok = all([check(p, counts) for p in paths])  # list, not generator -> every file checked
+    allok = all([check(p, counts, a.detail) for p in paths])  # list -> every file checked
 
     print("\nrecord counts per benchmark (all files of one benchmark should match WHEN FINISHED;")
     print("while jobs run, lower counts are just in-progress -- not an error):")
