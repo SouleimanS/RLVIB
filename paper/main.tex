@@ -428,6 +428,32 @@ selected checkpoint).}
 \label{fig:qual}
 \end{figure}
 
+On the benchmark itself, Figure~\ref{fig:avhqual} gives one corrected example per AVHBench task.
+
+\begin{figure}[t]\centering
+\setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}ccc >{\raggedright\arraybackslash}p{0.46\linewidth}@{}}
+\frm{avh_a2v_1.jpg} & \frm{avh_a2v_2.jpg} & \frm{avh_a2v_3.jpg} &
+\footnotesize \textbf{audio$\to$video.} \emph{``Is the power tool visible?''} --- it is not.\newline
+{\color{red!70!black}base: ``Yes'' ($\times$ infers the object from its sound)}\quad
+{\color{green!55!black}ours: ``No'' ($\checkmark$)} \\[1.5mm]
+\frm{avh_v2a_1.jpg} & \frm{avh_v2a_2.jpg} & \frm{avh_v2a_3.jpg} &
+\footnotesize \textbf{video$\to$audio.} \emph{``Is the bird making sound?''} --- it is silent.\newline
+{\color{red!70!black}base: ``Yes'' ($\times$ infers the sound from the sight)}\quad
+{\color{green!55!black}ours: ``No'' ($\checkmark$)} \\[1.5mm]
+\frm{avh_match_1.jpg} & \frm{avh_match_2.jpg} & \frm{avh_match_3.jpg} &
+\footnotesize \textbf{AV matching.} \emph{``Do the audio and video match?''} --- they do not.\newline
+{\color{red!70!black}base: ``Yes'' ($\times$)}\quad
+{\color{green!55!black}ours: ``No'' ($\checkmark$)} \\
+\end{tabular}
+\caption{AVHBench cross-modal hallucinations our method corrects, one per task (held-out clips; frozen
+base vs.\ the selected Qwen3-Omni checkpoint). In each the gold answer is ``No'' but the base answers
+``Yes'' ($\times$, red) and the adapter answers ``No'' ($\checkmark$, green): for audio$\to$video it
+affirms an object that is only heard, for video$\to$audio a sound that is only seen, and for matching it
+calls mismatched streams corresponding.}
+\label{fig:avhqual}
+\end{figure}
+
 \subsection{What the trained bottleneck does}
 \label{sec:interp}
 A forward-pass probe of the held Qwen3-Omni checkpoint reads each VIB's per-token rate (KL in bits) and
