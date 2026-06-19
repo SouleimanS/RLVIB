@@ -21,8 +21,8 @@ def _probe(path: str, q: mp.Queue) -> None:
     try:
         import decord
         vr = decord.VideoReader(path)
-        _ = vr[0]                       # force an actual frame decode (where it wedges)
-        q.put("ok")
+        vr.get_batch(list(range(len(vr))))   # decode EVERY frame -- the full read is where it wedges,
+        q.put("ok")                          # not frame 0 (which always succeeds)
     except Exception as e:              # noqa: BLE001 -- any failure is informative
         q.put(f"err:{type(e).__name__}")
 
