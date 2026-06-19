@@ -42,12 +42,19 @@ def _testset(n, frac=0.5, seed=12345):
 
 
 def _mcnemar_p(b, c):
-    """Exact two-sided McNemar (binomial on the b+c discordant pairs, p0=0.5)."""
+    """Exact two-sided McNemar (binomial on the b+c discordant pairs, p0=0.5).
+
+    Computed in log-space (lgamma) so math.comb doesn't overflow float for large b+c
+    (AVHBench has thousands of pairs -> comb(n, n/2) exceeds ~1.8e308 around n>1024)."""
     n = b + c
     if n == 0:
         return 1.0
     k = min(b, c)
-    tail = sum(math.comb(n, i) for i in range(k + 1)) * (0.5 ** n)
+    ln_half = n * math.log(0.5)
+    tail = math.fsum(
+        math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + ln_half)
+        for i in range(k + 1)
+    )
     return min(1.0, 2.0 * tail)
 
 
