@@ -6,6 +6,7 @@
 \usepackage{times}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\usepackage{array}            % >{\raggedright\arraybackslash}p{} columns (ragged-right without breaking \\)
 \usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta}
@@ -401,19 +402,19 @@ adapted model reports the actual overlaid sound.
 
 \begin{figure}[t]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}ccc p{0.46\linewidth}@{}}
+\begin{tabular}{@{}ccc >{\raggedright\arraybackslash}p{0.46\linewidth}@{}}
 \frm{as_flute_1.jpg} & \frm{as_flute_2.jpg} & \frm{as_flute_3.jpg} &
-\footnotesize\raggedright \emph{see:} flute,\quad\textbf{heard (overlaid): train horn.}\newline
+\footnotesize \emph{see:} flute,\quad\textbf{heard (overlaid): train horn.}\newline
 \emph{``Which event do you hear?''}\newline
 {\color{red!70!black}base: ``flute'' ($\times$ from vision)}\quad
 {\color{green!55!black}ours: ``train horn'' ($\checkmark$ from audio)} \\[1.5mm]
 \frm{as_airplane_1.jpg} & \frm{as_airplane_2.jpg} & \frm{as_airplane_3.jpg} &
-\footnotesize\raggedright \emph{see:} airplane,\quad\textbf{heard (overlaid): clock.}\newline
+\footnotesize \emph{see:} airplane,\quad\textbf{heard (overlaid): clock.}\newline
 \emph{``Which event do you hear?''}\newline
 {\color{red!70!black}base: ``airplane'' ($\times$ from vision)}\quad
 {\color{green!55!black}ours: ``clock'' ($\checkmark$ from audio)} \\[1.5mm]
 \frm{as_mandolin_1.jpg} & \frm{as_mandolin_2.jpg} & \frm{as_mandolin_3.jpg} &
-\footnotesize\raggedright \emph{see:} mandolin,\quad\textbf{heard (overlaid): horse.}\newline
+\footnotesize \emph{see:} mandolin,\quad\textbf{heard (overlaid): horse.}\newline
 \emph{``Which event do you hear?''}\newline
 {\color{red!70!black}base: ``mandolin'' ($\times$ from vision)}\quad
 {\color{green!55!black}ours: ``horse'' ($\checkmark$ from audio)} \\
