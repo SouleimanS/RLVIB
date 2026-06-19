@@ -126,11 +126,14 @@ def main() -> int:
         frames = _frames(a.video, gt)
         frame = frames[len(frames) // 2]
         fig, ax = plt.subplots(1, 3, figsize=(9, 3))
-        ax[0].imshow(frame); ax[0].set_title("frame"); ax[0].axis("off")
+        ax[0].imshow(frame)
+        ax[0].set_title("frame")
+        ax[0].axis("off")
         for k, name in enumerate(("base", "ours"), start=1):
             ax[k].imshow(frame)
             ax[k].imshow(_upsample(smaps[name], frame.shape[:2]), cmap="jet", alpha=0.45)
-            ax[k].set_title(name); ax[k].axis("off")
+            ax[k].set_title(name)
+            ax[k].axis("off")
         fig.tight_layout()
         fig.savefig(os.path.join(a.out, f"{tag}.png"), dpi=150, bbox_inches="tight")
         print(f"wrote {a.out}/{tag}.png  and  {a.out}/{tag}.npz", flush=True)
