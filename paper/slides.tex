@@ -91,9 +91,14 @@ Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze ev
   \draw[->] (llm.east)--(ans);
   \node[font=\tiny,below=1mm of ain] {\textcolor{frz}{$\blacksquare$ frozen}\quad\textcolor{trn}{$\blacksquare$ trained}};
 \end{tikzpicture}
+\vspace{0.2em}
+{\small Each adapter is a variational bottleneck on its token stream $x$:}
+\vspace{-0.3em}
+\[ z=\mu(x)+\sigma(x)\odot\epsilon,\ \ \epsilon\sim\mathcal N(0,I);\qquad y=x+W_{\text{out}}\,z \]
+\vspace{-0.7em}
 \begin{itemize}\small
-\item Two adapters (audio, vision) on the token streams --- the \textbf{only} trainable parameters.
-\item \textbf{Zero-init} $\Rightarrow$ starts \emph{exactly} as the base. \textbf{Bypass switch} $\Rightarrow$ base predictions for free (no 2nd copy).
+\item Same form for \textbf{audio and vision}; the \textbf{only} trainable parameters.
+\item $W_{\text{out}}$ \textbf{zero-init} $\Rightarrow$ $y{=}x$ at start; \textbf{bypass} $\Rightarrow$ base predictions for free.
 \end{itemize}
 \end{frame}
 
@@ -118,6 +123,8 @@ Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze ev
 \end{itemize}
 \end{column}
 \end{columns}
+\vfill
+{\footnotesize\textbf{Backbones / encoders:} Qwen3-Omni (\emph{AuT} audio, Qwen2.5-VL vision) \ $\cdot$ \ Qwen2.5-Omni (\emph{Whisper-v3} audio, Qwen2.5-VL vision) \ $\cdot$ \ VideoLLaMA2 (\emph{BEATs} audio, \emph{SigLIP} vision).}
 \end{frame}
 
 % --- 5. The training signal (the core trick) ---
@@ -155,31 +162,34 @@ false. \textbf{Watch the wrong metric and the collapse is invisible.} (Back to t
 
 % --- 7. Why it broke ---
 \begin{frame}{Why it broke (a documented failure mode, not a bug)}
-\begin{itemize}
-\item \textbf{Likelihood displacement}: DPO grows the chosen$-$rejected gap by pushing \emph{both} down ---
-the answer you wanted gets \emph{less} likely.
-\item \textbf{No anchor}: nothing constrained the output distribution, so it was free to drift to a degenerate
-constant answer.
+\[ \mathcal L_0=\underbrace{-\log\sigma\!\big(\beta[(c_p{-}c_r){-}(r_p{-}r_r)]\big)}_{\text{swap-DPO margin}}\;+\;\underbrace{\beta_{kl}\,\mathrm{KL}_{\text{VIB}}}_{\text{rate on the adapter only}} \]
+\vspace{-0.4em}
+\begin{itemize}\small
+\item $c_p,r_p$ = policy log-probs of chosen/rejected letters; $c_r,r_r$ = the frozen base.
+\item \textbf{Likelihood displacement}: the margin grows while \emph{both} $c_p$ and $r_p$ \emph{fall} $\Rightarrow$ the chosen answer gets \emph{less} likely.
+\item $\mathrm{KL}_{\text{VIB}}$ limits the adapter's \emph{rate}, \textbf{not the output} $\Rightarrow$ nothing stops the drift to constant ``no''.
 \end{itemize}
 \end{frame}
 
 % --- 8. The fix ---
 \begin{frame}{The fix: two anchors}
-\centering
-\begin{tikzpicture}[font=\small,
-  box/.style={draw,rounded corners,align=center,minimum height=11mm,minimum width=52mm}]
-  \node[box,fill=frz!8] (dpo) {swap-DPO term \ {\scriptsize prefer heard over seen}};
-  \node[box,fill=trn!16,below=3.5mm of dpo] (a1) {\textbf{chosen anchor}: pin chosen $\ge$ frozen base};
-  \node[box,fill=trn!16,below=3.5mm of a1] (a2) {\textbf{KL-to-base} on ordinary (non-swap) inputs};
-  \node[right=5mm of a1,align=left,font=\footnotesize] {protects the answer I promote $\Rightarrow$ \textbf{PA}};
-  \node[right=5mm of a2,align=left,font=\footnotesize] {protects everything else $\Rightarrow$ \textbf{HR}};
-\end{tikzpicture}
-\vfill
-\small One anchor protects the \textbf{promoted answer}; the other protects \textbf{everything else}.
+{\small Add two terms to the na\"ive loss:}
+\vspace{-0.3em}
+\begin{align*}
+\mathcal L =\ & \underbrace{-\log\sigma(\beta[(c_p{-}c_r){-}(r_p{-}r_r)])}_{\text{swap-DPO}}
+ \;+\; \lambda_a\,\underbrace{\big({-}\log\sigma(\beta(c_p{-}c_r){-}\delta)\big)}_{\textcolor{trn}{\textbf{chosen anchor}}} \\[2pt]
+ &+\; \lambda_{kl}\,\underbrace{\mathrm{KL}\!\big(p_{\text{base}}(\cdot|x)\,\|\,p_\theta(\cdot|x)\big)}_{\textcolor{trn}{\textbf{KL-to-base}}}
+ \;+\; \beta_{kl}\,\mathrm{KL}_{\text{VIB}}
+\end{align*}
+\vspace{-0.5em}
+\begin{itemize}\small
+\item \textcolor{trn}{\textbf{chosen anchor}}: pins the chosen letter's log-prob $\ge$ frozen base $\Rightarrow$ protects \textbf{PA}.
+\item \textcolor{trn}{\textbf{KL-to-base}}: on ordinary (non-swap) inputs, keeps the output near base $\Rightarrow$ protects \textbf{HR}.
+\end{itemize}
 \end{frame}
 
 % --- 9. Ablation (strongest result) ---
-\begin{frame}{Ablation: both anchors are necessary (the solid core)}
+\begin{frame}{Ablation (Qwen3-Omni): both anchors are necessary}
 \centering
 \begin{tabular}{lccc}
 \toprule
@@ -193,21 +203,23 @@ na\"ive swap-DPO       & 0.673 & 0.939 & 0.774 \\
 \bottomrule
 \end{tabular}
 \vfill
-\small Trained longer, each \emph{alone} fails differently: chosen-only loses perception (PA$\to$0.30),
-KL-only loses resistance (HR$\to$0.66). \textbf{Only both} stay healthy on both axes \emph{and} score best.
+{\footnotesize\textbf{+both, AVHBench by type:} A$\to$V $0.65{\to}0.68$ \ $\cdot$ \ V$\to$A $0.72{\to}0.78$ \ $\cdot$ \ AV-match $0.54{\to}0.63$ \ (overall $0.647{\to}0.707$).}\\[2pt]
+{\small Each \emph{alone} fails differently --- chosen-only PA$\to$0.30, KL-only HR$\to$0.66; \textbf{only both} stay healthy \emph{and} score best.}
 \end{frame}
 
 % --- 10. Benchmarks: what the numbers mean ---
 \begin{frame}{What the metrics mean (and why the collapse hid)}
 \begin{itemize}\small
 \item \textbf{AVHBench} = the \textbf{target} (audio--visual hallucination).
-\item \textbf{CMM} = capability check: \textbf{PA} (affirm present) and \textbf{HR} (deny absent).
+\item \textbf{CMM} = capability, two axes:
+  \begin{itemize}\scriptsize
+  \item \textbf{PA} (perception): on \emph{present} items --- correctly says ``yes, it's there'' (catches under-perception).
+  \item \textbf{HR} (resistance): on \emph{absent} items --- correctly says ``no, it isn't'' (catches hallucination).
+  \end{itemize}
 \end{itemize}
 \vfill
 \begin{block}{The collapse, in metric terms}
-\small All-``no'' $\Rightarrow$ \textbf{HR $\to$ 1.0} (deny everything) but \textbf{PA $\to$ 0}. HR alone would
-say the model is perfect. \textbf{Watch both} --- and they map one-to-one onto the anchors:
-chosen$\leftrightarrow$PA, KL$\leftrightarrow$HR.
+\small All-``no'' $\Rightarrow$ \textbf{HR$\to$1.0} but \textbf{PA$\to$0}: HR alone says ``perfect''. \textbf{Watch both} --- they map onto the anchors (chosen$\leftrightarrow$PA, KL$\leftrightarrow$HR).
 \end{block}
 \end{frame}
 
@@ -232,19 +244,7 @@ chosen$\leftrightarrow$PA, KL$\leftrightarrow$HR.
 \small Base names what it \emph{sees}; ours names what it \emph{hears}.
 \end{frame}
 
-% --- 13. Does it actually help ---
-\begin{frame}{Does it help? (the honest version)}
-\begin{itemize}
-\item Qwen3-Omni: AVHBench \textbf{0.647 $\to$ 0.707}.
-\item \textbf{Paired} tests (same items, base vs ours) --- not two noisy averages.
-\item Per seed: \textbf{marginal} ($p\approx0.06$). Significant \textbf{only pooled} across 3 seeds.
-\end{itemize}
-\vfill
-\begin{center}\itshape Real, repeatable \emph{direction}; \textbf{modest} size; \textbf{fragile} significance.
-(Pooling has a flaw --- open issues.)\end{center}
-\end{frame}
-
-% --- 14. Generalization ---
+% --- Generalization ---
 \begin{frame}{Generalization: uneven across backbones}
 \centering
 \begin{tabular}{lccc}
@@ -286,20 +286,6 @@ near-zero loss), so the swap signal has \textbf{nothing to grab}. Needs a backbo
 \item Caught + fixed a \textbf{parser bug} (scored one model's prose answers as errors); \textbf{no change} to the
 Qwen models $\Rightarrow$ the fix is cleanly isolated.
 \end{itemize}
-\end{frame}
-
-% --- 17. Open issues ---
-\begin{frame}{Open issues --- I want your input}
-\begin{enumerate}\small
-\item \textbf{Pooled significance} treats the same 150 items across seeds as independent (they aren't) ---
-inflates the result; need a clustered / seed-level test.
-\item Given the probe, \textbf{drop the information-bottleneck framing} and rename around what it does?
-\item \textbf{Residual leak}: the KL-anchor was designed after seeing CMM failures $\Rightarrow$ CMM is a
-\emph{development} signal, not a clean test.
-\item Confirm the VideoLLaMA2 story by running the \textbf{probe on it} (deferred).
-\end{enumerate}
-\vfill
-\begin{center}\large Which of these is most urgent?\end{center}
 \end{frame}
 
 \end{document}
