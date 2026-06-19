@@ -120,18 +120,26 @@ def _yes_rate(recs, keep):
     return (sum(1 for r in sub if r.get("pred") == "yes") / len(sub)) if sub else float("nan")
 
 
-def _one(model, exp, step):
+def _keep(n, dev):
+    """Held-out test indices: records[dev:] if dev>0 (full-eval; dev = the dev-subset size);
+    else select_holdout's 50/50 split (subset eval)."""
+    return set(range(dev, n)) if dev > 0 else _testset(n)
+
+
+def _one(model, exp, step, dev=0, suffix=""):
+    sx = f"_{suffix}" if suffix else ""
     xt = f"_{exp}" if exp else ""
-    base_a = _records(f"runs/avhbench_{model}.json")
-    base_c = _records(f"runs/cmm_{model}.json")
-    adt_a = _records(f"runs/avhbench_{model}{xt}_step{step}.json")
-    adt_c = _records(f"runs/cmm_{model}{xt}_step{step}.json")
+    base_a = _records(f"runs/avhbench_{model}{sx}.json")
+    base_c = _records(f"runs/cmm_{model}{sx}.json")
+    adt_a = _records(f"runs/avhbench_{model}{xt}{sx}_step{step}.json")
+    adt_c = _records(f"runs/cmm_{model}{xt}{sx}_step{step}.json")
     if not all((base_a, base_c, adt_a, adt_c)):
-        print(f"  missing JSONs for {model} exp={exp} step={step}")
-        return None, None
-    keep_a = _testset(min(len(base_a), len(adt_a)))
-    keep_c = _testset(min(len(base_c), len(adt_c)))
-    print(f"\n=== {model}  exp={exp or '-'}  step={step}  (test half) ===")
+        print(f"  missing JSONs ({model} exp={exp} step={step} suffix={suffix or '-'})")
+        return None
+    keep_a = _keep(min(len(base_a), len(adt_a)), dev)
+    keep_c = _keep(min(len(base_c), len(adt_c)), dev)
+    scope = f"held-out records[{dev}:]" if dev else "test half"
+    print(f"\n=== {model}  exp={exp or '-'}  step={step}  ({scope}) ===")
     bc, ac = _paired(base_a, adt_a, keep_a, _avh_correct)
     bcd = _report("AVHBench", bc, ac, adapt_yes=_yes_rate(adt_a, keep_a))
     for short, full in (("A->V", "Audio-driven Video Hallucination"),
@@ -141,8 +149,8 @@ def _one(model, exp, step):
         bt, at = _paired(base_a, adt_a, keep_t, _avh_correct)
         _report("  " + short, bt, at)
     for axis, ans in (("CMM-PA", "yes"), ("CMM-HR", "no")):
-        bc, ac = _paired(base_c, adt_c, keep_c, _cmm_correct_for(ans))
-        _report(axis, bc, ac)
+        bc2, ac2 = _paired(base_c, adt_c, keep_c, _cmm_correct_for(ans))
+        _report(axis, bc2, ac2)
     return bcd  # AVHBench (b, c) for pooling
 
 
@@ -152,13 +160,16 @@ def main() -> int:
     ap.add_argument("--exp", default="broad")
     ap.add_argument("--step", type=int, default=60)
     ap.add_argument("--pool", default="", help="exp:step,exp:step,... -> combined AVHBench McNemar")
+    ap.add_argument("--dev", type=int, default=0,
+                    help="full-eval: report on records[DEV:] (full minus the DEV-size dev subset)")
+    ap.add_argument("--suffix", default="", help="read *_{suffix}.json eval files (e.g. 'full')")
     args = ap.parse_args()
 
     if args.pool:
         B = C = 0
         for tok in args.pool.split(","):
             exp, step = tok.split(":")
-            bc = _one(args.model, exp, int(step))
+            bc = _one(args.model, exp, int(step), args.dev, args.suffix)
             if bc:
                 B += bc[0]
                 C += bc[1]
@@ -166,7 +177,7 @@ def main() -> int:
         print(f"\n=== POOLED AVHBench across seeds: b={B} c={C} "
               f"McNemar p={p:.4f}{'  *' if p < 0.05 else ''} ===")
     else:
-        _one(args.model, args.exp, args.step)
+        _one(args.model, args.exp, args.step, args.dev, args.suffix)
     return 0
 
 

@@ -42,6 +42,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-new-tokens", type=int, default=8)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--save-every", type=int, default=50, help="checkpoint the out JSON every N items")
+    ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -54,10 +56,25 @@ def main() -> int:
     out = args.out or f"runs/dave_{args.mode}.json"
     print(f"DAVE[{args.mode}]: {n}/{len(ds)}", flush=True)
 
-    correct = parsed = 0
+    # Resume a partial run (long full evals): reload saved records, recompute counters.
     records = []
-    t0 = time.time()
-    for i in range(n):
+    if not args.no_resume and os.path.exists(out):
+        with open(out) as f:
+            records = json.load(f).get("records", [])[:n]
+        if records:
+            print(f"resuming from {len(records)} saved records in {out}", flush=True)
+    correct = sum(1 for r in records if r.get("pred") == r.get("gt"))
+    parsed = sum(1 for r in records if r.get("pred") is not None)
+
+    def _write():
+        m = len(records)
+        os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+        with open(out, "w") as f:
+            json.dump({"mode": args.mode, "accuracy": correct / m if m else 0.0, "n": m,
+                       "parse_rate": parsed / m if m else 0.0, "records": records}, f, indent=2)
+
+    start, t0 = len(records), time.time()
+    for i in range(start, n):
         item = ds[i]
         gt = string.ascii_uppercase[item["gt_index"]] if item["gt_index"] is not None else None
         v = item["media_path"] if item["kind"] == "video" else None
@@ -72,15 +89,16 @@ def main() -> int:
         parsed += pred is not None
         correct += int(pred == gt)
         records.append({"gt": gt, "pred": pred, "raw": ans, "type": item["type"]})
-        if (i + 1) % 20 == 0:
-            print(f"  {i + 1}/{n} ({(time.time() - t0) / (i + 1):.1f}s/it)", flush=True)
+        done = i + 1
+        if done - start <= 3 or done % 10 == 0 or done == n:
+            print(f"  {done}/{n} ({(time.time() - t0) / max(done - start, 1):.1f}s/it)", flush=True)
+        if args.save_every and done % args.save_every == 0:
+            _write()
 
-    acc = correct / n if n else 0.0
-    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    with open(out, "w") as f:
-        json.dump({"mode": args.mode, "accuracy": acc, "n": n,
-                   "parse_rate": parsed / n if n else 0.0, "records": records}, f, indent=2)
-    print(f"\n=== DAVE [{args.mode}] acc={acc:.3f} (n={n}, parse={parsed / n if n else 0:.2f}) ===")
+    _write()
+    m = len(records)
+    print(f"\n=== DAVE [{args.mode}] acc={correct / m if m else 0:.3f} "
+          f"(n={m}, parse={parsed / m if m else 0:.2f}) ===")
     print(f"wrote {out}", flush=True)
     return 0
 
