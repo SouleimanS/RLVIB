@@ -394,32 +394,36 @@ VideoLLaMA2 anchored   & 0.613 & 0.712 & 0.929 \\
 \end{tabular}
 \end{table}
 
-Beyond the aggregate numbers, Figure~\ref{fig:qual} shows three real corrections from the
-\texttt{visual-language} subset --- the failure the adapter most often fixes ($14$ of the base's $30$
-hallucinations there): on clips that do not contain the queried object, the frozen base affirms a
-frequently co-occurring object and the adapter abstains.
+Beyond the aggregate numbers, Figure~\ref{fig:qual} shows the failure directly. On held-out AVE clips
+whose audio we have swapped so the seen and heard events differ, the frozen base answers ``which event do
+you hear?'' from the \emph{video} --- naming the object it sees and ignoring the sound --- while the
+adapted model reports the actual overlaid sound.
 
 \begin{figure}[t]\centering
-\setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}ccc p{0.40\linewidth}@{}}
-\frm{vl_flower_1.jpg} & \frm{vl_flower_2.jpg} & \frm{vl_flower_3.jpg} &
-\footnotesize\emph{``Did you see a flower in the video?''}\newline
-{\color{red!70!black}base: ``Yes, there are flowers visible.''}\newline
-{\color{green!55!black}ours: ``No, there are no flowers.''} \\[1.5mm]
-\frm{vl_tree_1.jpg} & \frm{vl_tree_2.jpg} & \frm{vl_tree_3.jpg} &
-\footnotesize\emph{``Did you see a tree in the video?''}\newline
-{\color{red!70!black}base: ``Yes, there is a tree visible.''}\newline
-{\color{green!55!black}ours: ``No.''} \\[1.5mm]
-\frm{vl_mountain_1.jpg} & \frm{vl_mountain_2.jpg} & \frm{vl_mountain_3.jpg} &
-\footnotesize\emph{``Did you see a mountain in the video?''}\newline
-{\color{red!70!black}base: ``Yes, there is a mountain visible.''}\newline
-{\color{green!55!black}ours: ``No.''} \\
+\setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}ccc p{0.46\linewidth}@{}}
+\frm{as_flute_1.jpg} & \frm{as_flute_2.jpg} & \frm{as_flute_3.jpg} &
+\footnotesize\raggedright \emph{see:} flute,\quad\textbf{heard (overlaid): train horn.}\newline
+\emph{``Which event do you hear?''}\newline
+{\color{red!70!black}base: ``flute'' ($\times$ from vision)}\quad
+{\color{green!55!black}ours: ``train horn'' ($\checkmark$ from audio)} \\[1.5mm]
+\frm{as_airplane_1.jpg} & \frm{as_airplane_2.jpg} & \frm{as_airplane_3.jpg} &
+\footnotesize\raggedright \emph{see:} airplane,\quad\textbf{heard (overlaid): clock.}\newline
+\emph{``Which event do you hear?''}\newline
+{\color{red!70!black}base: ``airplane'' ($\times$ from vision)}\quad
+{\color{green!55!black}ours: ``clock'' ($\checkmark$ from audio)} \\[1.5mm]
+\frm{as_mandolin_1.jpg} & \frm{as_mandolin_2.jpg} & \frm{as_mandolin_3.jpg} &
+\footnotesize\raggedright \emph{see:} mandolin,\quad\textbf{heard (overlaid): horse.}\newline
+\emph{``Which event do you hear?''}\newline
+{\color{red!70!black}base: ``mandolin'' ($\times$ from vision)}\quad
+{\color{green!55!black}ours: ``horse'' ($\checkmark$ from audio)} \\
 \end{tabular}
-\caption{Qualitative: the visual--language spurious correlation our adapter most often corrects. On
-Qwen3-Omni, for CMM clips that do \emph{not} contain the queried object, the frozen base affirms a
-commonly co-occurring object (red) while the audio-swap-trained adapter abstains (green). Real outputs
-(base vs.\ the selected checkpoint). The Language/Visual/Audio \emph{dominance} categories are absent from
-the $300$-example dev subset and are added from the full-set eval.}
+\caption{The audio-grounding failure our method targets, on held-out AVE clips. We overlay a different
+event's audio so the seen event (the video, shown as frames) differs from the heard event (the overlaid
+sound). Asked which event it hears, the frozen base answers from the \emph{video} --- it names the seen
+object and ignores the sound ($\times$, red) --- while the adapted model reports the actual overlaid sound
+($\checkmark$, green). Real Qwen3-Omni multiple-choice answers (base $=$ bottleneck bypassed, ours $=$ the
+selected checkpoint).}
 \label{fig:qual}
 \end{figure}
 
