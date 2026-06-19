@@ -39,10 +39,9 @@ nvidia-smi -L
 
 exec > >(tee -a "$PBS_O_WORKDIR/runs/cmm_baseline${TAG}_out.txt") 2>&1
 
-python -u -m rlvib.eval.run_cmm \
-    --model "${MODEL:-qwen3-omni}" \
-    --json-path "$CMM_JSON" --data-root "$CMM_ROOT" \
-    --limit "${LIMIT:-100}" $BN_ARG \
-    --out "runs/cmm_${MODEL:-qwen3-omni}${TAG}.json"
+python -u scripts/run_cmm_autoskip.py \
+    --out "runs/cmm_${MODEL:-qwen3-omni}${TAG}.json" \
+    --json "$CMM_JSON" --root "$CMM_ROOT" \
+    -- --model "${MODEL:-qwen3-omni}" --limit "${LIMIT:-100}" $BN_ARG
 
 echo "=== Done $(date) ==="
