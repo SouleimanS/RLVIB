@@ -41,8 +41,14 @@ if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:
 # audio-aware contrastive decoding (composes with the bottleneck); tag the output so a CD
 # run never overwrites the plain/bottleneck JSON. AUDIO_CD unset/0 => byte-identical to before.
 if awk "BEGIN{exit !(${AUDIO_CD:-0} > 0)}"; then TAG="${TAG}_cd${AUDIO_CD}"; fi
+# optional single-task re-run: TASKS="AV Matching" restricts to one AVHBench task (array so the
+# space in the name survives); NO_RESUME=1 forces a fresh JSON. Pair with a distinct TAG so a
+# single-task run never overwrites the full 3-task eval.
+OPT_ARGS=()
+[ -n "${TASKS:-}" ] && OPT_ARGS+=(--tasks "$TASKS")
+[ "${NO_RESUME:-0}" = 1 ] && OPT_ARGS+=(--no-resume)
 
-echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none}  audio_cd=${AUDIO_CD:-0} ==="
+echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none}  audio_cd=${AUDIO_CD:-0}  tasks=${TASKS:-all} ==="
 nvidia-smi -L
 
 exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline${TAG}_out.txt") 2>&1
@@ -50,7 +56,7 @@ exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline${TAG}_out.txt") 2>&1
 python -u -m rlvib.eval.run_avhbench \
     --model "${MODEL:-qwen3-omni}" \
     --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
-    --limit "${LIMIT:-100}" $BN_ARG \
+    --limit "${LIMIT:-100}" $BN_ARG "${OPT_ARGS[@]}" \
     --audio-cd "${AUDIO_CD:-0}" --cd-plausibility "${CD_PLAUSIBILITY:-0.1}" \
     --out "runs/avhbench_${MODEL:-qwen3-omni}${TAG}.json"
 
