@@ -200,42 +200,46 @@ audio--visual) and \emph{GPT-4o} (vision-only, hence audio-blind on non-speech s
 
 \section{Results and comparisons}
 \label{sec:results}
-Table~\ref{tab:main} compares all models. The adapter's robust, seed-invariant effect is on the
-video-driven \emph{audio}-hallucination probe ($V\!\to\!A$): on the held-out test split it rises
-significantly on both Qwen backbones and on \emph{every} seed --- Qwen3-Omni $+0.02$ to $+0.03$ and
-Qwen2.5-Omni $+0.06$ to $+0.11$ (paired McNemar, all $p<0.05$) --- and the CMM over-reliance subset that
-tests ignoring audio improves on all three backbones, i.e.\ the model stops ignoring what it hears. On
-Qwen3-Omni this nets a significant overall hallucination gain ($0.718\to0.761$ held-out; pooled across
-seeds $p<10^{-4}$) with audio--video matching \emph{also} improving. On Qwen2.5-Omni the large audio gain
-trades against matching ($-0.072$), so the overall benchmark is neutral when pooled across seeds while
-hallucination-resistance on audio rises sharply ($0.491\to0.551$, $p<10^{-4}$): a redistribution toward
-audio, not a free gain. On VideoLLaMA2 the adapter \emph{regresses} grounding --- both the overall
-benchmark and the audio probe fall --- consistent with its weak, separately-aligned audio pathway, whose
-behavior inherits the vision-language base and whose audio tokens prune almost without
-loss~\cite{avllm_seehear,fastav}: there is little audio signal for the adapter to exploit. The frozen
-frontier baselines bound the task: native-audio Gemini and audio-blind GPT-4o both sit below the
-adapted open Qwen backbones on the audio probe.
+Table~\ref{tab:main} compares all models (full-set accuracy; held-out paired-McNemar significance below).
+The adapter's robust, seed-invariant effect is the video-driven \emph{audio}-hallucination probe
+($V\!\to\!A$): it rises on both Qwen backbones (Qwen3-Omni $0.787\to0.815$, Qwen2.5-Omni $0.690\to0.780$),
+significantly on \emph{every} seed on the held-out split (paired McNemar, all $p<0.05$), and on the CMM
+over-reliance subset that tests ignoring audio the resistance rises on all three backbones --- the model
+stops ignoring what it hears. On Qwen3-Omni this nets an overall AVHBench gain ($0.714\to0.757$) that is
+significant held-out (pooled across seeds, $p<10^{-4}$), with audio--video matching \emph{also} improving
+($0.609\to0.693$). On Qwen2.5-Omni the large audio gain trades against matching ($0.755\to0.682$), so
+overall AVHBench barely moves ($0.737\to0.754$, neutral when pooled across seeds) while audio
+hallucination-resistance rises (HR $0.512\to0.559$, held-out $p<10^{-4}$): a redistribution toward audio,
+not a free gain. On VideoLLaMA2 the adapter \emph{regresses} grounding --- AVHBench $0.715\to0.669$ and the
+audio probe $0.766\to0.721$ both fall --- consistent with its weak, separately-aligned audio
+pathway~\cite{avllm_seehear,fastav}: there is little audio signal to exploit. The frontier baselines are
+reference points: Gemini (native audio--visual) reaches $V\!\to\!A{=}0.747$, which the adapted Qwen3-Omni
+($0.815$) leads, while vision-only GPT-4o fails the audio probe ($0.510$) as expected.
 
-\begin{table}[tb]\centering\small
-\caption{Global comparison (accuracy; higher is better). Three frozen open backbones, each base vs.\ the
-anchored adapter (``+ours''), plus two frozen frontier baselines. $V\!\to\!A$ is the video-driven
-\emph{audio}-hallucination probe (the ``grounds in what it hears'' axis). Bold marks the held-out gains
-that are significant under a paired McNemar test (in text); Qwen rows are reported on the held-out test
-split, the remaining rows on the full set. ``---'' = not run for that baseline.}
+\begin{table}[tb]\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Global comparison (full-set accuracy; higher is better). Three frozen open backbones, each base
+vs.\ the anchored adapter (``+ours''), and two frozen frontier baselines (Gemini, native audio--visual;
+GPT-4o, vision-only). $V\!\to\!A$ is the video-driven \emph{audio}-hallucination probe (the ``grounds in
+what it hears'' axis); PA/HR are CMM perception accuracy / hallucination resistance. For each open
+backbone the better of base vs.\ ``+ours'' is bold per column; held-out paired-McNemar significance is in
+the text. ``---'' = not run.}
 \label{tab:main}
-\begin{tabular}{lcccc}
+\begin{tabular}{l cccc ccc c}
 \toprule
-Model & AVHBench & $V\!\to\!A$ (audio) & CMM & DAVE \\
+& \multicolumn{4}{c}{AVHBench} & \multicolumn{3}{c}{CMM} & \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-8}
+Model & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR & overall & DAVE \\
 \midrule
-Gemini (native AV)        & 0.660 & 0.592 & 0.867 & --- \\
-GPT-4o (vision-only)      & 0.672 & 0.700 & 0.579 & --- \\
+Gemini (native AV)    & 0.850 & 0.747 & 0.603 & 0.718 & 0.907 & 0.628 & 0.768 & --- \\
+GPT-4o (vision-only)  & 0.846 & 0.510 & 0.501 & 0.579 & 0.359 & 0.892 & 0.626 & --- \\
 \midrule
-Qwen3-Omni                & 0.718 & 0.794 & 0.816 & 0.326 \\
-\quad + ours              & \textbf{0.761} & \textbf{0.820} & 0.817 & 0.318 \\
-Qwen2.5-Omni              & 0.745 & 0.706 & 0.715 & 0.246 \\
-\quad + ours              & 0.759 & \textbf{0.792} & 0.733 & 0.257 \\
-VideoLLaMA2               & 0.715 & 0.766 & 0.637 & 0.296 \\
-\quad + ours              & 0.669 & 0.721 & 0.647 & 0.198 \\
+Qwen3-Omni            & 0.739 & 0.787 & 0.609 & 0.714 & \textbf{0.899} & 0.733 & 0.816 & \textbf{0.326} \\
+\quad + ours          & \textbf{0.746} & \textbf{0.815} & \textbf{0.693} & \textbf{0.757} & 0.890 & \textbf{0.743} & 0.816 & 0.318 \\
+Qwen2.5-Omni          & 0.805 & 0.690 & \textbf{0.755} & 0.737 & \textbf{0.917} & 0.512 & 0.715 & 0.246 \\
+\quad + ours          & \textbf{0.820} & \textbf{0.780} & 0.682 & \textbf{0.754} & 0.907 & \textbf{0.559} & \textbf{0.733} & \textbf{0.257} \\
+VideoLLaMA2           & \textbf{0.805} & \textbf{0.766} & \textbf{0.596} & \textbf{0.715} & \textbf{0.617} & 0.657 & 0.637 & \textbf{0.296} \\
+\quad + ours          & 0.732 & 0.721 & 0.567 & 0.669 & 0.615 & \textbf{0.679} & \textbf{0.647} & 0.198 \\
 \bottomrule
 \end{tabular}
 \end{table}
