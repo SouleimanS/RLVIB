@@ -1,12 +1,8 @@
 #!/usr/bin/env python
-"""Assemble the results table from the _full eval JSONs.
-
-Per model/checkpoint: headline accuracy on AVHBench / CMM / DAVE, plus the thesis
-sub-metrics -- AVHBench audio probe (Video-driven Audio Hallucination) and CMM audio-subset
-HR + the three overrely_* hallucination-resistance scores (the over-reliance tasks). These
-are FULL-SET numbers (incl. the dev-300 the checkpoint was selected on); the held-out split
-and significance come from paired_stats. Reads whatever is on disk; missing/partial files
-show their count or '-'. A trailing '*' flags a benchmark below its full size.
+"""Dump the global-comparison numbers from the _full eval JSONs, one row per model/checkpoint:
+AVHBench per task (A->V, V->A, AV-match) + overall, CMM PA/HR + overall, and DAVE. Full-set
+accuracy (held-out McNemar significance comes from paired_stats). Missing/partial cells show
+'-'. Paste the output and the paper's global table is filled directly from it.
 
   python scripts/make_table.py
 """
@@ -18,10 +14,7 @@ import os
 import re
 
 MODELS = ["qwen3-omni", "qwen2.5-omni", "videollama2", "gemini", "gpt4o"]
-FULL = {"avhbench": 5302, "cmm": 2400, "dave": 1572}
-AVH_AUDIO = "Video-driven Audio Hallucination"
-OVR = ["overrely_visual_ignore_audio", "overrely_audio_ignore_visual",
-       "overrely_language_ignore_visual"]
+A2V, V2A, AVM = "Audio-driven Video Hallucination", "Video-driven Audio Hallucination", "AV Matching"
 
 
 def _variant(b: str) -> str:
@@ -37,18 +30,19 @@ def _load(path):
         return None
 
 
-def _fmt(x, partial=False):
-    if not isinstance(x, (int, float)):
-        return "  -  "
-    return f"{x:.3f}{'*' if partial else ' '}"
+def _f(x):
+    return f"{x:.3f}" if isinstance(x, (int, float)) else "  -  "
 
 
-def _partial(blob, bench):
-    """True if this benchmark is below its full size (still running / clips skipped)."""
-    if not blob:
-        return False
-    n = blob.get("n") if bench == "dave" else blob.get("results", {}).get("overall", {}).get("n")
-    return isinstance(n, int) and n < FULL[bench]
+def _avh(blob):
+    r = (blob or {}).get("results", {})
+    g = lambda k: r.get(k, {}).get("accuracy")  # noqa: E731
+    return g(A2V), g(V2A), g(AVM), r.get("overall", {}).get("accuracy")
+
+
+def _cmm(blob):
+    o = (blob or {}).get("results", {}).get("overall", {})
+    return o.get("PA"), o.get("HR"), o.get("acc")
 
 
 def main() -> int:
@@ -56,38 +50,29 @@ def main() -> int:
     for path in glob.glob("runs/*_full*.json"):
         b = os.path.basename(path)
         bench = b.split("_", 1)[0]
-        if bench not in FULL:
+        if bench not in ("avhbench", "cmm", "dave"):
             continue
         model = next((m for m in MODELS if m in b), None)
-        if not model:
-            continue
-        data.setdefault(model, {}).setdefault(_variant(b), {})[bench] = _load(path)
+        if model:
+            data.setdefault(model, {}).setdefault(_variant(b), {})[bench] = _load(path)
 
+    hdr = f"  {'variant':14s} | {'A->V':5s} {'V->A':5s} {'AVm':5s} {'AVH':5s} | " \
+          f"{'PA':5s} {'HR':5s} {'CMM':5s} | {'DAVE':5s}"
     for model in MODELS:
         if model not in data:
             continue
         print(f"\n=== {model} ===")
-        print(f"  {'checkpoint':14s} |  AVHBench  audio | "
-              f" CMM   aHR  | ovr V/A A/V L/V |  DAVE")
+        print(hdr)
         for var in sorted(data[model], key=lambda v: (v != "base", v)):
             d = data[model][var]
-            av, cm, dv = d.get("avhbench"), d.get("cmm"), d.get("dave")
-            ar = (av or {}).get("results", {})
-            cr = (cm or {}).get("results", {})
-            pa, pc, pd = _partial(av, "avhbench"), _partial(cm, "cmm"), _partial(dv, "dave")
-            avh = _fmt(ar.get("overall", {}).get("accuracy"), pa)
-            aud = _fmt(ar.get(AVH_AUDIO, {}).get("accuracy"), pa)
-            cmm = _fmt(cr.get("overall", {}).get("acc"), pc)
-            ahr = _fmt(cr.get("audio_subsets", {}).get("HR"), pc)
-            ovr = " ".join(_fmt(cr.get(o, {}).get("HR")).strip() for o in OVR)
-            dav = _fmt((dv or {}).get("accuracy"), pd)
-            print(f"  {var:14s} | {avh} {aud} | {cmm} {ahr} | {ovr} | {dav}")
-
-    print("\n  audio = Video-driven Audio Hallucination (the audio-grounding probe)")
-    print("  aHR   = CMM audio-subset Hallucination-Resistance; ovr = overrely_* HR "
-          "(Visual/Audio/Language ignore)")
-    print("  '*' = benchmark below full size (still running / clips skipped). "
-          "Full-set incl. dev-300; use paired_stats for held-out + significance.")
+            a2v, v2a, avm, avh = _avh(d.get("avhbench"))
+            pa, hr, cmm = _cmm(d.get("cmm"))
+            dave = (d.get("dave") or {}).get("accuracy")
+            print(f"  {var:14s} | {_f(a2v)} {_f(v2a)} {_f(avm)} {_f(avh)} | "
+                  f"{_f(pa)} {_f(hr)} {_f(cmm)} | {_f(dave)}")
+    print("\nA->V audio-driven video hall.; V->A video-driven AUDIO hall. (the grounding probe); "
+          "AVm AV-matching; AVH overall.")
+    print("CMM: PA perception acc / HR hallucination-resistance / CMM overall. Full-set accuracy.")
     return 0
 
 
