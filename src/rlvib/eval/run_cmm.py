@@ -15,6 +15,7 @@ import os
 import time
 
 from rlvib.data.cmm import AUDIO_SUBSETS, CMMDataset
+from rlvib.eval.contrastive import contrastive_answer
 from rlvib.eval.metrics import parse_yes_no
 from rlvib.eval.timeout import time_limit
 from rlvib.models import get_model
@@ -55,6 +56,12 @@ def main() -> int:
     ap.add_argument("--skip-file", default="runs/cmm_skip_clips.txt",
                     help="optional file of extra clip substrings (comma/newline separated) to skip, "
                          "e.g. the output of scripts/scan_bad_clips.py. Merged with --skip-clips.")
+    ap.add_argument("--audio-cd", type=float, default=0.0,
+                    help="audio-aware contrastive decoding strength alpha (0=off); composes with "
+                         "the attached bottleneck. Qwen3-/Qwen2.5-Omni only.")
+    ap.add_argument("--cd-plausibility", type=float, default=0.1,
+                    help="VCD plausibility constraint for --audio-cd (keep tokens within "
+                         "log(plausibility) of the full pass's max).")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -62,6 +69,12 @@ def main() -> int:
         from rlvib.models.bottleneck import load_attached
         _bn, _h = load_attached(model, args.bottleneck)
         print(f"attached bottleneck <- {args.bottleneck}", flush=True)
+    cd_alpha = args.audio_cd
+    if cd_alpha > 0 and args.model not in ("qwen3-omni", "qwen2.5-omni"):
+        print(f"[audio-cd] unsupported for {args.model} (sentence answers); plain decoding", flush=True)
+        cd_alpha = 0.0
+    elif cd_alpha > 0:
+        print(f"[audio-cd] audio-aware contrastive decoding ON (alpha={cd_alpha})", flush=True)
     ds = CMMDataset(args.json_path, args.data_root, sub_categories=args.subsets)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"CMM: {n}/{len(ds)} questions | subsets={args.subsets or 'all'}", flush=True)
@@ -104,10 +117,16 @@ def main() -> int:
         if any(s in (v or "") or s in (a or "") for s in skip):
             ans, pred = "SKIPPED (skip-clips)", None        # decoder-hang clip; keep indices aligned
         else:
-            msg = model.message(video=v, audio=a, prompt=item["question"])
             try:
                 with time_limit(args.gen_timeout):
-                    ans = model.generate(msg, use_audio_in_video=uaiv, max_new_tokens=args.max_new_tokens)
+                    if cd_alpha > 0:  # audio-aware contrastive decoding, composed with the bottleneck
+                        ans = contrastive_answer(model, video=v, audio=a, prompt=item["question"],
+                                                 alpha=cd_alpha, use_audio_in_video=uaiv,
+                                                 plausibility=args.cd_plausibility)
+                    else:
+                        msg = model.message(video=v, audio=a, prompt=item["question"])
+                        ans = model.generate(msg, use_audio_in_video=uaiv,
+                                             max_new_tokens=args.max_new_tokens)
                 pred = parse_yes_no(ans)
             except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging media, keep going
                 ans, pred = f"ERROR: {e}", None

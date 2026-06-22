@@ -14,6 +14,7 @@ import os
 import time
 
 from rlvib.data.avhbench import BINARY_TASKS, AVHBenchDataset
+from rlvib.eval.contrastive import contrastive_answer
 from rlvib.eval.metrics import accuracy, parse_yes_no
 from rlvib.eval.timeout import time_limit
 from rlvib.models import get_model
@@ -36,6 +37,12 @@ def main() -> int:
     ap.add_argument("--gen-timeout", type=int, default=120,
                     help="per-item wall-clock cap (s); a clip that hangs generate() is skipped "
                          "(pred=None) instead of stalling the whole run. 0 disables.")
+    ap.add_argument("--audio-cd", type=float, default=0.0,
+                    help="audio-aware contrastive decoding strength alpha (0=off); composes with "
+                         "the attached bottleneck. Qwen3-/Qwen2.5-Omni only.")
+    ap.add_argument("--cd-plausibility", type=float, default=0.1,
+                    help="VCD plausibility constraint for --audio-cd (keep tokens within "
+                         "log(plausibility) of the full pass's max).")
     args = ap.parse_args()
 
     model = get_model(args.model)
@@ -43,6 +50,12 @@ def main() -> int:
         from rlvib.models.bottleneck import load_attached
         _bn, _h = load_attached(model, args.bottleneck)
         print(f"attached bottleneck <- {args.bottleneck}", flush=True)
+    cd_alpha = args.audio_cd
+    if cd_alpha > 0 and args.model not in ("qwen3-omni", "qwen2.5-omni"):
+        print(f"[audio-cd] unsupported for {args.model} (sentence answers); plain decoding", flush=True)
+        cd_alpha = 0.0
+    elif cd_alpha > 0:
+        print(f"[audio-cd] audio-aware contrastive decoding ON (alpha={cd_alpha})", flush=True)
     ds = AVHBenchDataset(args.qa_json, args.video_root, tasks=args.tasks)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"AVHBench: {n}/{len(ds)} samples | tasks={args.tasks}", flush=True)
@@ -75,10 +88,16 @@ def main() -> int:
     for i in range(start, n):
         item = ds[i]
         gold = str(item["label"]).strip().lower()  # "yes" / "no"
-        msg = model.message(video=item["video_path"], prompt=item["text"] + YN_SUFFIX)
+        prompt = item["text"] + YN_SUFFIX
         try:
             with time_limit(args.gen_timeout):
-                ans = model.generate(msg, use_audio_in_video=True, max_new_tokens=args.max_new_tokens)
+                if cd_alpha > 0:  # audio-aware contrastive decoding, composed with the bottleneck
+                    ans = contrastive_answer(model, video=item["video_path"], audio=None,
+                                             prompt=prompt, alpha=cd_alpha, use_audio_in_video=True,
+                                             plausibility=args.cd_plausibility)
+                else:
+                    ans = model.generate(model.message(video=item["video_path"], prompt=prompt),
+                                         use_audio_in_video=True, max_new_tokens=args.max_new_tokens)
             pred = parse_yes_no(ans)
         except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging clips, keep going
             ans, pred = f"ERROR: {e}", None

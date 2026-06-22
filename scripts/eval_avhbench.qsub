@@ -38,8 +38,11 @@ AVHBENCH_QA="${AVHBENCH_QA:-$PWD/data/AVHBench/qa.json}"
 AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$PWD/data/AVHBench/videos}"
 BN_ARG=""
 if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
+# audio-aware contrastive decoding (composes with the bottleneck); tag the output so a CD
+# run never overwrites the plain/bottleneck JSON. AUDIO_CD unset/0 => byte-identical to before.
+if awk "BEGIN{exit !(${AUDIO_CD:-0} > 0)}"; then TAG="${TAG}_cd${AUDIO_CD}"; fi
 
-echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none} ==="
+echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none}  audio_cd=${AUDIO_CD:-0} ==="
 nvidia-smi -L
 
 exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline${TAG}_out.txt") 2>&1
@@ -48,6 +51,7 @@ python -u -m rlvib.eval.run_avhbench \
     --model "${MODEL:-qwen3-omni}" \
     --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
     --limit "${LIMIT:-100}" $BN_ARG \
+    --audio-cd "${AUDIO_CD:-0}" --cd-plausibility "${CD_PLAUSIBILITY:-0.1}" \
     --out "runs/avhbench_${MODEL:-qwen3-omni}${TAG}.json"
 
 echo "=== Done $(date) ==="
