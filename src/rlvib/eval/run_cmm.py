@@ -12,7 +12,8 @@ import argparse
 import collections
 import json
 import os
-import time
+
+from tqdm.auto import tqdm
 
 from rlvib.data.cmm import AUDIO_SUBSETS, CMMDataset
 from rlvib.eval.contrastive import contrastive_answer
@@ -107,8 +108,30 @@ def main() -> int:
     skip = sorted(set(skip))
     if skip:
         print(f"skip-clips (hard backstop): {skip}", flush=True)
-    start, t0 = len(records), time.time()
-    for i in range(start, n):
+    # live tqdm: running overall acc + PA (gold=yes) + HR (gold=no), CMM's two headline metrics
+    live = {"c": 0, "n": 0, "pa_c": 0, "pa_n": 0, "hr_c": 0, "hr_n": 0}
+    for pairs in by_sub.values():                            # seed from any resumed records
+        for g, p in pairs:
+            live["n"] += 1
+            live["c"] += int(p == g)
+            if g == "yes":
+                live["pa_n"] += 1
+                live["pa_c"] += int(p == g)
+            elif g == "no":
+                live["hr_n"] += 1
+                live["hr_c"] += int(p == g)
+
+    def _postfix():
+        d = {"acc": f"{100 * live['c'] / live['n']:.1f}" if live["n"] else "—"}
+        if live["pa_n"]:
+            d["PA"] = f"{100 * live['pa_c'] / live['pa_n']:.1f}"
+        if live["hr_n"]:
+            d["HR"] = f"{100 * live['hr_c'] / live['hr_n']:.1f}"
+        return d
+
+    start = len(records)
+    bar = tqdm(range(start, n), total=n, initial=start, desc="CMM", unit="q", dynamic_ncols=True)
+    for i in bar:
         item = ds[i]
         gold = item["answer"]
         v, a = item["video_path"], item["audio_path"]
@@ -131,14 +154,20 @@ def main() -> int:
             except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging media, keep going
                 ans, pred = f"ERROR: {e}", None
         by_sub[item["sub_category"]].append((gold, pred))
+        live["n"] += 1
+        live["c"] += int(pred == gold)
+        if gold == "yes":
+            live["pa_n"] += 1
+            live["pa_c"] += int(pred == gold)
+        elif gold == "no":
+            live["hr_n"] += 1
+            live["hr_c"] += int(pred == gold)
         records.append({
             "sub_category": item["sub_category"], "modality": item.get("modality"),
             "question": item["question"], "answer": gold, "pred": pred, "raw": ans,
         })
-        done = i + 1
-        if done - start <= 3 or done % 10 == 0 or done == n:  # early feedback, then every 10
-            print(f"  {done}/{n} ({(time.time() - t0) / max(done - start, 1):.1f}s/it)", flush=True)
-        if args.save_every and done % args.save_every == 0:
+        bar.set_postfix(_postfix(), refresh=False)
+        if args.save_every and (i + 1) % args.save_every == 0:
             _write()                                          # checkpoint so a crash loses <= N items
 
     results = _write()

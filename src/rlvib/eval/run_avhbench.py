@@ -11,7 +11,8 @@ import argparse
 import collections
 import json
 import os
-import time
+
+from tqdm.auto import tqdm
 
 from rlvib.data.avhbench import BINARY_TASKS, AVHBenchDataset
 from rlvib.eval.contrastive import contrastive_answer
@@ -84,8 +85,30 @@ def main() -> int:
             json.dump({"results": res, "records": records}, f, indent=2)
         return res
 
-    start, t0 = len(records), time.time()
-    for i in range(start, n):
+    # live tqdm: running overall acc + per-task acc (AdV / VdA / AVm), like the standalone harness
+    SHORT = {"Audio-driven Video Hallucination": "AdV",
+             "Video-driven Audio Hallucination": "VdA",
+             "AV Matching": "AVm"}
+    live = collections.defaultdict(lambda: [0, 0])            # task -> [correct, total]
+    for task, d in per_task.items():                          # seed from any resumed records
+        for p, g in zip(d["preds"], d["golds"]):
+            live[task][1] += 1
+            live[task][0] += int(p == g)
+
+    def _postfix():
+        c = sum(v[0] for v in live.values())
+        tot = sum(v[1] for v in live.values())
+        d = {"acc": f"{100 * c / tot:.1f}" if tot else "—"}
+        for task, short in SHORT.items():
+            cc, nn = live[task]
+            if nn:
+                d[short] = f"{100 * cc / nn:.1f}"
+        return d
+
+    start = len(records)
+    bar = tqdm(range(start, n), total=n, initial=start, desc="AVHBench", unit="q",
+               dynamic_ncols=True)
+    for i in bar:
         item = ds[i]
         gold = str(item["label"]).strip().lower()  # "yes" / "no"
         prompt = item["text"] + YN_SUFFIX
@@ -103,14 +126,14 @@ def main() -> int:
             ans, pred = f"ERROR: {e}", None
         per_task[item["task"]]["preds"].append(pred)
         per_task[item["task"]]["golds"].append(gold)
+        live[item["task"]][1] += 1
+        live[item["task"]][0] += int(pred == gold)
         records.append({
             "video_path": item["video_path"], "task": item["task"],
             "text": item["text"], "label": item["label"], "answer": ans, "pred": pred,
         })
-        done = i + 1
-        if done - start <= 3 or done % 10 == 0 or done == n:  # early feedback, then every 10
-            print(f"  {done}/{n}  ({(time.time() - t0) / max(done - start, 1):.1f}s/it)", flush=True)
-        if args.save_every and done % args.save_every == 0:
+        bar.set_postfix(_postfix(), refresh=False)
+        if args.save_every and (i + 1) % args.save_every == 0:
             _write()                                          # checkpoint so a crash loses <= N items
 
     results = _write()
