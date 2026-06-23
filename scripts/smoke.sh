@@ -1,19 +1,19 @@
 #!/bin/bash
-# Quick interactive smoke test of the AVHBench + CMM evals -- run ON a GPU compute node.
-# Self-contained (sources conda, activates the env, sets paths), so you paste ONE short line
-# instead of a multi-line block that mangles the terminal:
+# Interactive smoke test of AVHBench + CMM (run ON a GPU node). One pasteable line per run:
+#     N=150 bash scripts/smoke.sh                                  # base only, qwen2.5
+#     N=150 STEPS='60 150' bash scripts/smoke.sh                   # base + broad@60 + broad@150
+#     N=150 MODELS='qwen2.5-omni qwen3-omni' STEPS='60 150' bash scripts/smoke.sh
+#     CONDA_ENV=rlvib_vl2 MODELS=videollama2 STEPS='60 150' N=150 bash scripts/smoke.sh
 #
-#     N=150 bash scripts/smoke.sh
-#     N=150 MODELS='qwen2.5-omni qwen3-omni' bash scripts/smoke.sh
-#     CONDA_ENV=rlvib_vl2 MODELS=videollama2 N=150 bash scripts/smoke.sh   # VideoLLaMA2 (its env)
-#
-# Writes runs/smoke_{avh,cmm}_<model>.json. Qwen models use FPS (default 1, to match the
-# standalone harness); VideoLLaMA2 has its own sampler so FPS is not passed to it.
+# Writes runs/smoke_{avh,cmm}_<model>[_<exp>_step<s>].json. Qwen models pass FPS (default 1, to
+# match the standalone harness); VideoLLaMA2 has its own sampler so FPS is not passed to it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 N="${N:-150}"
 MODELS="${MODELS:-qwen2.5-omni}"
+STEPS="${STEPS:-}"                 # extra trained checkpoints to run, e.g. '60 150' (family $EXP)
+EXP="${EXP:-broad}"
 FPS="${FPS:-1}"
 AVHBENCH_QA="${AVHBENCH_QA:-data/AVHBench/qa.json}"
 AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-data/AVHBench/videos}"
@@ -29,16 +29,26 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 python -c "import torch; assert torch.cuda.is_available(), \
   'NO GPU -- start an interactive session first: qsub -I -P gae50891 -q rt_HF -l select=1 -l walltime=01:00:00'"
 
-for M in $MODELS; do
-    FPS_ARG=()
+run_one() {                       # $1=model  $2=bottleneck-or-empty  $3=output tag
+    local M="$1" BN="$2" TAG="$3" FPS_ARG=() BN_ARG=()
     case "$M" in qwen3-omni|qwen2.5-omni) [ -n "$FPS" ] && FPS_ARG=(--fps "$FPS");; esac
-    echo "===== $M / AVHBench (N=$N) ====="
+    [ -n "$BN" ] && BN_ARG=(--bottleneck "$BN")
+    echo "===== ${M}${TAG} / AVHBench (N=$N) ====="
     python -u -m rlvib.eval.run_avhbench --model "$M" \
         --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
-        --limit "$N" --no-resume "${FPS_ARG[@]}" --out "runs/smoke_avh_${M}.json"
-    echo "===== $M / CMM (N=$N) ====="
+        --limit "$N" --no-resume "${FPS_ARG[@]}" "${BN_ARG[@]}" --out "runs/smoke_avh_${M}${TAG}.json"
+    echo "===== ${M}${TAG} / CMM (N=$N) ====="
     python -u -m rlvib.eval.run_cmm --model "$M" \
         --json-path "$CMM_JSON" --data-root "$CMM_ROOT" \
-        --limit "$N" --no-resume "${FPS_ARG[@]}" --out "runs/smoke_cmm_${M}.json"
+        --limit "$N" --no-resume "${FPS_ARG[@]}" "${BN_ARG[@]}" --out "runs/smoke_cmm_${M}${TAG}.json"
+}
+
+for M in $MODELS; do
+    run_one "$M" "" ""                                    # base
+    for s in $STEPS; do                                   # trained checkpoints (if present)
+        ckpt="runs/anchored_${M}_${EXP}/bottleneck_step${s}.pt"
+        if [ -f "$ckpt" ]; then run_one "$M" "$ckpt" "_${EXP}_step${s}"
+        else echo "skip ${M} ${EXP} step${s} (missing $ckpt)"; fi
+    done
 done
-echo "=== smoke done -> runs/smoke_{avh,cmm}_<model>.json ==="
+echo "=== smoke done -> runs/smoke_{avh,cmm}_<model>*.json ==="
