@@ -23,14 +23,6 @@ import torch  # noqa: E402
 
 DEFAULT_MODEL = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
 
-# Official Qwen-Omni system prompt (HF model card / repo "Usage Tips"), required verbatim.
-# Omitting it drops the model's audio-visual perception priming and measurably shifts the
-# yes/no operating point on AVHBench/CMM. Lives in `message()` so train + eval stay consistent.
-SYSTEM_PROMPT = (
-    "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, "
-    "capable of perceiving auditory and visual inputs, as well as generating text and speech."
-)
-
 
 class QwenOmni:
     """Thin wrapper around Qwen3-Omni for text-out audio-visual inference."""
@@ -76,7 +68,10 @@ class QwenOmni:
 
     @staticmethod
     def message(video=None, audio=None, prompt: str = "", fps=None) -> list:
-        """Build a system + user conversation for the processor (official Qwen system prompt)."""
+        """Build a single user-turn conversation. Qwen3-Omni sets NO system prompt for benchmark
+        evaluation (repo README "Evaluation": *"No system prompt should be set for any evaluation
+        benchmark"*), and the Qwen2.5 "virtual human" string is not a Qwen3 prompt -- adding it
+        shifts the answer style and corrupts the yes/no results."""
         content = []
         if video is not None:
             vid = {"type": "video", "video": video}
@@ -86,10 +81,7 @@ class QwenOmni:
         if audio is not None:
             content.append({"type": "audio", "audio": audio})
         content.append({"type": "text", "text": prompt})
-        return [
-            {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]},
-            {"role": "user", "content": content},
-        ]
+        return [{"role": "user", "content": content}]
 
     def build_inputs(self, messages: list, use_audio_in_video: bool = True):
         from qwen_omni_utils import process_mm_info

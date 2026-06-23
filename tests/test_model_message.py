@@ -27,6 +27,13 @@ def test_qwen25_omni_system_prompt():
     _check(Qwen25Omni.message, SYSTEM_PROMPT)
 
 
-def test_qwen3_omni_system_prompt():
-    from rlvib.models.qwen3_omni import SYSTEM_PROMPT, QwenOmni
-    _check(QwenOmni.message, SYSTEM_PROMPT)
+def test_qwen3_omni_has_no_system_prompt():
+    # Qwen3-Omni sets NO system prompt for benchmark eval (repo README "Evaluation"); user-only turn.
+    from rlvib.models.qwen3_omni import QwenOmni
+    msg = QwenOmni.message(video="clip.mp4", prompt="Is there a dog barking?", fps=1.0)
+    assert all(m["role"] != "system" for m in msg)
+    assert msg[0]["role"] == "user"
+    types = [c["type"] for c in msg[0]["content"]]
+    assert "video" in types and "text" in types
+    vid = next(c for c in msg[0]["content"] if c["type"] == "video")   # fps still rides along
+    assert vid["fps"] == 1.0
