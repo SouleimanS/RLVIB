@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import logging
 import os
+import warnings
 
 from tqdm.auto import tqdm
 
@@ -20,6 +22,15 @@ from rlvib.eval.contrastive import contrastive_answer
 from rlvib.eval.metrics import parse_yes_no
 from rlvib.eval.timeout import time_limit
 from rlvib.models import get_model
+
+# Quiet the eval logs (see run_avhbench): transformers config/LOAD-REPORT + librosa/decord noise.
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+warnings.filterwarnings("ignore")
+for _n in ("transformers", "qwen_vl_utils", "qwen_omni_utils"):
+    logging.getLogger(_n).setLevel(logging.ERROR)
 
 
 def _scores(pairs: list) -> dict:
