@@ -47,11 +47,16 @@ if awk "BEGIN{exit !(${AUDIO_CD:-0} > 0)}"; then TAG="${TAG}_cd${AUDIO_CD}"; fi
 OPT_ARGS=()
 [ -n "${TASKS:-}" ] && OPT_ARGS+=(--tasks "$TASKS")
 [ "${NO_RESUME:-0}" = 1 ] && OPT_ARGS+=(--no-resume)
+# video fps for the Qwen frame sampler (FPS=1 matches the standalone AVHBench harness). Only the
+# Qwen models read it; VideoLLaMA2 has its own sampler, so FPS is not passed there.
+case "${MODEL:-qwen3-omni}" in
+    qwen3-omni|qwen2.5-omni) [ -n "${FPS:-}" ] && OPT_ARGS+=(--fps "$FPS");;
+esac
 
 echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none}  audio_cd=${AUDIO_CD:-0}  tasks=${TASKS:-all} ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_baseline${TAG}_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_${MODEL:-qwen3-omni}${TAG}_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_avhbench \
     --model "${MODEL:-qwen3-omni}" \

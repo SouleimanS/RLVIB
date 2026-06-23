@@ -25,6 +25,7 @@ MODELS="${MODELS:-qwen3-omni qwen2.5-omni videollama2}"
 EXPGLOB="${EXPGLOB:-broad*}"           # trained family to sweep; broad = the main run (abl_* are
                                        #   ablations, excluded by default). EXPGLOB='*' = all.
 MARK="${MARK:-sysfull}"                # tag marker -> runs/{avhbench,cmm}_<model>_<mark>*.json
+FPS="${FPS:-1}"                        # Qwen video fps to match the standalone harness (VL2 ignores)
 WALL="${WALL:-12:00:00}"
 CMM_JSON="${CMM_JSON:-$PWD/data/CMM/all_data_final_reorg.json}"
 CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
@@ -40,9 +41,9 @@ mark() { : > "$GUARD/$1"; }
 submit_pair() {                        # $1=MODEL  $2=TAG (leading _)  $3=BOTTLENECK abs path (opt)
     local M="$1" TAG="$2" BN="${3:-}" ENV
     ENV="$(env_for "$M")"
-    qsub -v "MODEL=$M,LIMIT=0,TAG=$TAG,CONDA_ENV=$ENV,NO_RESUME=1${BN:+,BOTTLENECK=$BN}" \
+    qsub -v "MODEL=$M,LIMIT=0,TAG=$TAG,CONDA_ENV=$ENV,NO_RESUME=1,FPS=$FPS${BN:+,BOTTLENECK=$BN}" \
         -l walltime="$WALL" scripts/eval_avhbench.qsub
-    qsub -v "MODEL=$M,LIMIT=0,TAG=$TAG,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,CONDA_ENV=$ENV${BN:+,BOTTLENECK=$BN}" \
+    qsub -v "MODEL=$M,LIMIT=0,TAG=$TAG,CMM_JSON=$CMM_JSON,CMM_ROOT=$CMM_ROOT,CONDA_ENV=$ENV,FPS=$FPS${BN:+,BOTTLENECK=$BN}" \
         -l walltime="$WALL" scripts/eval_cmm.qsub
 }
 

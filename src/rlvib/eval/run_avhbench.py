@@ -32,6 +32,9 @@ def main() -> int:
     ap.add_argument("--tasks", nargs="*", default=list(BINARY_TASKS))
     ap.add_argument("--limit", type=int, default=0, help="0 = all")
     ap.add_argument("--max-new-tokens", type=int, default=8)
+    ap.add_argument("--fps", type=float, default=None,
+                    help="video fps for the Qwen frame sampler (None = model default ~2; set 1.0 "
+                         "to match the standalone AVHBench harness). Ignored by non-Qwen models.")
     ap.add_argument("--out", default="runs/avhbench_baseline.json")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
     ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
@@ -105,6 +108,7 @@ def main() -> int:
                 d[short] = f"{100 * cc / nn:.1f}"
         return d
 
+    msg_kwargs = {} if args.fps is None else {"fps": args.fps}
     start = len(records)
     bar = tqdm(range(start, n), total=n, initial=start, desc="AVHBench", unit="q",
                dynamic_ncols=True)
@@ -119,8 +123,9 @@ def main() -> int:
                                              prompt=prompt, alpha=cd_alpha, use_audio_in_video=True,
                                              plausibility=args.cd_plausibility)
                 else:
-                    ans = model.generate(model.message(video=item["video_path"], prompt=prompt),
-                                         use_audio_in_video=True, max_new_tokens=args.max_new_tokens)
+                    msg = model.message(video=item["video_path"], prompt=prompt, **msg_kwargs)
+                    ans = model.generate(msg, use_audio_in_video=True,
+                                         max_new_tokens=args.max_new_tokens)
             pred = parse_yes_no(ans)
         except Exception as e:  # noqa: BLE001 — skip bad/missing/hanging clips, keep going
             ans, pred = f"ERROR: {e}", None

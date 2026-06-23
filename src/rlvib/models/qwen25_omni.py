@@ -54,10 +54,13 @@ class Qwen25Omni:
         return {"audio": self.model.audio_tower.proj, "vision": self.model.visual.merger}
 
     @staticmethod
-    def message(video=None, audio=None, prompt: str = "") -> list:
+    def message(video=None, audio=None, prompt: str = "", fps=None) -> list:
         content = []
         if video is not None:
-            content.append({"type": "video", "video": video})
+            vid = {"type": "video", "video": video}
+            if fps is not None:
+                vid["fps"] = fps                 # per-clip fps for the frame sampler (cf. standalone)
+            content.append(vid)
         if audio is not None:
             content.append({"type": "audio", "audio": audio})
         content.append({"type": "text", "text": prompt})

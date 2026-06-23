@@ -75,11 +75,14 @@ class QwenOmni:
         return {"audio": t.audio_tower.proj2, "vision": t.visual.merger}
 
     @staticmethod
-    def message(video=None, audio=None, prompt: str = "") -> list:
+    def message(video=None, audio=None, prompt: str = "", fps=None) -> list:
         """Build a system + user conversation for the processor (official Qwen system prompt)."""
         content = []
         if video is not None:
-            content.append({"type": "video", "video": video})
+            vid = {"type": "video", "video": video}
+            if fps is not None:
+                vid["fps"] = fps                 # per-clip fps for the frame sampler (cf. standalone)
+            content.append(vid)
         if audio is not None:
             content.append({"type": "audio", "audio": audio})
         content.append({"type": "text", "text": prompt})

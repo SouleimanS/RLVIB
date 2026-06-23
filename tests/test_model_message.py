@@ -16,6 +16,10 @@ def _check(message_fn, sysprompt):
     assert msg[1]["role"] == "user"
     types = [c["type"] for c in msg[1]["content"]]           # user turn still carries the inputs
     assert "video" in types and "text" in types
+    # fps, when given, rides along on the video content (matches the standalone harness)
+    vid = next(c for c in message_fn(video="clip.mp4", prompt="x", fps=1.0)[1]["content"]
+               if c["type"] == "video")
+    assert vid["fps"] == 1.0
 
 
 def test_qwen25_omni_system_prompt():

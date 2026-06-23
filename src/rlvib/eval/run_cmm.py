@@ -44,6 +44,9 @@ def main() -> int:
     ap.add_argument("--subsets", nargs="*", default=None, help="sub_category filter; default all")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-new-tokens", type=int, default=8)
+    ap.add_argument("--fps", type=float, default=None,
+                    help="video fps for the Qwen frame sampler (None = model default). Ignored by "
+                         "non-Qwen models.")
     ap.add_argument("--out", default="runs/cmm_baseline.json")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
     ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
@@ -129,6 +132,7 @@ def main() -> int:
             d["HR"] = f"{100 * live['hr_c'] / live['hr_n']:.1f}"
         return d
 
+    msg_kwargs = {} if args.fps is None else {"fps": args.fps}
     start = len(records)
     bar = tqdm(range(start, n), total=n, initial=start, desc="CMM", unit="q", dynamic_ncols=True)
     for i in bar:
@@ -147,7 +151,7 @@ def main() -> int:
                                                  alpha=cd_alpha, use_audio_in_video=uaiv,
                                                  plausibility=args.cd_plausibility)
                     else:
-                        msg = model.message(video=v, audio=a, prompt=item["question"])
+                        msg = model.message(video=v, audio=a, prompt=item["question"], **msg_kwargs)
                         ans = model.generate(msg, use_audio_in_video=uaiv,
                                              max_new_tokens=args.max_new_tokens)
                 pred = parse_yes_no(ans)
