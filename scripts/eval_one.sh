@@ -26,7 +26,11 @@ CMM_ROOT="${CMM_ROOT:-data/CMM}"
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
 conda activate "${CONDA_ENV:-rlvib}"
 export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
-export TRANSFORMERS_OFFLINE=1 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export TRANSFORMERS_OFFLINE=1
+# Pin to ONE GPU. device_map='auto' otherwise shards the 30B-MoE qwen3 across GPUs and its MoE
+# grouped_mm then fails ("tensors on cuda:0 vs cuda:1"). %%,* keeps just the first visible GPU.
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES%%,*}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 python -c "import torch; assert torch.cuda.is_available(), 'NO GPU -- run inside an interactive session'"
 
