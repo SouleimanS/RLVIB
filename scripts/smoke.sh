@@ -14,7 +14,6 @@ N="${N:-150}"
 MODELS="${MODELS:-qwen2.5-omni}"
 STEPS="${STEPS:-}"                 # extra trained checkpoints to run, e.g. '60 150' (family $EXP)
 EXP="${EXP:-broad}"
-FPS="${FPS:-1}"
 AVHBENCH_QA="${AVHBENCH_QA:-data/AVHBench/qa.json}"
 AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-data/AVHBench/videos}"
 CMM_JSON="${CMM_JSON:-data/CMM/all_data_final_reorg.json}"
@@ -34,8 +33,12 @@ python -c "import torch; assert torch.cuda.is_available(), \
   'NO GPU -- start an interactive session first: qsub -I -P gae50891 -q rt_HF -l select=1 -l walltime=01:00:00'"
 
 run_one() {                       # $1=model  $2=bottleneck-or-empty  $3=output tag
-    local M="$1" BN="$2" TAG="$3" FPS_ARG=() BN_ARG=()
-    case "$M" in qwen3-omni|qwen2.5-omni) [ -n "$FPS" ] && FPS_ARG=(--fps "$FPS");; esac
+    local M="$1" BN="$2" TAG="$3" FPS_ARG=() BN_ARG=() _fps=""
+    case "$M" in                  # per-model fps default (override FPS=...): 2.5=1, qwen3=2
+        qwen2.5-omni) _fps="${FPS:-1}";;
+        qwen3-omni)   _fps="${FPS:-2}";;
+    esac
+    [ -n "$_fps" ] && FPS_ARG=(--fps "$_fps")
     [ -n "$BN" ] && BN_ARG=(--bottleneck "$BN")
     echo "===== ${M}${TAG} / AVHBench (N=$N) ====="
     python -u -m rlvib.eval.run_avhbench --model "$M" \

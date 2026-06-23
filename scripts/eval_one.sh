@@ -16,7 +16,6 @@ M="${1:?usage: eval_one.sh <model> [step]   (step omitted = base)}"
 STEP="${2:-}"
 EXP="${EXP:-broad}"
 N="${N:-0}"                 # 0 = full set
-FPS="${FPS:-1}"
 BENCH="${BENCH:-both}"      # avhbench | cmm | both
 AVHBENCH_QA="${AVHBENCH_QA:-data/AVHBench/qa.json}"
 AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-data/AVHBench/videos}"
@@ -40,7 +39,15 @@ if [ -n "$STEP" ]; then
     [ -f "$CKPT" ] || { echo "missing checkpoint: $CKPT"; exit 1; }
     BN_ARG=(--bottleneck "$CKPT"); TAG="_${EXP}_sysfull_step${STEP}"
 fi
-FPS_ARG=(); case "$M" in qwen3-omni|qwen2.5-omni) [ -n "$FPS" ] && FPS_ARG=(--fps "$FPS");; esac
+# fps default is per-model (override with FPS=...): qwen2.5 validated at 1 (your standalone),
+# qwen3 at 2 (its original numbers + training default; fps=1 starves its video task -> yes-bias).
+# videollama2 has its own sampler -> no fps.
+case "$M" in
+    qwen2.5-omni) _fps="${FPS:-1}";;
+    qwen3-omni)   _fps="${FPS:-2}";;
+    *)            _fps="";;
+esac
+FPS_ARG=(); [ -n "$_fps" ] && FPS_ARG=(--fps "$_fps")
 
 run_avh() {                                                  # resumes from the --out JSON
     echo "===== ${M}${TAG} / AVHBench (limit=$N) ====="
