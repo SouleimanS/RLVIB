@@ -33,7 +33,12 @@ warnings.filterwarnings("ignore")
 for _n in ("transformers", "qwen_vl_utils", "qwen_omni_utils"):
     logging.getLogger(_n).setLevel(logging.ERROR)
 
-YN_SUFFIX = " Answer with a single word: Yes or No."
+# Answer-format instruction appended after each AVHBench question (with one separating space). The
+# benchmark never published its own wrapper and the exact wording is the single biggest lever on the
+# yes/no operating point, so it is configurable via --yn-suffix. Default = the co-author lab
+# convention (kaistmm/AVCD, an AVHBench co-author's lab). Alt (MAD): "Answer only 'Yes' or 'No'. Do
+# not include any explanation."
+DEFAULT_YN_SUFFIX = "Answer yes or no."
 
 
 def main() -> int:
@@ -48,6 +53,10 @@ def main() -> int:
     ap.add_argument("--fps", type=float, default=None,
                     help="video fps for the Qwen frame sampler (None = model default ~2; set 1.0 "
                          "to match the standalone AVHBench harness). Ignored by non-Qwen models.")
+    ap.add_argument("--yn-suffix", default=DEFAULT_YN_SUFFIX,
+                    help="answer-format instruction appended after the question -- the single "
+                         "biggest lever on the yes/no operating point (AVHBench never published "
+                         "its own wrapper).")
     ap.add_argument("--out", default="runs/avhbench_baseline.json")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint the out JSON every N items")
     ap.add_argument("--no-resume", action="store_true", help="start fresh, ignoring any existing --out")
@@ -128,7 +137,7 @@ def main() -> int:
     for i in bar:
         item = ds[i]
         gold = str(item["label"]).strip().lower()  # "yes" / "no"
-        prompt = item["text"] + YN_SUFFIX
+        prompt = item["text"].rstrip() + " " + args.yn_suffix
         try:
             with time_limit(args.gen_timeout):
                 if cd_alpha > 0:  # audio-aware contrastive decoding, composed with the bottleneck

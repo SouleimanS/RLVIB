@@ -48,12 +48,13 @@ case "$M" in
     *)            _fps="";;
 esac
 FPS_ARG=(); [ -n "$_fps" ] && FPS_ARG=(--fps "$_fps")
+SUF_ARG=(); [ -n "${YN_SUFFIX:-}" ] && SUF_ARG=(--yn-suffix "$YN_SUFFIX")   # A/B the answer suffix
 
 run_avh() {                                                  # resumes from the --out JSON
     echo "===== ${M}${TAG} / AVHBench (limit=$N) ====="
     python -u -m rlvib.eval.run_avhbench --model "$M" \
         --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
-        --limit "$N" "${FPS_ARG[@]}" "${BN_ARG[@]}" --out "runs/avhbench_${M}${TAG}.json"
+        --limit "$N" "${FPS_ARG[@]}" "${BN_ARG[@]}" "${SUF_ARG[@]}" --out "runs/avhbench_${M}${TAG}.json"
 }
 run_cmm() {                                                  # autoskip wrapper: resumes + steps over hanging clips
     echo "===== ${M}${TAG} / CMM (limit=$N) ====="
