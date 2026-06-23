@@ -11,8 +11,10 @@
 #   MODELS='qwen2.5-omni' bash scripts/launch_all_evals.sh    # one model
 #   MODELS='qwen3-omni qwen2.5-omni' bash scripts/launch_all_evals.sh   # skip videollama2 (fix
 #                                                              #   doesn't touch it -- saves GPU h)
-#   EXPGLOB='broad*' bash scripts/launch_all_evals.sh         # restrict trained families
-#   FORCE=1 bash scripts/launch_all_evals.sh                  # ignore the already-submitted guard
+#   EXPGLOB='*'      bash scripts/launch_all_evals.sh         # all trained families (incl. abl_*)
+#   STEPS='60 90'    bash scripts/launch_all_evals.sh         # only these checkpoint steps
+#   ALL_STEPS=1      bash scripts/launch_all_evals.sh         # every saved step (heavy!)
+#   FORCE=1          bash scripts/launch_all_evals.sh         # ignore the already-submitted guard
 #
 # IDEMPOTENT: each (model, base|checkpoint) drops a sentinel under runs/.alleval_<mark>_submitted/
 # and is skipped on a re-run, so a second invocation never double-submits onto a live JSON.
@@ -20,7 +22,8 @@ set -uo pipefail                       # NOT -e: keep going if a model has no ch
 cd "$(dirname "$0")/.."
 
 MODELS="${MODELS:-qwen3-omni qwen2.5-omni videollama2}"
-EXPGLOB="${EXPGLOB:-*}"                 # which trained variants to sweep (every step within each)
+EXPGLOB="${EXPGLOB:-broad*}"           # trained family to sweep; broad = the main run (abl_* are
+                                       #   ablations, excluded by default). EXPGLOB='*' = all.
 MARK="${MARK:-sysfull}"                # tag marker -> runs/{avhbench,cmm}_<model>_<mark>*.json
 WALL="${WALL:-12:00:00}"
 CMM_JSON="${CMM_JSON:-$PWD/data/CMM/all_data_final_reorg.json}"
@@ -51,16 +54,41 @@ for M in $MODELS; do
     submit_pair "$M" "_${MARK}" && mark "$key"
 done
 
-echo "=== TRAINED (every checkpoint step) ==="
+# Which step(s) per experiment: default = the holdout-selected pick (the "relevant" one behind
+# the paper table); STEPS='60 90' = those exact steps; ALL_STEPS=1 = every saved checkpoint.
+steps_for() {                          # $1=MODEL $2=EXP $3=DIR  ->  echoes space-separated steps
+    local M="$1" exp="$2" dir="$3" c b
+    if [ -n "${STEPS:-}" ]; then
+        echo "${STEPS//,/ }"
+    elif [ "${ALL_STEPS:-0}" = 1 ]; then
+        for c in "$dir"bottleneck_step*.pt; do
+            [ -f "$c" ] || continue
+            b=$(basename "$c" .pt); echo "${b#bottleneck_step}"
+        done
+    else
+        python scripts/select_holdout.py --model "$M" --exp "$exp" 2>/dev/null \
+            | grep -oP 'HONEST.*?step\K[0-9]+' | head -1 || true
+    fi
+}
+
+mode="holdout-selected step"
+[ -n "${STEPS:-}" ] && mode="steps ${STEPS}"
+[ "${ALL_STEPS:-0}" = 1 ] && mode="every step"
+echo "=== TRAINED (family '$EXPGLOB'; $mode) ==="
 for M in $MODELS; do
-    for ckpt in runs/anchored_${M}_${EXPGLOB}/bottleneck_step*.pt; do
-        [ -f "$ckpt" ] || continue                          # glob with no match -> the literal; skip
-        exp=$(basename "$(dirname "$ckpt")"); exp="${exp#anchored_${M}_}"
-        step=$(basename "$ckpt" .pt); step="${step#bottleneck_step}"
-        key="${M}__${exp}_step${step}"
-        if submitted "$key"; then echo "   skip $M/$exp step$step (already submitted)"; continue; fi
-        echo ">> $M/$exp step$step"
-        submit_pair "$M" "_${exp}_${MARK}_step${step}" "$PWD/$ckpt" && mark "$key"
+    for dir in runs/anchored_${M}_${EXPGLOB}/; do
+        [ -d "$dir" ] || continue                           # glob with no match -> literal; skip
+        exp=$(basename "$dir"); exp="${exp#anchored_${M}_}"
+        steps=$(steps_for "$M" "$exp" "$dir")
+        [ -n "$steps" ] || { echo "   skip $M/$exp (no step selected; set STEPS=NN or ALL_STEPS=1)"; continue; }
+        for step in $steps; do
+            ckpt="${dir}bottleneck_step${step}.pt"
+            [ -f "$ckpt" ] || { echo "   skip $M/$exp step$step (missing $ckpt)"; continue; }
+            key="${M}__${exp}_step${step}"
+            submitted "$key" && { echo "   skip $M/$exp step$step (already submitted)"; continue; }
+            echo ">> $M/$exp step$step"
+            submit_pair "$M" "_${exp}_${MARK}_step${step}" "$PWD/$ckpt" && mark "$key"
+        done
     done
 done
 
