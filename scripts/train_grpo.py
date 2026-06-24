@@ -70,6 +70,10 @@ def _yesno_item(model, it, cats, rng, suffix):
 
 
 def main() -> int:
+    # Pin to ONE GPU before any CUDA init: qwen3-omni's 30B MoE, if sharded across GPUs by
+    # device_map="auto", makes the MoE grouped_mm fail ("tensors on cuda:0 vs cuda:1" -> crash).
+    # Keep only the first visible GPU (matches eval_one.sh). Choose which with CUDA_VISIBLE_DEVICES=N.
+    os.environ["CUDA_VISIBLE_DEVICES"] = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[0]
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--pairs", type=int, default=300, help="# yes/no training items")
