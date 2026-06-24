@@ -19,13 +19,27 @@ from __future__ import annotations
 import argparse
 import os
 import random
+import warnings
 
 import torch
+from tqdm import tqdm
 
 from rlvib.data import ave
 from rlvib.models import get_model
 from rlvib.models.bottleneck import VariationalBottleneck, attach_bottlenecks, set_bypass
 from rlvib.train.dpo import answer_logp_vec, grpo_step, letter_id
+
+# Quiet the per-audio librosa FutureWarning spam + the bottleneck re-init UserWarning, and the
+# transformers rope warnings / weight-load report -- none are actionable here and they bury the
+# training trace. (Set RLVIB_VERBOSE=1 to keep them.)
+if not os.environ.get("RLVIB_VERBOSE"):
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=UserWarning)
+    try:
+        from transformers.utils import logging as _hflog
+        _hflog.set_verbosity_error()
+    except Exception:
+        pass
 
 
 @torch.no_grad()
@@ -62,8 +76,10 @@ def main() -> int:
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--accum", type=int, default=1,
                     help="items per optimizer step (each item does --group forwards)")
-    ap.add_argument("--group", type=int, default=8,
-                    help="GRPO group size = stochastic forwards per item; LOWER (e.g. 4) if OOM")
+    ap.add_argument("--group", type=int, default=4,
+                    help="GRPO group size = stochastic forwards per item, all held in memory until "
+                         "the group's advantages are computed. 4 fits qwen3-omni (30B) on one H200 "
+                         "(~102GB peak); 8 OOMs. Smaller backbones (7B) can go higher.")
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--beta-kl", type=float, default=0.01, help="VIB compression-KL weight")
     ap.add_argument("--lam-ref", type=float, default=0.05, help="KL(base||policy) anchor weight")
@@ -109,10 +125,12 @@ def main() -> int:
     print(f"[probe base] frac_yes={base_yes:.2f} acc={base_acc:.2f}  (collapse = frac_yes -> 0 or 1)",
           flush=True)
 
+    starts = range(0, len(train_items) - args.accum + 1, args.accum)
+    pbar = tqdm(total=args.epochs * len(starts), unit="step", desc="grpo")
     step = 0
     for epoch in range(args.epochs):
         rng.shuffle(train_items)
-        for i in range(0, len(train_items) - args.accum + 1, args.accum):
+        for i in starts:
             batch = []
             for it in train_items[i:i + args.accum]:
                 ex = _yesno_item(m, it, cats, rng, args.yn_suffix)
@@ -122,8 +140,8 @@ def main() -> int:
                            lam_ref=args.lam_ref, r_correct=args.r_correct,
                            r_abstain=args.r_abstain, r_halluc=args.r_halluc)
             step += 1
-            print(f"epoch {epoch} step {step}: "
-                  + "  ".join(f"{k}={v:+.4f}" for k, v in mt.items()), flush=True)
+            pbar.update(1)
+            pbar.set_postfix(ep=epoch, **{k: f"{v:+.3f}" for k, v in mt.items()})
             if step % args.eval_every == 0:
                 bns.eval()
                 fy, ac = _frac_yes(m, probe)
@@ -133,9 +151,10 @@ def main() -> int:
                             "cls": "VariationalBottleneck", "model": args.model,
                             "normalize_input": nin}, ckpt)
                 flag = "  <-- COLLAPSE ALARM" if (fy < 0.15 or fy > 0.85) else ""
-                print(f"[probe step {step}] frac_yes={fy:.2f} (base {base_yes:.2f}) acc={ac:.2f}  "
-                      f"saved {os.path.basename(ckpt)}{flag}", flush=True)
+                pbar.write(f"[step {step}] frac_yes={fy:.2f} (base {base_yes:.2f}) acc={ac:.2f}  "
+                           f"saved {os.path.basename(ckpt)}{flag}")
 
+    pbar.close()
     for h in handles:
         h.remove()
     print(f"=== GRPO training done === eval: EXP=grpo bash scripts/eval_one.sh {args.model} <step>",
