@@ -181,7 +181,8 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
 
 def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: float = 0.01,
               lam_ref: float = 0.05, r_correct: float = 1.0, r_abstain: float = 0.0,
-              r_halluc: float = -1.0, std_norm: bool = True) -> dict:
+              r_halluc: float = -1.0, std_norm: bool = True,
+              skip_degenerate: bool = False) -> dict:
     """One GRPO step over the trainable bottleneck on yes/no grounding items.
 
     Each ex = {messages, gold ('yes'|'no'), yes_id, no_id[, abstain_id]}. Per example we draw
@@ -206,7 +207,9 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
 
     KEY RISK (see the memo): if every sample in a group lands the same reward, the advantage is
     ~0 and the policy-gradient term vanishes -- watch `adv_std`. `kl_vib` -> 0 means the sampler is
-    collapsing to deterministic (exploration dying). Returns mean metrics.
+    collapsing to deterministic (exploration dying). `skip_degenerate=True` (DAPO dynamic sampling)
+    skips phase B for zero-variance groups so no compute is wasted on no-signal items; the returned
+    `frac_useful` is the fraction of the batch that carried a policy gradient. Returns mean metrics.
 
     Memory: two-phase / fixed-eps. Phase A samples all `group` actions under no_grad (capturing
     each forward's VIB noise); phase B replays each sample's noise WITH grad and backward()s it
@@ -216,7 +219,7 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
     optimizer.zero_grad()
     was_training = bottlenecks.training
     bottlenecks.train()                                     # ensure z = mu + sigma*eps (sampling)
-    rewards_m, advstd_m, klvib_m, klref_m, pcorrect_m = [], [], [], [], []
+    rewards_m, advstd_m, klvib_m, klref_m, pcorrect_m, useful_m = [], [], [], [], [], []
     for ex in batch:
         gold = ex["gold"]
         cands = [("yes", ex["yes_id"]), ("no", ex["no_id"])]
@@ -240,6 +243,16 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
                                else (r_abstain if label == "abstain" else r_halluc))
 
         r = torch.tensor(rewards, dtype=torch.float32, device=lp.device)
+        rewards_m.append(float(r.mean()))
+        advstd_m.append(float(r.std()))
+        pcorrect_m.append(float((r == r_correct).float().mean()))
+        # Dynamic sampling (DAPO): a zero-variance group has all-equal reward -> advantage is 0 ->
+        # no policy gradient. Skip its (expensive) phase B entirely; only the KL terms would move.
+        useful = bool((r != r[0]).any())                # group has reward variance (not all-equal)
+        useful_m.append(1.0 if useful else 0.0)
+        if skip_degenerate and not useful:
+            continue
+
         adv = r - r.mean()                                  # group-relative advantage (mean-centered)
         if std_norm:                                        # classic GRPO; Dr. GRPO drops /std (it
             adv = adv / (r.std() + 1e-6)                     # over-weights low-variance groups -> bias)
@@ -267,18 +280,17 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
             krefs_b.append(float(kl_ref.detach()))
         set_forced_eps(bottlenecks, None)
 
-        rewards_m.append(float(r.mean()))
-        advstd_m.append(float(r.std()))
         klvib_m.append(sum(kls_b) / max(1, len(kls_b)))
         klref_m.append(sum(krefs_b) / max(1, len(krefs_b)))
-        pcorrect_m.append(float((r == r_correct).float().mean()))
 
-    torch.nn.utils.clip_grad_norm_(bottlenecks.parameters(), max_norm=1.0)
-    optimizer.step()
+    if klvib_m:                                             # at least one item contributed a gradient
+        torch.nn.utils.clip_grad_norm_(bottlenecks.parameters(), max_norm=1.0)
+        optimizer.step()
     set_forced_eps(bottlenecks, None)
     if not was_training:
         bottlenecks.eval()
     n = max(1, len(batch))
     return {"reward": sum(rewards_m) / n, "adv_std": sum(advstd_m) / n,
-            "kl_vib": sum(klvib_m) / n, "kl_ref": sum(klref_m) / n,
-            "p_correct": sum(pcorrect_m) / n}
+            "kl_vib": sum(klvib_m) / max(1, len(klvib_m)),
+            "kl_ref": sum(klref_m) / max(1, len(klref_m)),
+            "p_correct": sum(pcorrect_m) / n, "frac_useful": sum(useful_m) / n}

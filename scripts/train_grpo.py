@@ -81,8 +81,13 @@ def main() -> int:
     ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--pairs", type=int, default=300, help="# yes/no training items")
     ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--accum", type=int, default=1,
-                    help="items per optimizer step (each item does --group forwards)")
+    ap.add_argument("--accum", type=int, default=4,
+                    help="items screened per optimizer step. With dynamic sampling, a step updates "
+                         "only on the non-degenerate items among these, so >1 ensures most steps "
+                         "carry signal (each item costs --group no_grad forwards to screen)")
+    ap.add_argument("--no-dyn-sample", dest="dyn_sample", action="store_false",
+                    help="disable DAPO dynamic sampling (default on: skip zero-variance groups, "
+                         "which on an easy task are the majority -> watch frac_useful in the bar)")
     ap.add_argument("--group", type=int, default=8,
                     help="GRPO group size = samples per item. grpo_step is two-phase/fixed-eps, so "
                          "peak memory is ~1 forward graph regardless of group (cost is ~2x forwards). "
@@ -150,7 +155,7 @@ def main() -> int:
             mt = grpo_step(m, bns, opt, batch, group=args.group, beta_kl=args.beta_kl,
                            lam_ref=args.lam_ref, r_correct=args.r_correct,
                            r_abstain=args.r_abstain, r_halluc=args.r_halluc,
-                           std_norm=args.std_adv)
+                           std_norm=args.std_adv, skip_degenerate=args.dyn_sample)
             step += 1
             pbar.update(1)
             pbar.set_postfix(ep=epoch, **{k: f"{v:+.3f}" for k, v in mt.items()})

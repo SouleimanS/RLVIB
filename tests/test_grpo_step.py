@@ -76,7 +76,7 @@ def test_grpo_step_runs_and_updates():
     m = grpo_step(model, bns, opt, _batch(), group=8)
 
     # metrics present and finite
-    assert set(m) == {"reward", "adv_std", "kl_vib", "kl_ref", "p_correct"}
+    assert set(m) == {"reward", "adv_std", "kl_vib", "kl_ref", "p_correct", "frac_useful"}
     for k, v in m.items():
         assert v == v and abs(v) < 1e6, (k, v)           # not NaN/inf
     assert -1.0 <= m["reward"] <= 1.0
@@ -96,6 +96,23 @@ def test_grpo_step_two_way_no_abstain():
     m = grpo_step(model, bns, opt, _batch(abstain=False), group=6)
     assert m["reward"] == m["reward"]                     # finite
     assert -1.0 <= m["reward"] <= 1.0
+
+
+def test_grpo_step_dynamic_sampling():
+    """skip_degenerate path runs and reports frac_useful in [0,1]; degenerate items are skipped."""
+    model, bns, opt = _setup()
+    m = grpo_step(model, bns, opt, _batch(), group=8, skip_degenerate=True)
+    assert 0.0 <= m["frac_useful"] <= 1.0
+    for v in m.values():
+        assert v == v and abs(v) < 1e6
+
+    # a batch whose every group is forced degenerate (group=1 -> std=0 always) updates nothing
+    model2, bns2, opt2 = _setup()
+    before = [p.detach().clone() for p in bns2.parameters()]
+    m2 = grpo_step(model2, bns2, opt2, _batch(), group=1, skip_degenerate=True)
+    assert m2["frac_useful"] == 0.0
+    moved = sum(float((a.detach() - b).abs().sum()) for a, b in zip(bns2.parameters(), before))
+    assert moved == 0.0                                  # no useful group -> no optimizer step
 
 
 def test_grpo_step_drgrpo_advantage():
