@@ -67,11 +67,17 @@ class QwenOmni:
         return {"audio": t.audio_tower.proj2, "vision": t.visual.merger}
 
     @staticmethod
-    def message(video=None, audio=None, prompt: str = "") -> list:
-        """Build a single user-turn conversation for the processor."""
+    def message(video=None, audio=None, prompt: str = "", fps=None) -> list:
+        """Build a single user-turn conversation. Qwen3-Omni sets NO system prompt for benchmark
+        evaluation (repo README "Evaluation": *"No system prompt should be set for any evaluation
+        benchmark"*), and the Qwen2.5 "virtual human" string is not a Qwen3 prompt -- adding it
+        shifts the answer style and corrupts the yes/no results."""
         content = []
         if video is not None:
-            content.append({"type": "video", "video": video})
+            vid = {"type": "video", "video": video}
+            if fps is not None:
+                vid["fps"] = fps                 # per-clip fps for the frame sampler (cf. standalone)
+            content.append(vid)
         if audio is not None:
             content.append({"type": "audio", "audio": audio})
         content.append({"type": "text", "text": prompt})

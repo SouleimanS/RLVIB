@@ -15,6 +15,14 @@ import torch  # noqa: E402
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-Omni-7B"
 
+# Official Qwen2.5-Omni system prompt (HF model card / repo "Usage Tips"), required verbatim.
+# Omitting it drops the model's audio-visual perception priming and measurably shifts the
+# yes/no operating point on AVHBench/CMM. Lives in `message()` so train + eval stay consistent.
+SYSTEM_PROMPT = (
+    "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, "
+    "capable of perceiving auditory and visual inputs, as well as generating text and speech."
+)
+
 
 class Qwen25Omni:
     """Thin wrapper around Qwen2.5-Omni (Thinker-only) for text-out AV inference."""
@@ -46,14 +54,20 @@ class Qwen25Omni:
         return {"audio": self.model.audio_tower.proj, "vision": self.model.visual.merger}
 
     @staticmethod
-    def message(video=None, audio=None, prompt: str = "") -> list:
+    def message(video=None, audio=None, prompt: str = "", fps=None) -> list:
         content = []
         if video is not None:
-            content.append({"type": "video", "video": video})
+            vid = {"type": "video", "video": video}
+            if fps is not None:
+                vid["fps"] = fps                 # per-clip fps for the frame sampler (cf. standalone)
+            content.append(vid)
         if audio is not None:
             content.append({"type": "audio", "audio": audio})
         content.append({"type": "text", "text": prompt})
-        return [{"role": "user", "content": content}]
+        return [
+            {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]},
+            {"role": "user", "content": content},
+        ]
 
     def build_inputs(self, messages: list, use_audio_in_video: bool = True):
         from qwen_omni_utils import process_mm_info

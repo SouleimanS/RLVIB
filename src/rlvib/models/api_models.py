@@ -99,7 +99,14 @@ class GeminiModel(_APIModel):
                 uploaded.append(f)
                 parts.append(f)
         parts.append(message.get("prompt", ""))
-        cfg = types.GenerateContentConfig(temperature=0.0, max_output_tokens=max(max_new_tokens, 16))
+        # gemini-2.5-* "think" by default and thinking tokens count against max_output_tokens;
+        # with a tiny budget that left no room for the answer (empty text -> unparseable, ~15%).
+        # Disable thinking for these yes/no probes and give a small real output budget.
+        cfg_kw = dict(temperature=0.0, max_output_tokens=max(max_new_tokens, 32))
+        _TC = getattr(types, "ThinkingConfig", None)
+        if _TC is not None:
+            cfg_kw["thinking_config"] = _TC(thinking_budget=0)
+        cfg = types.GenerateContentConfig(**cfg_kw)
         try:
             resp = _retry(lambda: self.client.models.generate_content(
                 model=self.model_id, contents=parts, config=cfg), what="gemini generate")

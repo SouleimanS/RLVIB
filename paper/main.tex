@@ -6,7 +6,7 @@
 \usepackage{times}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
-\usepackage{array}            % >{\raggedright\arraybackslash}p{} columns (ragged-right without breaking \\)
+\usepackage{array}
 \usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta}
@@ -17,17 +17,14 @@
 \titleformat{\section}{\normalfont\large\bfseries}{\thesection}{0.6em}{}
 \titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.6em}{}
 \setlength{\parindent}{0pt}\setlength{\parskip}{0.5em}
-% Let floats fill pages instead of piling onto float-only pages / leaving big gaps.
 \renewcommand{\topfraction}{0.9}\renewcommand{\bottomfraction}{0.8}
 \renewcommand{\textfraction}{0.08}\renewcommand{\floatpagefraction}{0.75}
 \setcounter{topnumber}{3}\setcounter{bottomnumber}{2}\setcounter{totalnumber}{5}
 \newcommand{\KL}{\mathrm{KL}}
-\newcommand{\note}[1]{\textsuperscript{\textbf{#1}}}
 % frame thumbnail with a build-safe fallback box if the image hasn't been extracted yet
 \newcommand{\frm}[1]{\IfFileExists{figures/#1}{\includegraphics[height=14mm]{figures/#1}}%
   {\fbox{\parbox[c][13mm][c]{17mm}{\centering\scriptsize\ttfamily #1}}}}
 \newcommand{\frmrow}[1]{\frm{#1_1.jpg}\hspace{1.2pt}\frm{#1_2.jpg}\hspace{1.2pt}\frm{#1_3.jpg}}
-% one styled example row: #1 frame-prefix, #2 context line, #3 question, #4 base answer, #5 our answer.
 \newcommand{\exrow}[5]{%
   \begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.8mm]}]
     \node[draw=black!30,rounded corners=2.5pt,inner sep=1.6pt,line width=0.5pt] (im) {\frmrow{#1}};
@@ -49,68 +46,44 @@ and a Two-Anchor Mitigation}}
 \maketitle
 
 \begin{abstract}
-We adapt a frozen audio--visual large language model (AV-LLM) by training only a small per-modality
-transform on its modality-adapter token streams, with a modality-conditional (audio-swap) preference
-objective, and we study what breaks and what holds. Applying direct preference optimization (DPO) to this
-setup collapses the model: on a held-out perception benchmark its accuracy falls from $0.953$ to $0.013$
-and it converges to a near-constant answer. We attribute the collapse to likelihood displacement and the
-absence of any constraint on the output distribution, and we fix it with two anchors --- a term holding
-the chosen answer's likelihood at or above the frozen base, and an explicit KL penalty to the base on
-general inputs. An ablation shows both are necessary: the first alone still loses perception accuracy, the
-second alone loses hallucination-resistance. This diagnosis-and-mitigation is our main, reproducible
-result. The downstream grounding effect is real but modest: under a leakage-controlled, \emph{paired}
-protocol (same test items, McNemar), AVHBench improves on Qwen3-Omni from $0.647$ to $0.707$ --- per-seed
-marginal ($p\,{\approx}\,0.06$) but significant pooled across three seeds ($b{=}17$, $c{=}38$, $p{=}0.007$;
-bootstrap $\Delta{=}{+}0.060\,[{+}0.007,{+}0.113]$) --- a positive but non-significant trend on Qwen2.5-Omni
-($p{=}0.13$), and no effect on VideoLLaMA2, which under-uses audio. A per-token probe shows the learned
-transform mostly reshapes the \emph{vision} stream while the audio path stays a pass-through, so conflict
-resolution happens inside the frozen LM and the information-bottleneck rate penalty is nominal at our
-operating point. All numbers are on $300$-example benchmark subsets; we report confidence intervals
-throughout and discuss limitations in detail.
+Audio--visual LLMs under-use audio: they answer from the image, hallucinating sounds it implies and
+ignoring sounds that contradict it. We ask whether a \emph{frozen} model can be re-grounded by training
+only a small per-modality transform on its adapter token streams, with a modality-conditional preference
+--- on an audio-swapped counterfactual, prefer the answer matching the \emph{heard} event over the
+\emph{seen} one. Plain direct preference optimization (DPO) on this signal collapses the model: perception
+accuracy falls to near zero and the output becomes a near-constant answer. We trace the collapse to
+likelihood displacement and the absence of any constraint on the output distribution, and prevent it with
+two anchors --- a floor holding the chosen answer's likelihood at the frozen base, and a KL penalty to the
+base on general inputs --- with an ablation showing both are necessary. This diagnosis and fix is our main
+result. The downstream grounding effect is real but backbone-dependent: under a paired, leakage-controlled
+protocol the audio-hallucination probe improves significantly on both Qwen backbones and on every seed,
+yielding a net benchmark gain on Qwen3-Omni, a redistribution toward audio (at audio--video matching's
+expense) on Qwen2.5-Omni, and a regression on VideoLLaMA2, whose audio pathway is too weak to exploit. A
+per-token probe shows the learned transform reshapes the \emph{vision} stream, so the frozen language
+model --- not the audio path --- resolves the conflict. We do not claim state of the art.
 \end{abstract}
 
 \section{Introduction}
-Audio--visual large language models couple pretrained audio and vision encoders to a language model
-through lightweight per-modality adapters. They exhibit a modality imbalance: they tend to answer from
-the visual stream and under-use audio, including hallucinating sounds implied by the image and ignoring
-audio that conflicts with it~\cite{cmm,avhbench}. We ask whether this can be corrected cheaply, by
-\emph{freezing the entire model} and training only a small per-modality variational information
-bottleneck (VIB) inserted on the adapter token streams.
+Audio--visual large language models attach pretrained audio and vision encoders to a language model through
+lightweight per-modality adapters, and they inherit a modality imbalance: they answer from the visual
+stream, hallucinating sounds the image implies and ignoring sounds that contradict it~\cite{cmm,avhbench}.
+We ask whether this can be corrected without touching the model --- freezing every pretrained weight and
+training only a small per-modality transform on the adapter token streams.
 
-The training signal is a modality-conditional preference. From a clean clip we synthesize an
-audio-swapped counterfactual (the original video with another clip's audio) and prefer the answer
-consistent with the \emph{heard} event over the answer consistent with the \emph{seen} event. Because
-both answers are scored on the same swapped clip, preferring the heard event requires using the audio.
+The training signal is a modality-conditional preference. From a clean clip we build an audio-swapped
+counterfactual (the original video with another clip's audio) and prefer the answer consistent with the
+\emph{heard} event over the \emph{seen} one. Scored on the same swapped clip, this preference can be
+satisfied only by attending to the audio.
 
-We report three things. (i)~Applying DPO to this objective, while regularizing only the bottleneck's
-information rate, collapses the model (Section~\ref{sec:collapse}); we attribute the collapse to
-likelihood displacement and a missing output-distribution constraint. (ii)~A chosen-likelihood anchor and
-an explicit KL-to-base penalty prevent the collapse, and an ablation shows both terms are necessary
-(Section~\ref{sec:abl}); this is our main result. (iii)~With both terms the downstream effect on an
-audio--visual hallucination benchmark is modest and backbone-dependent --- significant when pooled across
-seeds on Qwen3-Omni, a non-significant trend on Qwen2.5-Omni, and absent on VideoLLaMA2
-(Section~\ref{sec:results}) --- and a per-token probe shows the learned transform reshapes the vision
-stream rather than the audio path, with the frozen language model resolving the conflict
-(Section~\ref{sec:interp}). We do not claim a state-of-the-art result.
+Our contributions are three. (i)~Plain preference optimization of this objective collapses a frozen
+AV-LLM; we trace the collapse to likelihood displacement and a missing output-distribution constraint.
+(ii)~Two anchors --- a chosen-likelihood floor and a KL-to-base penalty --- prevent it, and an ablation
+shows both are necessary; this is our main, reproducible result. (iii)~Under a paired, leakage-controlled
+protocol the adapter redirects grounding toward audio to a backbone-dependent degree, and a per-token
+probe locates the change. We do not claim state of the art.
 
-\section{Related work}
-\textbf{Preference optimization and its failure modes.} DPO~\cite{dpo} optimizes a log-sigmoid of the
-difference between chosen and rejected log-probabilities. This difference can be increased by lowering
-both, and the probability of the \emph{preferred} response can fall --- ``likelihood
-displacement''~\cite{razin} --- worst when chosen and rejected are near-identical. DPO-Positive~\cite{dpop}
-adds a penalty preventing the chosen log-probability from dropping below the reference. Unlike PPO, DPO's
-KL constraint is implicit and acts only on the preference pairs~\cite{dpovsppo}.
-\textbf{Multimodal preference optimization.} mDPO~\cite{mdpo} reports an analogous failure on multimodal
-LLMs (the model ignores the image and the chosen likelihood drops) and adds a conditional term and a
-reward anchor; our chosen anchor follows the same principle, with audio as the conditioning modality.
-\textbf{Capability retention.} RLHF imposes an ``alignment tax''; explicit KL-to-reference penalties and
-pretraining-mixing reduce it~\cite{instructgpt}, and proxy over-optimization past a KL budget degrades
-true quality~\cite{gao}; selection should use diverse held-out evaluations~\cite{ivison}.
-\textbf{Information bottleneck.} The variational IB~\cite{vib} trades sufficiency against a rate penalty;
-Vittle~\cite{vittle} applies a VIB to multimodal-LLM hidden states. We use a per-modality VIB on adapter
-outputs and report that the rate penalty, as commonly weighted, is weak (Section~\ref{sec:interp}).
-
-\section{Method}
+\section{Architecture}
+\label{sec:arch}
 
 \begin{figure}[tb]
 \centering
@@ -133,268 +106,140 @@ outputs and report that the rate penalty, as commonly weighted, is weak (Section
   \draw[->] (ain)--(aenc); \draw[->] (aenc)--(aproj); \draw[->] (aproj)--(avib); \draw[->] (avib.east)--(llm.west);
   \draw[->] (llm.east)--(ans);
 \end{tikzpicture}
-\caption{The method. The audio--visual LLM is frozen (blue): per-modality encoders and adapters feed a
-frozen language model. We insert a small variational information bottleneck (orange, the only trained
-parameters) on each adapter's output token stream --- $z=\mu(x)+\sigma(x)\,\epsilon$,
-$y=x+W_{\text{out}}z$ with $W_{\text{out}}$ zero-initialized (identity at start). The two VIBs are trained
-with an audio-swap preference and two anchors (Section~\ref{sec:method-anchored}). A per-token probe
-(Table~\ref{tab:interp}) shows the learned transform mostly reshapes the vision stream, so the frozen
-language model resolves the audio--vision conflict.}
+\caption{The architecture. Everything blue is frozen; the only trained parameters are the two variational
+information bottlenecks (orange) inserted on the per-modality adapter outputs ---
+$z=\mu(x)+\sigma(x)\,\epsilon$, $y=x+W_{\text{out}}z$ with $W_{\text{out}}$ zero-initialized (identity at
+start). They are trained by an audio-swap preference with two anchors (Section~\ref{sec:method}).}
 \label{fig:method}
 \end{figure}
 
-\subsection{Frozen AV-LLM with a per-modality VIB}
-The base model is frozen (Figure~\ref{fig:method}). On each per-modality adapter output (the token sequence
-$x\in\mathbb{R}^{T\times d}$ feeding the language model) we attach a VIB via a forward hook:
+The model is frozen. On each per-modality adapter output --- the token sequence $x\in\mathbb{R}^{T\times d}$
+feeding the language model --- we attach a variational information bottleneck (VIB) through a forward hook:
 \begin{equation}
 z=\mu(x)+\sigma(x)\odot\epsilon,\ \epsilon\sim\mathcal N(0,I);\qquad y=x+W_{\text{out}}z,
 \end{equation}
-with $W_{\text{out}}$ zero-initialized so $y=x$ at initialization. The per-token rate is
-$\KL(q(z|x)\,\|\,\mathcal N(0,I))$. A bypass flag sets $y=x$, recovering the exact frozen base; we use it
-for the DPO reference log-probabilities and the KL-to-base target without holding a second model. Only
-the two VIBs (audio, vision) are trainable.
+with per-token rate $\KL(q(z|x)\,\|\,\mathcal N(0,I))$. Because $W_{\text{out}}$ is zero-initialized the
+adapter is the identity at start, and a bypass flag restores the exact frozen base --- which we reuse for
+the DPO reference log-probabilities and the KL-to-base target, so no second model is needed. Only the two
+VIBs are trained. They attach at the audio-tower projection and vision merger of the Qwen-Omni backbones,
+and at the BEATs and SigLIP adapters of VideoLLaMA2.1-7B-AV.
 
-\subsection{Audio-swap preference and the naive objective}
-\label{sec:collapse}
-For a clip we build a multiple-choice question and an audio-swapped copy (video unchanged, audio replaced
-by a different-category clip). The chosen letter is the heard event, the rejected letter the seen event,
-both scored on the swapped clip. Let $c_p,r_p$ be the policy log-probs of the chosen/rejected letters
-(bottleneck active) and $c_r,r_r$ the reference log-probs (bottleneck bypassed). The naive objective
-regularizes only the latent rate $\KL_{\text{VIB}}$:
+\section{Method: objective and losses}
+\label{sec:method}
+\textbf{Audio-swap preference and the naive objective.} From each clip we form a multiple-choice question
+and an audio-swapped copy (video unchanged, audio from a different-category clip); the chosen letter names
+the heard event, the rejected the seen one, both scored on the swapped clip. With $c_p,r_p$ the policy
+log-probs of the two letters (bottleneck active) and $c_r,r_r$ the reference (bypassed), the naive
+objective regularizes only the latent rate:
 \begin{equation}
 \mathcal L_0=-\log\sigma\!\big(\beta[(c_p-c_r)-(r_p-r_r)]\big)+\beta_{kl}\,\KL_{\text{VIB}}.
 \label{eq:naive}
 \end{equation}
-Nothing constrains the output distribution against the base. Because $\mathcal L_0$ is a log-sigmoid of a
-difference, it can be minimized by lowering both letter log-probs; with an always-on adapter and an
-input-blind objective the probability mass moves to a degenerate constant answer.
+Nothing ties the output to the base. As a log-sigmoid of a difference, $\mathcal L_0$ can be reduced by
+lowering \emph{both} letter probabilities, and with an always-on adapter and an input-blind objective the
+mass drifts to a constant answer.
 
-\subsection{Anchored swap-DPO}
-\label{sec:method-anchored}
-We add two terms:
+\textbf{Anchored swap-DPO.} We add two terms:
 \begin{align}
 \mathcal L=\ &-\log\sigma\!\big(\beta[(c_p-c_r)-(r_p-r_r)]\big)
  +\lambda_{a}\,\big(\!-\log\sigma(\beta(c_p-c_r)-\delta)\big)\nonumber\\
  &+\lambda_{kl}\,\KL\!\big(p_{\text{base}}(\cdot|x)\,\|\,p_\theta(\cdot|x)\big)+\beta_{kl}\,\KL_{\text{VIB}}.
 \label{eq:anchored}
 \end{align}
-The \emph{chosen anchor} (second term, $\delta{=}0$)~\cite{mdpo,dpop} keeps the chosen log-prob at or above
-the frozen base. The \emph{KL-to-base} term penalizes the policy for deviating from the base's answer
-distribution on a set of general (non-swap) inputs $x$; because the base is the bypassed bottleneck,
-$p_{\text{base}}$ is available without a second model. The general inputs span matched multiple-choice,
-audio-presence, visual-presence, and open-ended prompts (the ``broad'' set).
+The chosen anchor ($\delta{=}0$)~\cite{mdpo,dpop} keeps the chosen log-prob from falling below the frozen
+base. The KL-to-base term penalizes drift from the base's answer distribution on general (non-swap) inputs
+--- matched multiple-choice, audio- and visual-presence, and open-ended prompts (the ``broad'' set) --- and
+is free because the base is the bypassed bottleneck.
 
-\subsection{Monitoring and selection}
-Per step we log the absolute chosen/rejected log-probs (not only their margin), $\KL_{\text{VIB}}$, the
-KL-to-base, and the fraction of ``yes'' answers on a balanced yes/no probe (a constant-answer detector).
-Checkpoints are saved periodically and selected on the held-out benchmarks, not the training proxy. The
-selection rule maximizes AVHBench subject to capability guards (Section~\ref{sec:setup}).
+\textbf{Monitoring, selection, and numerics.} Throughout training we log the absolute chosen/rejected
+log-probs (not only their margin), both KL terms, and the yes-rate on a balanced probe --- a
+constant-answer detector --- and select checkpoints on held-out benchmarks by best hallucination accuracy
+subject to capability guards (Section~\ref{sec:setup}). Numerically, the VIB runs in float32 (bfloat16
+underflows its squared-mean rate term) with normalized input and gradients clipped to norm $1.0$;
+VideoLLaMA2's float16 forward overflows attention, so we train it in bfloat16. These guards leave the Qwen
+backbones unchanged.
 
-\subsection{Implementation details (numerical)}
-\label{sec:impl}
-The Qwen-Omni backbones run in bfloat16. VideoLLaMA2 is distributed in float16 for inference but trained
-in bfloat16; a differentiable float16 forward overflows attention, so we cast it to bfloat16. The VIB is
-computed in float32 (bfloat16's mantissa is insufficient for the squared-mean term in the rate), its
-encoder input is LayerNorm-normalized for backbones with large adapter activations, gradients are clipped
-to norm $1.0$, and its linear layers are explicitly initialized (the VideoLLaMA2 loader disables the
-default initialization process-wide). The Qwen backbones are unaffected by these guards.
-
-\section{Experiments}
-\subsection{Setup}
+\section{Experimental setup}
 \label{sec:setup}
-\textbf{Backbones:} Qwen3-Omni (primary), Qwen2.5-Omni, VideoLLaMA2.1-7B-AV; all frozen, only the
-two VIBs trained. \textbf{Training data:} audio-swapped AVE clips (300 pairs, 2 epochs, $\beta{=}0.1$,
-$\lambda_a{=}1$, $\lambda_{kl}{=}2$, $\beta_{kl}{=}0.01$ unless stated). \textbf{Benchmarks (held-out,
-$n{=}300$ subset each):} AVHBench~\cite{avhbench} (audio--visual hallucination, overall accuracy);
-CMM~\cite{cmm} perception accuracy (PA; correctly affirms present content) and hallucination resistance
-(HR; correctly denies absent content); DAVE~\cite{dave} audio--visual multiple choice. \textbf{Selection protocol (leakage control):} each benchmark's $300$ per-example records are split,
-by a fixed seed, into a validation half and a disjoint test half; checkpoints (and the recipe and
-$\beta_{kl}$) are selected on the validation half and \emph{all reported numbers are on the test half}.
-The selection rule is the highest validation AVHBench subject to capability guards
-$\text{PA}\ge\text{PA}_{\text{base}}-0.05$ and $\text{HR}\ge\text{HR}_{\text{base}}-0.05$ (relative to
-each backbone's base, computed on validation). Reported metrics are therefore on $n{=}150$.
-\textbf{Answer parsing.} Free-text outputs are mapped to yes/no by a parser that recognizes negated
-absence answers (e.g.\ ``I did not see a tree''$\,\to\,$``no''). An earlier negation-blind parser scored
-such answers as unparseable errors, which floored VideoLLaMA2's CMM hallucination-resistance to near
-zero; VideoLLaMA2 answers in full sentences, whereas the Qwen backbones answer with a leading
-``yes''/``no'' and are unaffected. We corrected the parser and re-derived every metric from the saved raw
-outputs; the correction leaves all Qwen2.5-/Qwen3-Omni numbers unchanged, isolating the change to the one
-backbone that answered in prose.
-\textbf{Development vs.\ test, and paired statistics.} The \emph{design} of the broad anchor was informed
-by inspecting CMM perception/hallucination failures on the held-out benchmarks, so we read CMM as a
-\emph{development} signal and treat AVHBench as the primary held-out test; the checkpoint, recipe and
-$\beta_{kl}$ are still selected only on the validation half, but a residual test-informed-design risk
-remains, which we flag rather than claim away. Because base and adapted see identical items, every
-base-vs-adapted comparison below is a \emph{paired} McNemar test on the discordant pairs, with bootstrap
-$95\%$ CIs over examples reported alongside the seed variance.
+\textbf{Backbones and training.} Qwen3-Omni (primary), Qwen2.5-Omni, and VideoLLaMA2.1-7B-AV, all frozen
+with only the two VIBs trained on $300$ audio-swapped AVE preference pairs for two epochs
+($\lambda_a{=}1$, $\lambda_{kl}{=}2$, $\beta_{kl}{=}0.01$). \textbf{Selection (leakage control).} We select
+checkpoints and hyperparameters on a $300$-example development split of each benchmark and report \emph{all}
+final numbers on the disjoint held-out remainder (AVHBench contributing $n{=}5002$). The rule is the best
+validation hallucination accuracy subject to capability guards
+$\text{PA}\ge\text{PA}_{\text{base}}-0.05$, $\text{HR}\ge\text{HR}_{\text{base}}-0.05$. The ablation
+(Table~\ref{tab:abl}) uses the $300$-example diagnosis split; the global comparison
+(Table~\ref{tab:main}) uses the held-out remainder. \textbf{Answer parsing.} A negation-aware parser maps
+free text to yes/no (e.g.\ ``I did not see a tree''$\,\to\,$``no''); a negation-blind parser had floored
+VideoLLaMA2's resistance, as it answers in full sentences while the Qwen backbones lead with
+``yes''/``no''. We re-derived every metric from saved outputs, which left all Qwen numbers unchanged.
+\textbf{Statistics.} Base and adapted see identical items, so every comparison is a \emph{paired} McNemar
+test on the discordant pairs, with bootstrap $95\%$ CIs and seed variance reported in text.
 
-\subsection{The collapse and the anchor ablation (Qwen3-Omni)}
-\label{sec:abl}
-Table~\ref{tab:abl} reports the selected checkpoint for the four objectives; Table~\ref{tab:collapse}
-reports the end-of-training (step 150) CMM axes to show the collapse dynamics. The naive objective
-(Eq.~\ref{eq:naive}) reduces CMM perception (test) from $0.939$ to $0.015$ by step 150 and the model
-answers a near-constant ``no'' (hallucination-resistance inflates to $1.000$ because denying everything
-trivially avoids hallucination). The chosen anchor alone delays but does not prevent the perception loss
-($0.303$ at step 150). The KL-to-base alone keeps perception near base but loses hallucination-resistance
-($0.655$). Only with both terms does the selected checkpoint keep both axes within tolerance, and it
-also attains the highest AVHBench. All four objectives drift if trained to step 150; selection is
-mid-training.
+\section{Benchmarks}
+\label{sec:bench}
+\textbf{AVHBench}~\cite{avhbench} measures cross-modal hallucination through three yes/no tasks ---
+audio-driven \emph{video} hallucination ($A\!\to\!V$: is a queried object visible?), video-driven
+\emph{audio} hallucination ($V\!\to\!A$: is a queried sound audible?), and audio--video matching; $V\!\to\!A$
+is our direct audio-grounding probe. \textbf{CMM}~\cite{cmm} separates perception accuracy (PA; affirming
+present content) from hallucination resistance (HR; denying absent content), with over-reliance subsets
+(e.g.\ \texttt{overrely\_visual\_ignore\_audio}) that test whether a model ignores one modality for
+another. \textbf{DAVE}~\cite{dave} is an audio--visual multiple-choice diagnostic. As reference points we
+also evaluate two frozen frontier models: Gemini (native audio--visual) and GPT-4o (vision-only, hence
+blind to non-speech sound).
 
-\begin{table}[tb]\centering\small
-\caption{Anchor ablation on Qwen3-Omni (val-selected, test-reported, $n{=}150$). Selected checkpoint =
-highest validation AVHBench with PA and HR within $0.05$ of base on validation. Higher is better.}
-\label{tab:abl}
-\begin{tabular}{lcccccc}
-\toprule
-Objective & $\lambda_a$ & $\lambda_{kl}$ & sel.\ step & AVHBench & CMM-PA & CMM-HR \\
-\midrule
-Frozen base & --- & --- & --- & 0.647 & 0.939 & 0.810 \\
-Naive swap-DPO (Eq.~\ref{eq:naive}) & 0 & 0 & 30 & 0.673 & 0.939 & 0.774 \\
-\quad + chosen anchor only & 1 & 0 & 30 & 0.660 & 0.939 & 0.798 \\
-\quad + KL-to-base only & 0 & 2 & 60 & 0.647 & 0.924 & 0.810 \\
-\quad + both (anchored, ``broad'') & 1 & 2 & 60 & \textbf{0.707} & 0.909 & 0.869 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[tb]\centering\small
-\caption{End-of-training (step 150) CMM axes on Qwen3-Omni (test split), showing the collapse without
-both anchors. PA$\to$0.015 under naive DPO is a near-constant ``no'' (HR $\to$ 1.0 by denying everything).}
-\label{tab:collapse}
-\begin{tabular}{lcc}
-\toprule
-Objective (step 150) & CMM-PA & CMM-HR \\
-\midrule
-Naive swap-DPO & 0.015 & 1.000 \\
-\quad + chosen anchor only & 0.303 & 0.917 \\
-\quad + KL-to-base only & 0.894 & 0.655 \\
-\quad + both (anchored) & 0.848 & 0.476 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Held recipe, seed variation, and rate sweep (Qwen3-Omni)}
+\section{Results and comparisons}
 \label{sec:results}
-Because base and adapted are evaluated on identical test items, we report a paired McNemar test on the
-discordant pairs rather than comparing two independently-noisy point estimates (Table~\ref{tab:seeds}).
-Per seed the test AVHBench gain is $+0.060/+0.020/+0.060$ but only marginal (discordant
-$b/c=5/14,\,7/10,\,5/14$; $p=0.06,\,0.63,\,0.06$); pooled across the three seeds it is significant
-($b{=}17$, $c{=}38$, $p=0.007$), and a bootstrap over test examples gives
-$\Delta=+0.060\,[{+}0.007,{+}0.113]$ for the strongest seed against a base of $0.647\,[0.567,0.727]$. The
-selected model is not collapsed (yes-rate $0.62$ on a balanced probe), and the selection is insensitive to
-the guard threshold (the same checkpoint is chosen at $\mathrm{tol}\in\{0.03,0.05,0.08\}$). The capability
-axes do not move significantly (CMM-PA $-0.030$, $p=0.50$; CMM-HR $+0.060$, $p=0.18$), and we treat these
-as development signals (Section~\ref{sec:setup}). The $\pm0.023$ in Table~\ref{tab:seeds} is seed variance
-only and understates the per-example noise. Table~\ref{tab:beta} sweeps the rate weight $\beta_{kl}$: the
-test AVHBench is comparable across $\{0.01,0.1,1.0\}$ (all $\approx0.70$) while the number of checkpoints
-passing the validation guards increases ($2/5,4/5,5/5$), i.e.\ larger $\beta_{kl}$ buys training stability,
-not accuracy --- consistent with the nominal rate penalty (Section~\ref{sec:interp}). The apparent
-$\beta_{kl}{=}0.1$ advantage under full-set (leaky) selection did not survive the val/test split.
+Table~\ref{tab:main} reports full-set accuracy for every model; significance below is the held-out paired
+McNemar test. The adapter's robust, seed-invariant effect is the audio probe $V\!\to\!A$: it rises on both
+Qwen backbones (Qwen3-Omni $0.787\to0.815$, Qwen2.5-Omni $0.690\to0.780$), significantly on \emph{every}
+seed ($p<0.05$), and the CMM over-reliance subset that tests ignoring audio improves on all three
+backbones --- the model stops ignoring what it hears.
 
-\begin{table}[tb]\centering\small
-\caption{Anchored recipe across three seeds (Qwen3-Omni, val-selected, test-reported, $n{=}150$). Paired
-McNemar vs.\ base on identical items: $b$=base-right/adapted-wrong, $c$=base-wrong/adapted-right. Base test
-AVHBench $=0.647\,[0.567,0.727]$, PA $=0.939$, HR $=0.810$. The $\pm$ row is seed variance only.}
-\label{tab:seeds}
-\begin{tabular}{lccccc}
+The benchmarks then diverge by backbone. On Qwen3-Omni the audio gain comes with a matching gain
+($0.609\to0.693$), so overall AVHBench rises ($0.714\to0.757$, significant held-out, pooled $p<10^{-4}$).
+On Qwen2.5-Omni the audio gain is larger but trades against matching ($0.755\to0.682$), so overall AVHBench
+barely moves ($0.737\to0.754$, neutral when pooled) while audio hallucination-resistance climbs
+(HR $0.512\to0.559$, $p<10^{-4}$): the adapter \emph{redistributes} grounding toward audio rather than
+lifting every axis. On VideoLLaMA2 it instead regresses --- AVHBench $0.715\to0.669$, the audio probe
+$0.766\to0.721$ --- consistent with a weak, separately-aligned audio pathway~\cite{avllm_seehear,fastav}
+that offers little audio signal to exploit. Among the frozen frontier baselines, native-audio Gemini
+reaches $V\!\to\!A{=}0.747$, which adapted Qwen3-Omni ($0.815$) surpasses, while vision-only GPT-4o fails
+the audio probe ($0.510$), as expected.
+
+\begin{table}[tb]\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Global comparison (full-set accuracy; higher is better). Three frozen open backbones, each base
+vs.\ the anchored adapter (``+ours''), and two frozen frontier baselines (Gemini, native audio--visual;
+GPT-4o, vision-only). $V\!\to\!A$ is the video-driven \emph{audio}-hallucination probe (the ``grounds in
+what it hears'' axis); PA/HR are CMM perception accuracy / hallucination resistance. For each open
+backbone the better of base vs.\ ``+ours'' is bold per column; held-out paired-McNemar significance is in
+the text. ``---'' = not run.}
+\label{tab:main}
+\begin{tabular}{l cccc ccc c}
 \toprule
-seed & sel.\ step & AVHBench & CMM-PA & CMM-HR & McNemar $b/c$ ($p$) \\
+& \multicolumn{4}{c}{AVHBench} & \multicolumn{3}{c}{CMM} & \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-8}
+Model & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR & overall & DAVE \\
 \midrule
-0 & 60 & 0.707 & 0.909 & 0.869 & $5/14$ ($0.06$) \\
-1 & 90 & 0.667 & 0.864 & 0.810 & $7/10$ ($0.63$) \\
-2 & 60 & 0.707 & 0.924 & 0.833 & $5/14$ ($0.06$) \\
+Gemini (native AV)    & 0.850 & 0.747 & 0.603 & 0.718 & 0.907 & 0.628 & 0.768 & --- \\
+GPT-4o (vision-only)  & 0.846 & 0.510 & 0.501 & 0.579 & 0.359 & 0.892 & 0.626 & --- \\
 \midrule
-mean$\pm$std & --- & $0.694\pm0.023$ & $0.899\pm0.031$ & $0.837\pm0.030$ & pooled $17/38$ ($\mathbf{0.007}$) \\
+Qwen3-Omni            & 0.739 & 0.787 & 0.609 & 0.714 & \textbf{0.899} & 0.733 & 0.816 & \textbf{0.326} \\
+\quad + ours          & \textbf{0.746} & \textbf{0.815} & \textbf{0.693} & \textbf{0.757} & 0.890 & \textbf{0.743} & 0.816 & 0.318 \\
+Qwen2.5-Omni          & 0.805 & 0.690 & \textbf{0.755} & 0.737 & \textbf{0.917} & 0.512 & 0.715 & 0.246 \\
+\quad + ours          & \textbf{0.820} & \textbf{0.780} & 0.682 & \textbf{0.754} & 0.907 & \textbf{0.559} & \textbf{0.733} & \textbf{0.257} \\
+VideoLLaMA2           & \textbf{0.805} & \textbf{0.766} & \textbf{0.596} & \textbf{0.715} & \textbf{0.617} & 0.657 & 0.637 & \textbf{0.296} \\
+\quad + ours          & 0.732 & 0.721 & 0.567 & 0.669 & 0.615 & \textbf{0.679} & \textbf{0.647} & 0.198 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[tb]\centering\small
-\caption{Rate-weight sweep $\beta_{kl}$ (Qwen3-Omni, anchored ``broad'', seed 0; val-selected,
-test-reported). ``guards pass'' counts how many of the 5 saved checkpoints satisfy both validation
-guards. The test AVHBench is comparable across $\beta_{kl}$ (the apparent $\beta_{kl}{=}0.1$ advantage
-under full-set selection was selection bias), but larger $\beta_{kl}$ is more stable.}
-\label{tab:beta}
-\begin{tabular}{lccccc}
-\toprule
-$\beta_{kl}$ & sel.\ step & AVHBench & CMM-PA & CMM-HR & guards pass \\
-\midrule
-0.01 & 60  & 0.707 & 0.909 & 0.869 & 2/5 \\
-0.1  & 150 & 0.700 & 0.879 & 0.857 & 4/5 \\
-1.0  & 150 & 0.707 & 0.909 & 0.869 & 5/5 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:avhtask} breaks the Qwen3-Omni AVHBench gain down by hallucination type. The improvement is
-positive on all three tasks and concentrates where audio grounding matters most --- the video-driven
-\emph{audio}-hallucination task ($V\!\to\!A$: is the queried sound actually audible?) and audio--video
-matching --- while the audio-driven \emph{video}-hallucination task ($A\!\to\!V$) barely moves, consistent
-with a signal that teaches the model to report the \emph{heard} event. Per-task $n$ is small ($34/68/48$),
-so no single task is individually significant; the breakdown shows where the (pooled-significant) gain
-lives, not per-task significance.
-
-\begin{table}[tb]\centering\small
-\caption{Qwen3-Omni AVHBench gain by hallucination type (val-selected step~$60$, test split; paired McNemar
-vs.\ base on identical items). Per-task $n$ is small, so this shows \emph{where} the gain concentrates, not
-per-task significance --- the overall/pooled result carries the significance (Table~\ref{tab:seeds}).}
-\label{tab:avhtask}
-\begin{tabular}{llcccc}
-\toprule
-AVHBench task & probes & base & adapted & $\Delta$ & McNemar $p$ \\
-\midrule
-$A\!\to\!V$ (audio-driven video hall.) & object visible?    & 0.647 & 0.676 & $+0.029$ & $1.00$ \\
-$V\!\to\!A$ (video-driven audio hall.) & sound audible?     & 0.721 & 0.779 & $+0.059$ & $0.34$ \\
-AV-matching                            & audio/video match? & 0.542 & 0.625 & $+0.083$ & $0.22$ \\
-\midrule
-overall                                & ---                & 0.647 & 0.707 & $+0.060$ & $0.06$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Multi-model results}
-Table~\ref{tab:models} reports all three backbones under the same paired protocol. On Qwen2.5-Omni
-AVHBench rises $0.620\to0.673$, but the paired test is \emph{not} significant (McNemar $b{=}7$, $c{=}15$,
-$p=0.13$; bootstrap $\Delta\,[-0.007,+0.113]$ includes zero); perception is unchanged ($0.939$) and HR
-drifts down $0.619\to0.583$ ($p=0.25$). The relative guard (Section~\ref{sec:setup}) is needed here
-because Qwen2.5's base HR is below the absolute $0.70$ threshold used for Qwen3. We therefore report
-Qwen2.5-Omni as a positive but non-significant trend. On VideoLLaMA2 --- which trains once the numerical
-guards of Section~\ref{sec:impl} are applied --- no axis changes significantly (AVHBench $\Delta-0.053$,
-$p=0.29$; CMM-PA $p=0.63$; CMM-HR $p=1.0$, preserved at $0.92$). Notably the adapter still flips $44$ of
-$150$ AVHBench answers ($b{=}26$, $c{=}18$) but with \emph{no net direction} --- it perturbs the vision
-stream without an audio signal to land on. This is consistent with VideoLLaMA2's weak, separately-aligned
-audio pathway: its audio behavior largely inherits its vision-language base model~\cite{avllm_seehear} and
-its audio tokens prune almost entirely without loss of accuracy~\cite{fastav}. Running the per-token probe
-of Section~\ref{sec:interp} on VideoLLaMA2 --- a direct internal check of ``no audio signal to exploit'',
-i.e.\ whether its audio VIB is also a pass-through --- is the cleanest falsification and we leave it to
-future work. We did not sweep DAVE; base DAVE (MCQ) accuracies are $0.380/0.307/0.357$
-for Qwen3-/Qwen2.5-Omni/VideoLLaMA2. (VideoLLaMA2's high base hallucination-resistance, $0.92$, is the
-corrected measurement of Section~\ref{sec:setup}, ``Answer parsing''; an earlier draft scored it near
-zero.)
-
-\begin{table}[tb]\centering\small
-\caption{All three backbones (AVHBench/CMM val-selected, test-reported, $n{=}150$). The anchored row is the
-validation-selected checkpoint; paired-McNemar significance is in the text (Qwen3-Omni significant pooled,
-Qwen2.5-Omni n.s., VideoLLaMA2 n.s.). DAVE is base-only and omitted (see text).}
-\label{tab:models}
-\begin{tabular}{lccc}
-\toprule
-& AVHBench & CMM-PA & CMM-HR \\
-\midrule
-Qwen3-Omni base        & 0.647 & 0.939 & 0.810 \\
-Qwen3-Omni anchored    & \textbf{0.707} & 0.909 & 0.869 \\
-Qwen2.5-Omni base      & 0.620 & 0.939 & 0.619 \\
-Qwen2.5-Omni anchored  & 0.673 & 0.939 & 0.583 \\
-VideoLLaMA2 base       & 0.667 & 0.742 & 0.917 \\
-VideoLLaMA2 anchored   & 0.613 & 0.712 & 0.929 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Beyond the aggregate numbers, Figure~\ref{fig:qual} shows the failure directly. On held-out AVE clips
-whose audio we have swapped so the seen and heard events differ, the frozen base answers ``which event do
-you hear?'' from the \emph{video} --- naming the object it sees and ignoring the sound --- while the
-adapted model reports the actual overlaid sound.
+The Qwen3-Omni gain is stable across three seeds (significant individually for two of three and pooled,
+$p<10^{-4}$), though it reflects the validation-selected checkpoint rather than a monotone improvement.
+Figures~\ref{fig:qual} and~\ref{fig:avhqual} show the behavior directly: on swapped clips the base answers
+from the video while the adapter reports the overlaid sound, and on AVHBench it stops affirming objects and
+sounds that are only implied.
 
 \begin{figure}[tb]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
@@ -406,16 +251,11 @@ adapted model reports the actual overlaid sound.
 \exrow{as_mandolin}{\emph{see:} mandolin\quad\textbf{heard (overlaid): horse}}%
   {``Which event do you hear?''}{``mandolin''}{``horse''}
 \end{tabular}
-\caption{The audio-grounding failure our method targets, on held-out AVE clips. We overlay a different
-event's audio so the seen event (the video, shown as frames) differs from the heard event (the overlaid
-sound). Asked which event it hears, the frozen base answers from the \emph{video} --- it names the seen
-object and ignores the sound ($\times$, red) --- while the adapted model reports the actual overlaid sound
-($\checkmark$, green). Real Qwen3-Omni multiple-choice answers (base $=$ bottleneck bypassed, ours $=$ the
-selected checkpoint).}
+\caption{The targeted failure, on held-out AVE clips whose audio is swapped so the seen and heard events
+differ. Asked what it hears, the frozen base names the \emph{seen} object ($\times$, red); the adapter
+reports the overlaid sound ($\checkmark$, green). Real Qwen3-Omni answers (base $=$ bottleneck bypassed).}
 \label{fig:qual}
 \end{figure}
-
-On the benchmark itself, Figure~\ref{fig:avhqual} gives one corrected example per AVHBench task.
 
 \begin{figure}[tb]\centering
 \setlength{\tabcolsep}{2pt}\renewcommand{\arraystretch}{1.25}
@@ -427,64 +267,75 @@ On the benchmark itself, Figure~\ref{fig:avhqual} gives one corrected example pe
 \exrow{avh_match}{\textbf{audio--video matching}}%
   {``Do the audio and video match?'' --- they do not.}{``Yes''}{``No''}
 \end{tabular}
-\caption{AVHBench cross-modal hallucinations our method corrects, one per task (held-out clips; frozen
-base vs.\ the selected Qwen3-Omni checkpoint). In each the gold answer is ``No'' but the base answers
-``Yes'' ($\times$, red) and the adapter answers ``No'' ($\checkmark$, green): for audio$\to$video it
-affirms an object that is only heard, for video$\to$audio a sound that is only seen, and for matching it
-calls mismatched streams corresponding.}
+\caption{One corrected AVHBench case per task (held-out; Qwen3-Omni). The gold answer is ``No''; the base
+hallucinates ``Yes'' ($\times$, red) and the adapter answers ``No'' ($\checkmark$, green).}
 \label{fig:avhqual}
 \end{figure}
 
-\subsection{What the trained bottleneck does}
-\label{sec:interp}
-A forward-pass probe of the held Qwen3-Omni checkpoint reads each VIB's per-token rate (KL in bits) and
-edit magnitude ($\|W_{\text{out}}z\|/\|x\|$); Table~\ref{tab:interp} reports averages over 8 clips. The
-vision VIB rewrites the vision tokens substantially ($\sim$59\% of each token's magnitude, spread across
-all tokens) while the audio VIB is close to a pass-through (its small edit is a constant bias; its rate is
-near zero). The grounding is thus achieved by reshaping the vision stream rather than by modifying audio;
-because each VIB is per-modality, this transform is unconditional and the conflict resolution occurs in
-the frozen language model. The vision rate ($\sim$640 bits/token) is large relative to the loss weight
-$\beta_{kl}{=}0.01$ applied to the \emph{mean} rate, i.e. the bottleneck is weakly compressed at this
-setting --- consistent with the $\beta_{kl}$ sweep, where larger weights stabilize training.
+\section{Ablations}
+\label{sec:abl}
+Table~\ref{tab:abl} isolates the two anchors on Qwen3-Omni. The naive objective (Eq.~\ref{eq:naive})
+collapses the model: trained to convergence it drives CMM perception from $0.939$ to $0.015$, answering
+``no'' to everything --- which trivially inflates hallucination-resistance to $1.0$. The chosen anchor
+alone only delays the perception loss (to $0.303$); the KL-to-base alone holds perception but loses
+resistance ($0.655$). Only \emph{both} terms keep perception and resistance near base while attaining the
+best hallucination accuracy. All objectives drift if trained too long, so selection takes the checkpoint
+before the drift; the choice is insensitive to the guard threshold. Sweeping the rate weight
+$\beta_{kl}\in\{0.01,0.1,1.0\}$ leaves hallucination accuracy near $0.70$ throughout while larger weights
+pass more validation guards --- the rate penalty buys training stability, not accuracy.
 
 \begin{table}[tb]\centering\small
-\caption{Per-token VIB statistics of the held Qwen3-Omni checkpoint (8 clips).}
-\label{tab:interp}
-\begin{tabular}{lccc}
+\caption{Anchor ablation on Qwen3-Omni (validation-selected). Both terms are necessary: the chosen anchor
+alone still loses perception accuracy (PA) and the KL-to-base alone loses hallucination resistance (HR);
+only ``both'' keeps PA and HR near base while attaining the best hallucination accuracy.}
+\label{tab:abl}
+\begin{tabular}{lccccc}
 \toprule
-modality & rate (bits/tok) & edit $\|\Delta\|/\|x\|$ & top-10\% of rate \\
+Objective & $\lambda_a$ & $\lambda_{kl}$ & AVHBench & CMM-PA & CMM-HR \\
 \midrule
-vision & $\sim$640 & $\sim$59\% & $\sim$27\% \\
-audio  & $\sim$0.17 & $\sim$11\% (constant bias) & --- \\
+Frozen base                 & --- & --- & 0.647 & 0.939 & 0.810 \\
+Naive swap-DPO (Eq.~\ref{eq:naive}) & 0 & 0 & 0.673 & 0.939 & 0.774 \\
+\quad + chosen anchor only  & 1 & 0 & 0.660 & 0.939 & 0.798 \\
+\quad + KL-to-base only      & 0 & 2 & 0.647 & 0.924 & 0.810 \\
+\quad + both (anchored, ours) & 1 & 2 & \textbf{0.707} & 0.909 & 0.869 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Limitations}
-The evaluation uses $300$-example subsets split $150/150$ (validation for selection, test for reporting),
-so test metrics are on $n{=}150$; we therefore lead with paired McNemar tests and bootstrap CIs rather than
-bare point estimates, and report seed variance separately. The grounding gain is modest: significant only
-when pooled across three seeds on Qwen3-Omni ($p=0.007$; marginal per seed), a non-significant trend on
-Qwen2.5-Omni, and null on VideoLLaMA2. It is the validation-selected checkpoint, not a monotone training
-improvement --- all recipes drift if trained longer. As stated in Section~\ref{sec:setup}, the broad
-anchor was designed after inspecting CMM failures, so CMM is a development signal and a residual
-test-informed-design risk remains. The information-bottleneck framing is partly nominal: at
-$\beta_{kl}{=}0.01$ the rate penalty is weak and the learned transform reshapes the vision stream rather
-than compressing audio. We audit clip-id overlap between the AVE training pool and the three benchmarks to
-check dataset-level leakage. Finally, the audio-swap signal is synthetic, the benchmarks are yes/no-heavy
-(the regime where likelihood displacement bites), and the training set is small ($300$ pairs, two epochs);
-a larger-data replication and a non-yes/no (open-ended) slice are the natural next checks.
+\section{Discussion}
+\label{sec:interp}
+\textbf{Where the change happens.} A forward-pass probe reads each VIB's per-token rate and edit magnitude
+$\|W_{\text{out}}z\|/\|x\|$. The vision VIB rewrites its tokens substantially ($\sim$59\% of each token's
+magnitude) while the audio VIB is almost a pass-through (a small constant bias, near-zero rate). Grounding
+is therefore achieved by reshaping the \emph{vision} stream, not by editing audio; since each VIB is
+per-modality and unconditional, the conflict is resolved inside the frozen language model. The vision rate
+($\sim$640 bits/token) is large against the loss weight $\beta_{kl}{=}0.01$, so the bottleneck is weakly
+compressed --- which matches the rate sweep and suggests the variational machinery is, at this operating
+point, close to a learned residual transform.
 
-\section{Conclusion}
-The robust, transferable result of this paper is a diagnosis and a fix: naive preference optimization of a
-frozen AV-LLM's adapter streams collapses the model via likelihood displacement, and a two-anchor loss
-(a chosen-likelihood anchor plus a KL-to-base on general inputs) prevents it, with an ablation showing
-both terms are necessary. The downstream grounding effect is smaller and backbone-dependent --- a
-significant (pooled) but modest AVHBench gain on Qwen3-Omni, a non-significant trend on Qwen2.5-Omni, and
-no effect on VideoLLaMA2, which under-uses audio. A per-token probe shows the learned transform mostly
-reshapes the vision stream, so the conflict is resolved inside the frozen language model and the
-bottleneck's rate penalty is nominal at our operating point. We release the diagnosis, the recipe, the
-monitoring, selection, and paired-statistics protocol, and the numerical fixes.
+\textbf{Related work.} DPO~\cite{dpo} maximizes a log-sigmoid of the chosen$-$rejected log-probability gap;
+that gap can widen while the \emph{preferred} probability falls (``likelihood displacement''~\cite{razin}),
+worst when the responses are near-identical, and DPO-Positive~\cite{dpop} adds a floor on the chosen term.
+DPO's KL constraint is implicit and acts only on the pairs~\cite{dpovsppo}. mDPO~\cite{mdpo} reports the
+analogous multimodal failure --- the model ignores the image as its chosen likelihood drops --- and adds a
+conditional term and reward anchor; our chosen anchor follows the same principle with audio as the
+conditioning modality. Capability-retention work motivates the explicit KL-to-base~\cite{instructgpt,gao}
+and held-out selection~\cite{ivison}. The variational IB~\cite{vib} trades sufficiency against a rate
+penalty, and Vittle~\cite{vittle} applies one to multimodal-LLM hidden states; we place a per-modality VIB
+on adapter outputs.
+
+\textbf{Limitations.} The effect is the validation-selected checkpoint, not a monotone improvement, and it
+is backbone-dependent (Section~\ref{sec:results}). The ``broad'' anchor was designed by inspecting CMM
+failures, so CMM is a development signal and a residual test-informed-design risk remains. The
+information-bottleneck framing is partly nominal at $\beta_{kl}{=}0.01$. Finally, the audio-swap signal is
+synthetic, the benchmarks are yes/no-heavy (the regime where likelihood displacement bites), and the
+training set is small; a larger-data replication and an open-ended slice are the natural next checks.
+
+\textbf{Conclusion.} Preference-optimizing a frozen AV-LLM's adapter streams collapses the model via
+likelihood displacement; a two-anchor loss --- a chosen-likelihood floor and a KL-to-base on general
+inputs --- prevents it, with both terms necessary. The resulting adapter redirects grounding toward audio
+to a backbone-dependent degree, realized by reshaping the vision stream inside the frozen model. We release
+the diagnosis, the recipe, and the monitoring, selection, and paired-statistics protocol.
 
 {\small
 \begin{thebibliography}{99}

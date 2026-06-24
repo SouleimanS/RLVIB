@@ -23,7 +23,10 @@ mkdir -p "$PBS_O_WORKDIR/runs"
 
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
 conda activate "${CONDA_ENV:-rlvib}"
-export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+# Do NOT export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:..." -- conda's OpenSSL then shadows the system
+# one and crashes the Qwen media/import path (the same EVP_md2 symbol-lookup error that breaks
+# system git). torch finds its bundled CUDA libs via RPATH, so it isn't needed -- verified: the
+# interactive smoke runs Qwen fine without it. See CLAUDE.md "Gotcha".
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRANSFORMERS_OFFLINE=1
@@ -33,16 +36,24 @@ CMM_JSON="${CMM_JSON:-$PWD/data/CMM/cmm.json}"
 CMM_ROOT="${CMM_ROOT:-$PWD/data/CMM}"
 BN_ARG=""
 if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
+# audio-aware contrastive decoding (composes with the bottleneck); tag the output so a CD
+# run never overwrites the plain/bottleneck JSON. AUDIO_CD unset/0 => byte-identical to before.
+if awk "BEGIN{exit !(${AUDIO_CD:-0} > 0)}"; then TAG="${TAG}_cd${AUDIO_CD}"; fi
+# video fps for the Qwen frame sampler (FPS=1 matches the standalone harness); Qwen models only.
+FPS_ARG=""
+case "${MODEL:-qwen3-omni}" in
+    qwen3-omni|qwen2.5-omni) [ -n "${FPS:-}" ] && FPS_ARG="--fps $FPS";;
+esac
 
-echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none} ==="
+echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none}  audio_cd=${AUDIO_CD:-0} ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/cmm_baseline${TAG}_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/cmm_${MODEL:-qwen3-omni}${TAG}_out.txt") 2>&1
 
-python -u -m rlvib.eval.run_cmm \
-    --model "${MODEL:-qwen3-omni}" \
-    --json-path "$CMM_JSON" --data-root "$CMM_ROOT" \
-    --limit "${LIMIT:-100}" $BN_ARG \
-    --out "runs/cmm_${MODEL:-qwen3-omni}${TAG}.json"
+python -u scripts/run_cmm_autoskip.py \
+    --out "runs/cmm_${MODEL:-qwen3-omni}${TAG}.json" \
+    --json "$CMM_JSON" --root "$CMM_ROOT" \
+    -- --model "${MODEL:-qwen3-omni}" --limit "${LIMIT:-100}" $BN_ARG $FPS_ARG \
+       --audio-cd "${AUDIO_CD:-0}" --cd-plausibility "${CD_PLAUSIBILITY:-0.1}"
 
 echo "=== Done $(date) ==="
