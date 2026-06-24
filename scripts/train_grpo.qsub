@@ -37,7 +37,7 @@ python -u scripts/train_grpo.py --model "${MODEL:-qwen3-omni}" \
     --pairs "${PAIRS:-300}" --epochs "${EPOCHS:-2}" --accum "${ACCUM:-1}" \
     --group "${GROUP:-8}" --lr "${LR:-5e-5}" --beta-kl "${BETAKL:-0.01}" \
     --lam-ref "${LAMREF:-0.05}" --seed "${SEED:-0}" --eval-every "${EVALEVERY:-10}" \
-    ${ABSTAIN:+--abstain-token "$ABSTAIN"} \
+    ${ABSTAIN:+--abstain-token "$ABSTAIN"} ${STD_ADV:+--std-adv} \
     --save-dir "runs/anchored_${MODEL:-qwen3-omni}_grpo"
 
 echo "=== Done $(date) ==="

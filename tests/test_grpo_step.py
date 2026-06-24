@@ -98,6 +98,17 @@ def test_grpo_step_two_way_no_abstain():
     assert -1.0 <= m["reward"] <= 1.0
 
 
+def test_grpo_step_drgrpo_advantage():
+    """Dr. GRPO path (std_norm=False, mean-centered advantage) runs and moves the bottleneck."""
+    model, bns, opt = _setup()
+    before = [p.detach().clone() for p in bns.parameters()]
+    m = grpo_step(model, bns, opt, _batch(), group=8, std_norm=False)
+    for v in m.values():
+        assert v == v and abs(v) < 1e6
+    moved = sum(float((a.detach() - b).abs().sum()) for a, b in zip(bns.parameters(), before))
+    assert moved > 0.0
+
+
 def test_grpo_step_restores_eval_mode():
     """A step taken from eval() must leave the bottlenecks back in eval() (sampling is internal)."""
     model, bns, opt = _setup()

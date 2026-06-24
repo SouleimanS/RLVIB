@@ -181,7 +181,7 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
 
 def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: float = 0.01,
               lam_ref: float = 0.05, r_correct: float = 1.0, r_abstain: float = 0.0,
-              r_halluc: float = -1.0) -> dict:
+              r_halluc: float = -1.0, std_norm: bool = True) -> dict:
     """One GRPO step over the trainable bottleneck on yes/no grounding items.
 
     Each ex = {messages, gold ('yes'|'no'), yes_id, no_id[, abstain_id]}. Per example we draw
@@ -199,6 +199,10 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
     A_i = (r_i - mean)/std is monotonic in raw reward, abstention always out-advantages a wrong
     "confident" answer, so the policy is pushed to abstain-when-unsure rather than hallucinate.
     Omit `abstain_id` for plain 2-way yes/no (reward collapses to +1/-1).
+
+    Advantage: A_i = r_i - mean(r), optionally /(std(r)+eps). `std_norm=False` is the Dr. GRPO
+    ("GRPO Done Right", arXiv:2503.20783) correction -- dividing by std biases the gradient toward
+    low-variance (too-easy/too-hard) groups. Length normalization is N/A here (single-token answers).
 
     KEY RISK (see the memo): if every sample in a group lands the same reward, the advantage is
     ~0 and the policy-gradient term vanishes -- watch `adv_std`. `kl_vib` -> 0 means the sampler is
@@ -236,7 +240,9 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
                                else (r_abstain if label == "abstain" else r_halluc))
 
         r = torch.tensor(rewards, dtype=torch.float32, device=lp.device)
-        adv = (r - r.mean()) / (r.std() + 1e-6)             # group-relative advantage
+        adv = r - r.mean()                                  # group-relative advantage (mean-centered)
+        if std_norm:                                        # classic GRPO; Dr. GRPO drops /std (it
+            adv = adv / (r.std() + 1e-6)                     # over-weights low-variance groups -> bias)
 
         with torch.no_grad():                               # reference = bottleneck bypassed (base)
             set_bypass(bottlenecks, True)

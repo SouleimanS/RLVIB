@@ -95,6 +95,9 @@ def main() -> int:
     ap.add_argument("--r-correct", type=float, default=1.0)
     ap.add_argument("--r-abstain", type=float, default=0.0)
     ap.add_argument("--r-halluc", type=float, default=-1.0)
+    ap.add_argument("--std-adv", action="store_true",
+                    help="use classic GRPO std-normalized advantage; default is Dr. GRPO "
+                         "mean-centering (drops the /std bias toward low-variance groups)")
     ap.add_argument("--yn-suffix", default=" Answer yes or no.",
                     help="answer-format suffix (match the eval harness default)")
     ap.add_argument("--eval-every", type=int, default=10)
@@ -146,7 +149,8 @@ def main() -> int:
                 batch.append(ex)
             mt = grpo_step(m, bns, opt, batch, group=args.group, beta_kl=args.beta_kl,
                            lam_ref=args.lam_ref, r_correct=args.r_correct,
-                           r_abstain=args.r_abstain, r_halluc=args.r_halluc)
+                           r_abstain=args.r_abstain, r_halluc=args.r_halluc,
+                           std_norm=args.std_adv)
             step += 1
             pbar.update(1)
             pbar.set_postfix(ep=epoch, **{k: f"{v:+.3f}" for k, v in mt.items()})
