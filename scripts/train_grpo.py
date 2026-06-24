@@ -74,16 +74,19 @@ def main() -> int:
     # device_map="auto", makes the MoE grouped_mm fail ("tensors on cuda:0 vs cuda:1" -> crash).
     # Keep only the first visible GPU (matches eval_one.sh). Choose which with CUDA_VISIBLE_DEVICES=N.
     os.environ["CUDA_VISIBLE_DEVICES"] = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[0]
+    # expandable_segments cuts allocator fragmentation across steps (the OOM the qsub avoided);
+    # set it here too so a bare `python scripts/train_grpo.py` gets it. Must precede CUDA init.
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--pairs", type=int, default=300, help="# yes/no training items")
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--accum", type=int, default=1,
                     help="items per optimizer step (each item does --group forwards)")
-    ap.add_argument("--group", type=int, default=4,
-                    help="GRPO group size = stochastic forwards per item, all held in memory until "
-                         "the group's advantages are computed. 4 fits qwen3-omni (30B) on one H200 "
-                         "(~102GB peak); 8 OOMs. Smaller backbones (7B) can go higher.")
+    ap.add_argument("--group", type=int, default=8,
+                    help="GRPO group size = samples per item. grpo_step is two-phase/fixed-eps, so "
+                         "peak memory is ~1 forward graph regardless of group (cost is ~2x forwards). "
+                         "Larger groups => less-noisy advantages; raise freely if step time allows.")
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--beta-kl", type=float, default=0.01, help="VIB compression-KL weight")
     ap.add_argument("--lam-ref", type=float, default=0.05, help="KL(base||policy) anchor weight")

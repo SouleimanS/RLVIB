@@ -15,7 +15,11 @@ pytest.importorskip("torch")
 import torch  # noqa: E402
 import torch.nn as nn  # noqa: E402
 
-from rlvib.models.bottleneck import VariationalBottleneck  # noqa: E402
+from rlvib.models.bottleneck import (  # noqa: E402
+    VariationalBottleneck,
+    capture_eps,
+    set_forced_eps,
+)
 from rlvib.train.dpo import grpo_step  # noqa: E402
 
 DIM, VOCAB = 16, 32
@@ -100,3 +104,25 @@ def test_grpo_step_restores_eval_mode():
     bns.eval()
     grpo_step(model, bns, opt, _batch(), group=4)
     assert not bns.training
+
+
+def test_forced_eps_replays_deterministically():
+    """Pinning eps must reproduce the exact z/logits (the fixed-eps replay grpo_step relies on)."""
+    torch.manual_seed(0)
+    bns = nn.ModuleDict({"audio": VariationalBottleneck(DIM), "vision": VariationalBottleneck(DIM)})
+    for b in bns.values():
+        nn.init.normal_(b.out.weight, std=0.1)   # un-zero the residual so eps reaches the output
+    bns.train()
+    x = torch.randn(1, 1, DIM)
+
+    y1 = torch.stack([b(x) for b in bns.values()])      # free-running sample
+    eps = capture_eps(bns)
+    assert set(eps) == {"audio", "vision"}
+
+    set_forced_eps(bns, eps)                             # replay -> identical output
+    y2 = torch.stack([b(x) for b in bns.values()])
+    assert torch.allclose(y1, y2, atol=1e-6)
+
+    set_forced_eps(bns, None)                            # cleared -> resamples (differs)
+    y3 = torch.stack([b(x) for b in bns.values()])
+    assert not torch.allclose(y1, y3, atol=1e-6)

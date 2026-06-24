@@ -79,6 +79,8 @@ class VariationalBottleneck(nn.Module):
         self.normalize_input = normalize_input
         self.bypass = False
         self.last_kl = None
+        self.last_eps = None       # the reparam noise z used last forward (for fixed-eps replay)
+        self._forced_eps = None    # if set (and shape-matching), reuse this noise instead of sampling
         self.last_kl_per_token = None  # (..., T) bits the bottleneck allocates per token
         self.last_residual_per_token = None    # (..., T) ||out(z)|| -> actual edit magnitude
         self.last_input_norm_per_token = None  # (..., T) ||x||      -> for the relative edit
@@ -95,7 +97,17 @@ class VariationalBottleneck(nn.Module):
             h = self.act(self.enc(enc_in))
             mu = self.to_mu(h)
             logvar = self.to_logvar(h).clamp(-8.0, 8.0)
-            z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
+            if self.training:
+                # reuse a pinned eps when replaying a sample (fixed-eps GRPO -> the gradient
+                # forward matches the sampling forward); else draw fresh reparam noise.
+                if self._forced_eps is not None and self._forced_eps.shape == mu.shape:
+                    eps = self._forced_eps.to(mu.dtype)
+                else:
+                    eps = torch.randn_like(mu)
+                self.last_eps = eps.detach()
+                z = mu + eps * torch.exp(0.5 * logvar)
+            else:
+                z = mu
             kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
             self.last_kl = kl_elem.mean()                       # scalar rate for the IB loss
             if os.environ.get("RLVIB_VIB_DEBUG"):
@@ -156,6 +168,21 @@ def set_bypass(bottlenecks, on: bool) -> None:
     """Toggle pass-through (identity) on all bottlenecks — used for the DPO reference."""
     for b in bottlenecks.values():
         b.bypass = on
+
+
+def capture_eps(bottlenecks):
+    """Snapshot the reparam noise each bottleneck used in its last forward (fixed-eps GRPO)."""
+    return {k: b.last_eps for k, b in bottlenecks.items() if getattr(b, "last_eps", None) is not None}
+
+
+def set_forced_eps(bottlenecks, eps_map) -> None:
+    """Pin each bottleneck's next-forward reparam noise to `eps_map[name]` (None per key = resample).
+
+    Pass None to clear all (free-running sampling). Used to replay a sampled GRPO action's noise so
+    the gradient forward reproduces the sampling forward without holding every group graph at once.
+    """
+    for k, b in bottlenecks.items():
+        b._forced_eps = (eps_map or {}).get(k)
 
 
 def load_attached(model, ckpt_path):

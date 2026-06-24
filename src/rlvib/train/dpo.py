@@ -16,7 +16,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from rlvib.models.bottleneck import set_bypass, total_kl
+from rlvib.models.bottleneck import capture_eps, set_bypass, set_forced_eps, total_kl
 
 
 def answer_logp_vec(model, messages, use_audio_in_video: bool = True):
@@ -203,6 +203,11 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
     KEY RISK (see the memo): if every sample in a group lands the same reward, the advantage is
     ~0 and the policy-gradient term vanishes -- watch `adv_std`. `kl_vib` -> 0 means the sampler is
     collapsing to deterministic (exploration dying). Returns mean metrics.
+
+    Memory: two-phase / fixed-eps. Phase A samples all `group` actions under no_grad (capturing
+    each forward's VIB noise); phase B replays each sample's noise WITH grad and backward()s it
+    immediately, so peak memory is ONE forward graph regardless of `group` (the gradient is
+    identical to building all group graphs at once -- the eps is held fixed per sample).
     """
     optimizer.zero_grad()
     was_training = bottlenecks.training
@@ -215,42 +220,56 @@ def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: 
             cands.append(("abstain", ex["abstain_id"]))
         ids = [i for _, i in cands]
 
-        logps, rewards, kls = [], [], []
-        lp = None
-        for _ in range(group):                              # the GRPO group (fresh z per pass)
-            set_bypass(bottlenecks, False)                  # policy
-            lp = answer_logp_vec(model, ex["messages"])
-            kls.append(total_kl(bottlenecks))
-            cat = torch.log_softmax(lp[ids], dim=0)         # categorical over candidate answers
-            a = int(torch.distributions.Categorical(logits=cat.detach()).sample())
-            logps.append(cat[a])                            # log pi(a_i | x, z_i)  [keeps grad]
-            label = cands[a][0]
-            rewards.append(r_correct if label == gold
-                           else (r_abstain if label == "abstain" else r_halluc))
+        # Phase A: sample `group` actions + rewards under no_grad, snapshotting each VIB noise.
+        eps_list, actions, rewards = [], [], []
+        set_forced_eps(bottlenecks, None)                   # free-running sampling
+        with torch.no_grad():
+            for _ in range(group):
+                set_bypass(bottlenecks, False)
+                lp = answer_logp_vec(model, ex["messages"])
+                eps_list.append(capture_eps(bottlenecks))
+                cat = torch.log_softmax(lp[ids], dim=0)
+                a = int(torch.distributions.Categorical(logits=cat).sample())
+                actions.append(a)
+                label = cands[a][0]
+                rewards.append(r_correct if label == gold
+                               else (r_abstain if label == "abstain" else r_halluc))
 
         r = torch.tensor(rewards, dtype=torch.float32, device=lp.device)
         adv = (r - r.mean()) / (r.std() + 1e-6)             # group-relative advantage
-        kl_vib = sum(k for k in kls if torch.is_tensor(k)) / max(1, len(kls))
-        if not torch.is_tensor(kl_vib):                     # all bottlenecks bypassed / no KL
-            kl_vib = torch.zeros((), device=lp.device)
 
         with torch.no_grad():                               # reference = bottleneck bypassed (base)
             set_bypass(bottlenecks, True)
             base = answer_logp_vec(model, ex["messages"])
             set_bypass(bottlenecks, False)
-        kl_ref = (base.exp() * (base - lp)).sum()           # KL(base || policy) at the answer pos
 
-        pg = -(adv.detach() * torch.stack(logps)).mean()    # GRPO policy-gradient
-        (pg + beta_kl * kl_vib + lam_ref * kl_ref).backward()
+        # Phase B: replay each sample's eps WITH grad and backward immediately (one live graph).
+        kls_b, krefs_b = [], []
+        for i in range(group):
+            set_forced_eps(bottlenecks, eps_list[i])
+            lp = answer_logp_vec(model, ex["messages"])
+            kl_vib = total_kl(bottlenecks)
+            if not torch.is_tensor(kl_vib):
+                kl_vib = torch.zeros((), device=lp.device)
+            cat = torch.log_softmax(lp[ids], dim=0)
+            logp = cat[actions[i]]                          # log pi(a_i | x, z_i)  [keeps grad]
+            kl_ref = (base.exp() * (base - lp)).sum()       # KL(base || policy) at the answer pos
+            # mean over the group: pg = mean_i(-adv_i*logp_i); kl terms averaged too
+            loss_i = (-(adv[i].detach() * logp) + beta_kl * kl_vib + lam_ref * kl_ref) / group
+            loss_i.backward()
+            kls_b.append(float(kl_vib.detach()))
+            krefs_b.append(float(kl_ref.detach()))
+        set_forced_eps(bottlenecks, None)
 
         rewards_m.append(float(r.mean()))
         advstd_m.append(float(r.std()))
-        klvib_m.append(float(kl_vib.detach()))
-        klref_m.append(float(kl_ref.detach()))
+        klvib_m.append(sum(kls_b) / max(1, len(kls_b)))
+        klref_m.append(sum(krefs_b) / max(1, len(krefs_b)))
         pcorrect_m.append(float((r == r_correct).float().mean()))
 
     torch.nn.utils.clip_grad_norm_(bottlenecks.parameters(), max_norm=1.0)
     optimizer.step()
+    set_forced_eps(bottlenecks, None)
     if not was_training:
         bottlenecks.eval()
     n = max(1, len(batch))
