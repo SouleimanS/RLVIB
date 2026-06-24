@@ -120,7 +120,8 @@ def main() -> int:
     rng = random.Random(args.seed)
     rng.shuffle(items)
     train_items = items[:args.pairs]
-    probe = [_yesno_item(m, it, cats, random.Random(1), args.yn_suffix) for it in items[400:440]]
+    probe_rng = random.Random(1)   # ONE rng across the probe -> balanced yes/no (not all-same)
+    probe = [_yesno_item(m, it, cats, probe_rng, args.yn_suffix) for it in items[400:440]]
     print(f"train items: {len(train_items)} | probe: {len(probe)} | group={args.group} | "
           f"abstain={'on(' + args.abstain_token + ')' if abstain_id is not None else 'off'}", flush=True)
 
