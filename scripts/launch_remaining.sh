@@ -18,6 +18,33 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p runs/launchlogs
+EXP="${EXP:-broad}"
+
+# Unify naming: some full-set runs were written under smoke_* filenames (e.g. qwen2.5-omni's
+# base/broad@60/broad@150 are real full runs, just misnamed). make_table ranks sysfull>full>smoke,
+# so copy those smoke_* JSONs to the canonical sysfull names and the cells report as a complete
+# source instead of 'smoke'. Non-destructive: cp only, and never clobbers an existing sysfull file.
+# Override with UNIFY_MODEL= / UNIFY_STEPS= ; set UNIFY_MODEL= empty to skip.
+_cp_pair() {  # $1=src smoke json   $2=dst sysfull json
+    [ -f "$1" ] || { echo "  unify: skip (no $1)"; return 0; }
+    [ -e "$2" ] && { echo "  unify: keep existing $2"; return 0; }
+    cp "$1" "$2" && echo "  unify: $1 -> $2"
+}
+unify_names() {
+    local M="${UNIFY_MODEL-qwen2.5-omni}" s
+    [ -n "$M" ] || { echo "unify_names: UNIFY_MODEL empty -> skip"; return 0; }
+    echo "=== unify naming for $M (smoke_* full runs -> sysfull) ==="
+    for s in ${UNIFY_STEPS:-base 60 150}; do
+        if [ "$s" = base ]; then
+            _cp_pair "runs/smoke_avh_${M}.json"               "runs/avhbench_${M}_sysfull.json"
+            _cp_pair "runs/smoke_cmm_${M}.json"               "runs/cmm_${M}_sysfull.json"
+        else
+            _cp_pair "runs/smoke_avh_${M}_${EXP}_step${s}.json" "runs/avhbench_${M}_${EXP}_sysfull_step${s}.json"
+            _cp_pair "runs/smoke_cmm_${M}_${EXP}_step${s}.json" "runs/cmm_${M}_${EXP}_sysfull_step${s}.json"
+        fi
+    done
+}
+unify_names
 
 echo "remaining-eval launcher: 5 configs across GPUs 0-4. logs -> runs/launchlogs/*.log"
 
