@@ -177,3 +177,83 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
     n, m = max(1, len(swap_batch)), max(1, len(anchor_batch))
     return {"loss": sum(losses) / n, "margin": sum(margins) / n, "p_chosen": sum(prefs) / n,
             "anchor": sum(anchors) / n, "chosen_minus_ref": sum(cmr) / n, "gen_kl": sum(gkls) / m}
+
+
+def grpo_step(model, bottlenecks, optimizer, batch, *, group: int = 8, beta_kl: float = 0.01,
+              lam_ref: float = 0.05, r_correct: float = 1.0, r_abstain: float = 0.0,
+              r_halluc: float = -1.0) -> dict:
+    """One GRPO step over the trainable bottleneck on yes/no grounding items.
+
+    Each ex = {messages, gold ('yes'|'no'), yes_id, no_id[, abstain_id]}. Per example we draw
+    `group` stochastic VIB passes (the model is in train() mode, so z = mu + sigma*eps differs
+    each pass -- this IS the exploration; with W_out zero-init the *value* is base at init but the
+    gradient w.r.t. the adapter is not), sample an answer from the candidate tokens, score it with
+    a verifiable ternary reward, group-normalize to advantages, and apply the GRPO policy-gradient
+    to the bottleneck params (grad flows through the realized z via reparameterization). Two extra
+    terms regularize, matching docs/research/grpo-vib.md: `beta_kl * KL_VIB` (the bottleneck's own
+    compression rate) and `lam_ref * KL(base || policy)` on the answer distribution (the IBL-style
+    / GRPO reference-KL anchor against adapter drift off the frozen base -- same form as
+    anchored_dpo_step's `gen_kl`).
+
+    Ternary reward (TruthRL): +1 correct, 0 abstain, -1 hallucinate -> because the group advantage
+    A_i = (r_i - mean)/std is monotonic in raw reward, abstention always out-advantages a wrong
+    "confident" answer, so the policy is pushed to abstain-when-unsure rather than hallucinate.
+    Omit `abstain_id` for plain 2-way yes/no (reward collapses to +1/-1).
+
+    KEY RISK (see the memo): if every sample in a group lands the same reward, the advantage is
+    ~0 and the policy-gradient term vanishes -- watch `adv_std`. `kl_vib` -> 0 means the sampler is
+    collapsing to deterministic (exploration dying). Returns mean metrics.
+    """
+    optimizer.zero_grad()
+    was_training = bottlenecks.training
+    bottlenecks.train()                                     # ensure z = mu + sigma*eps (sampling)
+    rewards_m, advstd_m, klvib_m, klref_m, pcorrect_m = [], [], [], [], []
+    for ex in batch:
+        gold = ex["gold"]
+        cands = [("yes", ex["yes_id"]), ("no", ex["no_id"])]
+        if ex.get("abstain_id") is not None:
+            cands.append(("abstain", ex["abstain_id"]))
+        ids = [i for _, i in cands]
+
+        logps, rewards, kls = [], [], []
+        lp = None
+        for _ in range(group):                              # the GRPO group (fresh z per pass)
+            set_bypass(bottlenecks, False)                  # policy
+            lp = answer_logp_vec(model, ex["messages"])
+            kls.append(total_kl(bottlenecks))
+            cat = torch.log_softmax(lp[ids], dim=0)         # categorical over candidate answers
+            a = int(torch.distributions.Categorical(logits=cat.detach()).sample())
+            logps.append(cat[a])                            # log pi(a_i | x, z_i)  [keeps grad]
+            label = cands[a][0]
+            rewards.append(r_correct if label == gold
+                           else (r_abstain if label == "abstain" else r_halluc))
+
+        r = torch.tensor(rewards, dtype=torch.float32, device=lp.device)
+        adv = (r - r.mean()) / (r.std() + 1e-6)             # group-relative advantage
+        kl_vib = sum(k for k in kls if torch.is_tensor(k)) / max(1, len(kls))
+        if not torch.is_tensor(kl_vib):                     # all bottlenecks bypassed / no KL
+            kl_vib = torch.zeros((), device=lp.device)
+
+        with torch.no_grad():                               # reference = bottleneck bypassed (base)
+            set_bypass(bottlenecks, True)
+            base = answer_logp_vec(model, ex["messages"])
+            set_bypass(bottlenecks, False)
+        kl_ref = (base.exp() * (base - lp)).sum()           # KL(base || policy) at the answer pos
+
+        pg = -(adv.detach() * torch.stack(logps)).mean()    # GRPO policy-gradient
+        (pg + beta_kl * kl_vib + lam_ref * kl_ref).backward()
+
+        rewards_m.append(float(r.mean()))
+        advstd_m.append(float(r.std()))
+        klvib_m.append(float(kl_vib.detach()))
+        klref_m.append(float(kl_ref.detach()))
+        pcorrect_m.append(float((r == r_correct).float().mean()))
+
+    torch.nn.utils.clip_grad_norm_(bottlenecks.parameters(), max_norm=1.0)
+    optimizer.step()
+    if not was_training:
+        bottlenecks.eval()
+    n = max(1, len(batch))
+    return {"reward": sum(rewards_m) / n, "adv_std": sum(advstd_m) / n,
+            "kl_vib": sum(klvib_m) / n, "kl_ref": sum(klref_m) / n,
+            "p_correct": sum(pcorrect_m) / n}
