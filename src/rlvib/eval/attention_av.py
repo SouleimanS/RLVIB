@@ -1,70 +1,94 @@
-"""Total attention to audio-visual tokens, as a fraction of attention to all input tokens.
+"""Attention to audio / visual tokens, as a fraction of attention to all input tokens.
 
 Reproduces the MoD-DPO++ "Figure 6" probe. For a clip, run ONE forward with eager attention
-and measure how much of the answer position's attention mass lands on the audio + visual
+and measure how much of the answer position's attention mass lands on the audio and/or visual
 placeholder tokens versus all input tokens (including text). The VIB / FiLM adapter reshapes
-exactly those AV token embeddings, so base vs trained shows whether the adapter makes the model
-ATTEND to audio-visual evidence more (the thesis), not just whether the answer changes.
+exactly those tokens, so base vs trained shows whether the adapter makes the model ATTEND to
+that evidence more.
 
-Qwen-Omni only: needs the model loaded with attn_implementation='eager' (sdpa/flash do not
-return attention weights). Memory is O(L*H*S^2); keep S small (low --fps, short clips).
+`--modality audio` isolates the AUDIO tokens (the V->A grounding axis, cleanly token-represented)
+-- recommended for Qwen3-Omni, whose combined AV number is dominated by ~1300 vision tokens and is
+sensitive to architecture-specific attention (sinks, vision handling) that differs from Qwen2.5.
 
-  model = get_model("qwen2.5-omni", attn="eager")
-  frac, n_av, n_tot = av_attention_fraction(model, model.message(video=v, audio=a, prompt=q))
+Qwen-Omni only: needs the model loaded with attn_implementation='eager'. Memory is O(L*H*S^2);
+keep S small (low --fps, short clips).
 """
 from __future__ import annotations
 
 import torch
 
-# Audio / image / video PLACEHOLDER token surface forms across Qwen-Omni versions (the repeated
-# media tokens, not the bos/eos markers). Detection also falls back to config token-index attrs.
-_AV_TOKEN_STRINGS = ("<|AUDIO|>", "<|audio_pad|>", "<|IMAGE|>", "<|image_pad|>",
-                     "<|VIDEO|>", "<|video_pad|>")
-_AV_CONFIG_ATTRS = ("audio_token_index", "image_token_index", "video_token_index",
-                    "audio_token_id", "image_token_id", "video_token_id")
+# Placeholder (repeated per media chunk) token surface forms, split by modality; detection also
+# falls back to config token-index attrs. Audio vs visual are kept separate so the mask can be
+# restricted to one modality.
+_AUDIO_TOKEN_STRINGS = ("<|AUDIO|>", "<|audio_pad|>")
+_VISUAL_TOKEN_STRINGS = ("<|IMAGE|>", "<|image_pad|>", "<|VIDEO|>", "<|video_pad|>")
+_AUDIO_CONFIG_ATTRS = ("audio_token_index", "audio_token_id")
+_VISUAL_CONFIG_ATTRS = ("image_token_index", "video_token_index", "image_token_id", "video_token_id")
 
 
-def av_token_ids(model) -> set[int]:
-    """Token ids marking audio / image / video placeholder positions in input_ids.
+def _configs(model):
+    out = []
+    base = getattr(model.model, "config", None)
+    if base is not None:
+        out.append(base)
+        for sub in ("thinker_config", "thinker"):
+            c = getattr(base, sub, None)
+            c = getattr(c, "config", c)
+            if c is not None and c is not base:
+                out.append(c)
+    return out
 
-    Tries the tokenizer's special-token surface forms first, then config token-index attrs
-    (the thinker may nest its config). Prints nothing; callers should sanity-check it is
-    non-empty (otherwise the AV mask is empty and the fraction is 0)."""
+
+def _ids_from(model, token_strings, config_attrs) -> set[int]:
     tok = getattr(model, "tokenizer", None) or model.processor.tokenizer
     ids: set[int] = set()
     unk = getattr(tok, "unk_token_id", None)
-    for s in _AV_TOKEN_STRINGS:
+    for s in token_strings:
         try:
             i = tok.convert_tokens_to_ids(s)
         except Exception:  # noqa: BLE001
             i = None
         if isinstance(i, int) and i >= 0 and i != unk:
             ids.add(i)
-    cfgs = []
-    base = getattr(model.model, "config", None)
-    if base is not None:
-        cfgs.append(base)
-        for sub in ("thinker_config", "thinker"):
-            c = getattr(base, sub, None)
-            c = getattr(c, "config", c)
-            if c is not None and c is not base:
-                cfgs.append(c)
-    for c in cfgs:
-        for a in _AV_CONFIG_ATTRS:
+    for c in _configs(model):
+        for a in config_attrs:
             v = getattr(c, a, None)
             if isinstance(v, int) and v >= 0:
                 ids.add(v)
     return ids
 
 
+def audio_token_ids(model) -> set[int]:
+    """Token ids marking audio placeholder positions in input_ids."""
+    return _ids_from(model, _AUDIO_TOKEN_STRINGS, _AUDIO_CONFIG_ATTRS)
+
+
+def visual_token_ids(model) -> set[int]:
+    """Token ids marking image/video placeholder positions in input_ids."""
+    return _ids_from(model, _VISUAL_TOKEN_STRINGS, _VISUAL_CONFIG_ATTRS)
+
+
+def av_token_ids(model) -> set[int]:
+    """Audio + visual placeholder token ids (the union)."""
+    return audio_token_ids(model) | visual_token_ids(model)
+
+
+def modality_ids(model, modality: str = "av") -> set[int]:
+    """`modality` in {'av','audio','vision'} -> the corresponding placeholder token-id set."""
+    return {"audio": audio_token_ids, "vision": visual_token_ids}.get(
+        modality, av_token_ids)(model)
+
+
 @torch.no_grad()
 def av_attention_fraction(model, messages, av_ids: set[int] | None = None,
                           use_audio_in_video: bool = True, query: str = "last"):
-    """Fraction of the answer-position attention mass on AV tokens / on all input tokens.
+    """Fraction of the answer-position attention mass on the masked tokens / on all input tokens.
 
-    Returns (fraction, n_av_tokens, n_total_tokens). `query="last"` uses the final prompt
-    position (the one that predicts the answer); `query="mean"` averages over all positions.
-    Averages over heads then layers. Requires the model loaded with attn='eager'.
+    Returns (fraction, n_masked_tokens, n_total_tokens, per_layer_fracs). `query="last"` uses the
+    final prompt position (predicts the answer); `query="mean"` averages over all positions (a
+    global measure, runs much higher -- dominated by media-attends-to-media). Averages over heads
+    then layers; `per_layer_fracs` is the per-layer profile (head-mean) for diagnostics. Requires
+    the model loaded with attn='eager'.
     """
     av_ids = av_ids if av_ids is not None else av_token_ids(model)
     inputs = model.build_inputs(messages, use_audio_in_video=use_audio_in_video)
@@ -75,18 +99,17 @@ def av_attention_fraction(model, messages, av_ids: set[int] | None = None,
         raise RuntimeError("no attentions returned -- load the model with attn='eager' "
                            "(sdpa/flash do not expose attention weights)")
     ids = inputs["input_ids"][0]                             # (S,)
-    av_mask = torch.zeros_like(ids, dtype=torch.bool)
+    mask = torch.zeros_like(ids, dtype=torch.bool)
     for i in av_ids:
-        av_mask |= ids == i
-    layer_fracs = []
+        mask |= ids == i
+    per_layer = []
     for a in attns:                                          # a: (1, H, S, S)
         if query == "mean":
-            aq = a[0].float().mean(dim=1)                    # (S_query, S_key) head-mean
-            aq = aq.mean(dim=0, keepdim=True)                # (1, S_key) query-mean
+            aq = a[0].float().mean(dim=1).mean(dim=0, keepdim=True)   # (1, S_key) head+query mean
         else:
             aq = a[0, :, -1, :].float()                      # (H, S_key) last-query, per head
         denom = aq.sum(dim=-1) + 1e-9                        # ~1 (causal, normalized)
-        layer_fracs.append((aq[:, av_mask].sum(dim=-1) / denom).mean().item())
+        per_layer.append((aq[:, mask].sum(dim=-1) / denom).mean().item())   # head-mean
     del out, attns
-    frac = sum(layer_fracs) / len(layer_fracs)               # mean over layers
-    return frac, int(av_mask.sum()), int(av_mask.numel())
+    frac = sum(per_layer) / len(per_layer)                   # mean over layers
+    return frac, int(mask.sum()), int(mask.numel()), per_layer
