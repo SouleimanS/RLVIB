@@ -23,7 +23,9 @@ cd "$PBS_O_WORKDIR"
 mkdir -p "$PBS_O_WORKDIR/runs"
 
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
 conda activate rlvib
+set -u
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"   # torch wheel's CUDA libs
 export CUDA_VISIBLE_DEVICES=0                                     # 30B-A3B fits one H200
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

@@ -14,7 +14,9 @@ set -euo pipefail
 cd "$PBS_O_WORKDIR"
 
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
 conda activate rlvib
+set -u
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 
 echo "=== Node: $(hostname)  Date: $(date) ==="

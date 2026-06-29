@@ -27,7 +27,9 @@ cd "$PBS_O_WORKDIR"
 mkdir -p "$PBS_O_WORKDIR/runs"
 
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
 conda activate "${CONDA_ENV:-rlvib}"
+set -u
 # Do NOT export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:..." -- conda's OpenSSL then shadows the system
 # one and crashes the Qwen media/import path (the same EVP_md2 symbol-lookup error that breaks
 # system git). torch finds its bundled CUDA libs via RPATH, so it isn't needed -- verified: the
