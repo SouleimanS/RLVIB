@@ -105,6 +105,34 @@ def make_hear_mcq(audio_event: str, visual_event: str, all_categories: list[str]
     }
 
 
+def make_see_mcq(audio_event: str, visual_event: str, all_categories: list[str],
+                 k: int = 4, rng: random.Random | None = None) -> dict:
+    """Vision-question counterpart of make_hear_mcq for an audio-SWAPPED clip: "which do you SEE?".
+
+    Same option set (both events + distractors), but the SEEN event is gold. For the DPO this
+    flips the roles vs the HEAR question on the SAME clip: chosen = `visual_letter` (seen = the
+    correct answer to a SEE question), rejected = `audio_letter` (the heard event = the audio
+    distractor the gate must SUPPRESS when vision is the trusted stream). Pairing a HEAR and a
+    SEE example on one swapped clip is the contrast that forces a question-conditioned gate g(q)
+    to route by question type instead of re-collapsing to the unconditional vision rewrite.
+    """
+    rng = rng or random.Random()
+    pool = [c for c in all_categories if c not in (audio_event, visual_event)]
+    distractors = rng.sample(pool, min(k - 2, len(pool)))
+    options = [audio_event, visual_event] + distractors
+    rng.shuffle(options)
+    ai, vi = options.index(audio_event), options.index(visual_event)
+    return {
+        "question": "Which event do you SEE in this clip?",
+        "options": options,
+        "audio_event": audio_event,
+        "visual_event": visual_event,
+        "audio_letter": string.ascii_uppercase[ai],
+        "visual_letter": string.ascii_uppercase[vi],
+        "gold_letter": string.ascii_uppercase[vi],   # seen = gold (vs heard = gold for HEAR)
+    }
+
+
 def format_mcq(question: str, options: list[str]) -> str:
     """Lettered prompt (parseable by rlvib.eval.metrics.parse_choice)."""
     opts = "\n".join(f"({string.ascii_uppercase[i]}) {o}" for i, o in enumerate(options))

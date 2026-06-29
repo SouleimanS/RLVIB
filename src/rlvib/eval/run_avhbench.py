@@ -70,12 +70,20 @@ def main() -> int:
                     help="VCD plausibility constraint for --audio-cd (keep tokens within "
                          "log(plausibility) of the full pass's max).")
     args = ap.parse_args()
+    if args.fps is None:           # pin the per-model frame rate REGARDLESS of launcher, so the
+        args.fps = {"qwen3-omni": 2.0, "qwen2.5-omni": 1.0}.get(args.model)  # selection grid and the
+        # final eval can't silently differ (qwen3 starves -> yes-bias at fps<2). Explicit --fps wins.
+        if args.fps is not None:
+            print(f"[fps] defaulting {args.model} to fps={args.fps} (pass --fps to override)", flush=True)
 
     model = get_model(args.model)
+    _bn, cond = None, False
     if args.bottleneck:
-        from rlvib.models.bottleneck import load_attached
+        from rlvib.models.bottleneck import load_attached, question_embedding, set_condition
         _bn, _h = load_attached(model, args.bottleneck)
-        print(f"attached bottleneck <- {args.bottleneck}", flush=True)
+        cond = "q_proj" in _bn      # FiLM (prompt-aware) bottleneck -> set the question per item
+        print(f"attached bottleneck <- {args.bottleneck}" + ("  (prompt-aware/FiLM)" if cond else ""),
+              flush=True)
     cd_alpha = args.audio_cd
     if cd_alpha > 0 and args.model not in ("qwen3-omni", "qwen2.5-omni"):
         print(f"[audio-cd] unsupported for {args.model} (sentence answers); plain decoding", flush=True)
@@ -138,6 +146,8 @@ def main() -> int:
         item = ds[i]
         gold = str(item["label"]).strip().lower()  # "yes" / "no"
         prompt = item["text"].rstrip() + " " + args.yn_suffix
+        if cond:                                  # prompt-aware FiLM: condition on the question (no suffix)
+            set_condition(_bn, question_embedding(model, item["text"].rstrip()))
         try:
             with time_limit(args.gen_timeout):
                 if cd_alpha > 0:  # audio-aware contrastive decoding, composed with the bottleneck

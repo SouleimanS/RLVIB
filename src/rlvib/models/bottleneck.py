@@ -109,8 +109,107 @@ class VariationalBottleneck(nn.Module):
         return x + delta.to(x.dtype)
 
 
+class FiLMVariationalBottleneck(VariationalBottleneck):
+    """Prompt-aware VIB (scope-1 of docs/research/query-conditioned-bottleneck.md): FiLM-modulate
+    the bottleneck hidden activation by a pooled question embedding q, plus a per-modality output
+    gate g(q). Lets the module KEEP AUDIO when asked about sound and vision when asked about looks
+    (selective, question-routed grounding) instead of the unconditional vision-rewrite.
+
+        h          = GELU(enc(x))
+        gamma,beta = film(q).chunk(2)               # film zero-init -> gamma=beta=0 at init
+        h'         = (1 + gamma) * h + beta          # 1+gamma => identity at init; clamp gamma
+        mu,logvar  = to_mu(h'), to_logvar(h')
+        z          = mu + sigma*eps (train) | mu (eval)
+        g          = sigmoid(gate(q))                # gate bias +4 => g~=0.98 (open) at init
+        y          = x + g * out(z)                  # out zero-init => y == x at init, ANY q,g
+
+    q is supplied out-of-band via set_condition() before each forward (the adapter hook only sees
+    x, never the question). q is None -> behaves EXACTLY like VariationalBottleneck (unconditional
+    / back-compat). Identity-at-init holds regardless of q, so bypass->exact-base and the
+    anchored-DPO reference are untouched. Trained per-modality; both modalities share one q.
+    """
+
+    def __init__(self, dim: int = 2048, hidden: int | None = None, cond_dim: int = 2048,
+                 normalize_input: bool = False):
+        super().__init__(dim, hidden, normalize_input=normalize_input)
+        hidden = hidden or dim
+        self.cond_dim = cond_dim
+        # FiLM generator q -> (gamma, beta). Zero-init => gamma=beta=0 at init, so the hidden
+        # activation (hence mu/logvar/KL) is byte-for-byte the unconditional VIB at step 0;
+        # gradients still flow (d h'/d gamma = h, d h'/d beta = 1) once `out` leaves zero.
+        self.film = nn.Linear(cond_dim, 2 * hidden)
+        nn.init.zeros_(self.film.weight)
+        nn.init.zeros_(self.film.bias)
+        # Output gate q -> 1 logit (scalar per modality, broadcast over tokens+features). Weight
+        # zero + bias +4 => g = sigmoid(4) ~= 0.98 (open) and q-independent at init; `out` is zero
+        # so the edit is 0 regardless of g, but starting "open" means the gate's job is to LEARN
+        # TO CLOSE the irrelevant stream per question, descending from "both open" rather than
+        # climbing the audio gate up from a dead 0 (a low-gradient flat region).
+        self.gate = nn.Linear(cond_dim, 1)
+        nn.init.zeros_(self.gate.weight)
+        nn.init.constant_(self.gate.bias, 4.0)
+        self._cond = None              # (cond_dim,) projected question vec; set by set_condition()
+        self.last_gate = None          # live gate value -> optional gate-usage loss + routing probe
+
+    def forward(self, x):
+        if self.bypass:                # reference pass: exact frozen base (q ignored)
+            return x
+        q = self._cond
+        pd = self.enc.weight.dtype     # fp32 on fp16/normalize backbones -> no overflow / dtype skew
+        with torch.autocast(x.device.type, enabled=False):
+            xc = torch.nan_to_num(x.to(pd))
+            enc_in = F.layer_norm(xc, (xc.shape[-1],)) if self.normalize_input else xc
+            h = self.act(self.enc(enc_in))
+            if q is not None:
+                qd = q.to(pd).reshape(-1)                       # (cond_dim,) -- batch-1 loop
+                gamma, beta = self.film(qd).chunk(2, dim=-1)    # (hidden,), (hidden,)
+                gamma = gamma.clamp(-1.0, 1.0)                  # scale in [0,2]: FiLM stability
+                h = (1.0 + gamma) * h + beta                    # broadcast over all leading dims
+            mu = self.to_mu(h)
+            logvar = self.to_logvar(h).clamp(-8.0, 8.0)
+            z = mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if self.training else mu
+            kl_elem = -0.5 * (1.0 + logvar - mu.pow(2) - logvar.exp())
+            self.last_kl = kl_elem.mean()
+            self.last_kl_per_token = kl_elem.sum(dim=-1).detach()
+            delta = self.out(z)
+            if q is not None:
+                g = torch.sigmoid(self.gate(qd))               # (1,) live scalar gate
+                self.last_gate = g                             # live: gate-usage term reads it; probes detach
+                delta = g * delta                              # uniform scalar gate over the edit
+            self.last_residual_per_token = delta.detach().norm(dim=-1)
+            self.last_input_norm_per_token = xc.detach().norm(dim=-1)
+        return x + delta.to(x.dtype)
+
+
+@torch.no_grad()
+def question_embedding(model, prompt: str):
+    """Mean-pooled FROZEN token embedding of the QUESTION TEXT ONLY (no media tokens) ->
+    (embed_dim,) on model.device, fp32. Reuses the LLM's own input embedding table so q lives
+    in the model's token space -- no new encoder, no new deps. Pass to set_condition()."""
+    lm = getattr(model.model, "thinker", model.model)        # Qwen3 -> .thinker; else self
+    tok = getattr(model, "tokenizer", None) or model.processor.tokenizer
+    ids = tok(prompt, add_special_tokens=False, return_tensors="pt").input_ids.to(model.device)
+    emb = lm.get_input_embeddings()(ids)                     # (1, L, embed_dim); table is frozen
+    return emb.float().mean(dim=1)[0]                        # (embed_dim,)
+
+
+def set_condition(bottlenecks, q_emb) -> None:
+    """Stash the per-example conditioning vector on every modality bottleneck before a forward.
+    Projects the frozen question embedding through the shared `q_proj` once. No-op for plain
+    (unconditional) bottlenecks, so it is safe to call unconditionally in train/eval loops.
+    Call IDENTICALLY in training and eval, right before each model forward; the bypassed
+    reference pass ignores the condition, so no toggling is needed around it."""
+    if "q_proj" not in bottlenecks:                          # plain VIB / Residual: nothing to do
+        return
+    proj = bottlenecks["q_proj"]
+    q = proj(q_emb.to(proj.weight.dtype))                    # (embed_dim,) -> (cond_dim,)
+    for name, b in bottlenecks.items():
+        if name != "q_proj":
+            b._cond = q                                      # audio + vision share the same q
+
+
 def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
-                       normalize_input: bool = False):
+                       normalize_input: bool = False, cond_dim: int | None = None):
     """Freeze the model; attach trainable bottlenecks (`cls`) on the audio + vision
     adapters via forward hooks. `dim` defaults to `model.hidden_dim`. `normalize_input`
     LayerNorms the VIB encoder input (for massive-activation backbones, e.g. VideoLLaMA2).
@@ -128,10 +227,18 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
     vib_dtype = (torch.float32
                  if (getattr(model, "dtype", None) == torch.float16 or normalize_input)
                  else model.dtype)
-    kw = {"normalize_input": normalize_input} if cls is VariationalBottleneck else {}
-    bottlenecks = nn.ModuleDict(
-        {"audio": cls(dim, **kw), "vision": cls(dim, **kw)}
-    ).to(model.device, vib_dtype)
+    # normalize_input applies to every VIB subclass (incl. FiLM); cond_dim only to the FiLM one.
+    kw = {"normalize_input": normalize_input} if issubclass(cls, VariationalBottleneck) else {}
+    is_film = issubclass(cls, FiLMVariationalBottleneck)
+    if is_film:
+        lm = getattr(model.model, "thinker", model.model)          # frozen embed table -> cond_dim
+        embed_dim = lm.get_input_embeddings().weight.shape[1]
+        cond_dim = cond_dim or embed_dim
+        kw["cond_dim"] = cond_dim
+    bottlenecks = nn.ModuleDict({"audio": cls(dim, **kw), "vision": cls(dim, **kw)})
+    if is_film:                                                     # shared q-projection (q is the
+        bottlenecks["q_proj"] = nn.Linear(embed_dim, cond_dim)     # same for both modalities)
+    bottlenecks = bottlenecks.to(model.device, vib_dtype)
 
     handles = []
     for name, adapter in model.adapter_modules().items():
@@ -154,8 +261,9 @@ def total_kl(bottlenecks):
 
 def set_bypass(bottlenecks, on: bool) -> None:
     """Toggle pass-through (identity) on all bottlenecks — used for the DPO reference."""
-    for b in bottlenecks.values():
-        b.bypass = on
+    for name, b in bottlenecks.items():
+        if name != "q_proj":                 # q_proj is a bare Linear, not a bottleneck
+            b.bypass = on
 
 
 def load_attached(model, ckpt_path):
@@ -169,9 +277,12 @@ def load_attached(model, ckpt_path):
 
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     cls = {"VariationalBottleneck": VariationalBottleneck,
-           "ResidualBottleneck": ResidualBottleneck}.get(ck.get("cls"), VariationalBottleneck)
+           "ResidualBottleneck": ResidualBottleneck,
+           "FiLMVariationalBottleneck": FiLMVariationalBottleneck}.get(
+               ck.get("cls"), VariationalBottleneck)
     bottlenecks, handles = attach_bottlenecks(model, dim=ck.get("dim"), cls=cls,
-                                              normalize_input=ck.get("normalize_input", False))
+                                              normalize_input=ck.get("normalize_input", False),
+                                              cond_dim=ck.get("cond_dim"))
     bottlenecks.load_state_dict(ck["state_dict"])
     bottlenecks.eval()
     return bottlenecks, handles

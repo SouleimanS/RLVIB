@@ -16,7 +16,12 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from rlvib.models.bottleneck import set_bypass, total_kl
+from rlvib.models.bottleneck import (
+    question_embedding,
+    set_bypass,
+    set_condition,
+    total_kl,
+)
 
 
 def answer_logp_vec(model, messages, use_audio_in_video: bool = True):
@@ -127,7 +132,8 @@ def dpo_step(model, bottlenecks, optimizer, batch, beta: float = 0.1,
 
 def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
                       beta: float = 0.1, beta_kl: float = 0.01, lam_anchor: float = 1.0,
-                      delta: float = 0.0, lam_kl: float = 1.0) -> dict:
+                      delta: float = 0.0, lam_kl: float = 1.0,
+                      lam_gate: float = 0.0, gate_target: float = 0.6) -> dict:
     """Collapse-resistant swap-DPO (see docs/research/dpo-collapse-and-fixes.md).
 
     Adds the two anchors plain DPO lacked:
@@ -137,10 +143,22 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
          penalizes the always-on adapter for drifting from the frozen model's answer
          distribution where it should be identity -- the input-blind constraint DPO omits.
     `chosen_minus_ref` (= cp - cr) should stay >= 0; `gen_kl` should stay small.
+
+    Prompt-aware (FiLM) bottleneck: if `bottlenecks` carries a `q_proj` (i.e. it is a
+    FiLMVariationalBottleneck dict), the question is encoded via question_embedding() and
+    pushed onto the bottlenecks with set_condition() before each forward (the reference/bypass
+    pass ignores it). Each example then needs a `prompt` field (raw question text) and, for the
+    optional gate-usage term, a `qtype` in {"hear","see"}. `lam_gate>0` adds a one-sided hinge
+    pushing the question-relevant modality's gate above `gate_target` (audio on HEAR, vision on
+    SEE) -- symmetry-breaking insurance so the gate doesn't re-collapse to vision-only routing.
     """
     optimizer.zero_grad()
+    film = "q_proj" in bottlenecks
     losses, margins, prefs, anchors, cmr, gkls = [], [], [], [], [], []
+    g_audio, g_vision = [], []
     for ex in swap_batch:
+        if film:
+            set_condition(bottlenecks, question_embedding(model, ex["prompt"]))
         c, r = letter_id(model, ex["chosen_letter"]), letter_id(model, ex["rejected_letter"])
         set_bypass(bottlenecks, False)
         lp = answer_logp_vec(model, ex["messages"])
@@ -154,14 +172,23 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
         margin = beta * ((cp - cr) - (rp - rr))
         anchor = -F.logsigmoid(beta * (cp - cr) - delta)   # pin chosen >= ref (mDPO L_AncPO)
         loss = -F.logsigmoid(margin) + lam_anchor * anchor + beta_kl * kl
+        if film and lam_gate > 0:                          # gate-usage symmetry-breaker (optional)
+            g_rel = (bottlenecks["audio"].last_gate if ex.get("qtype", "hear") == "hear"
+                     else bottlenecks["vision"].last_gate)
+            loss = loss + lam_gate * F.softplus(gate_target - g_rel).mean()
         loss.backward()
         losses.append(float(loss.detach()))
         margins.append(float(margin.detach()))
         prefs.append(float((cp > rp).detach()))
         anchors.append(float(anchor.detach()))
         cmr.append(float((cp - cr).detach()))
+        if film and bottlenecks["audio"].last_gate is not None:
+            g_audio.append(float(bottlenecks["audio"].last_gate.detach().mean()))
+            g_vision.append(float(bottlenecks["vision"].last_gate.detach().mean()))
 
     for ex in anchor_batch:                                # general KL-to-base anchor
+        if film:
+            set_condition(bottlenecks, question_embedding(model, ex["prompt"]))
         set_bypass(bottlenecks, False)
         lp_pol = answer_logp_vec(model, ex["messages"])
         with torch.no_grad():
@@ -175,5 +202,9 @@ def anchored_dpo_step(model, bottlenecks, optimizer, swap_batch, anchor_batch,
     torch.nn.utils.clip_grad_norm_(bottlenecks.parameters(), max_norm=1.0)  # spike insurance
     optimizer.step()
     n, m = max(1, len(swap_batch)), max(1, len(anchor_batch))
-    return {"loss": sum(losses) / n, "margin": sum(margins) / n, "p_chosen": sum(prefs) / n,
-            "anchor": sum(anchors) / n, "chosen_minus_ref": sum(cmr) / n, "gen_kl": sum(gkls) / m}
+    out = {"loss": sum(losses) / n, "margin": sum(margins) / n, "p_chosen": sum(prefs) / n,
+           "anchor": sum(anchors) / n, "chosen_minus_ref": sum(cmr) / n, "gen_kl": sum(gkls) / m}
+    if g_audio:                                            # FiLM: mean gate per modality (routing)
+        out["g_audio"] = sum(g_audio) / len(g_audio)
+        out["g_vision"] = sum(g_vision) / len(g_vision)
+    return out

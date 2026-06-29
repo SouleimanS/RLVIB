@@ -9,8 +9,13 @@
 
 # Collapse-resistant anchored swap-DPO (the rebuild). See train_swap_anchored.py and
 # docs/research/dpo-collapse-and-fixes.md.
-#   qsub scripts/train_swap_anchored.qsub
+#   qsub scripts/train_swap_anchored.qsub                                          # Stage 1
 #   PAIRS=400 EPOCHS=3 LAMKL=2.0 qsub -v PAIRS,EPOCHS,LAMKL scripts/train_swap_anchored.qsub
+#   # Stage 2 (prompt-aware FiLM, warm-started -- see docs/research/film-multistage-recipe.md):
+#   EXP=film FILM=1 INIT_FROM=runs/anchored_qwen3-omni/bottleneck_step60.pt PAIRS=400 EPOCHS=3 \
+#     SEEFRAC=1.0 WARMUPSTEPS=80 WARMUPFRAC=0.1 LR=3e-5 LAMANCHOR=1.5 LAMKL=2.0 BETAKL=0.05 \
+#     LAMGATE=0.05 qsub -v EXP,FILM,INIT_FROM,PAIRS,EPOCHS,SEEFRAC,WARMUPSTEPS,WARMUPFRAC,LR,LAMANCHOR,LAMKL,BETAKL,LAMGATE \
+#     scripts/train_swap_anchored.qsub
 
 set -euo pipefail
 cd "$PBS_O_WORKDIR"
@@ -29,10 +34,22 @@ nvidia-smi -L
 
 exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_${MODEL:-qwen3-omni}${EXP:+_$EXP}_out.txt") 2>&1
 
+# optional prompt-aware FiLM (Stage 2) flags -- empty by default => unchanged Stage-1 behavior
+EXTRA=()
+[ -n "${FILM:-}" ]        && EXTRA+=(--film)
+[ -n "${INIT_FROM:-}" ]   && EXTRA+=(--init-from "$INIT_FROM")
+[ -n "${SEEFRAC:-}" ]     && EXTRA+=(--see-frac "$SEEFRAC")
+[ -n "${WARMUPSTEPS:-}" ] && EXTRA+=(--warmup-steps "$WARMUPSTEPS")
+[ -n "${WARMUPFRAC:-}" ]  && EXTRA+=(--warmup-frac "$WARMUPFRAC")
+[ -n "${LAMGATE:-}" ]     && EXTRA+=(--lam-gate "$LAMGATE")
+[ -n "${GATETARGET:-}" ]  && EXTRA+=(--gate-target "$GATETARGET")
+[ -n "${LR:-}" ]          && EXTRA+=(--lr "$LR")
+
 python -u scripts/train_swap_anchored.py --model "${MODEL:-qwen3-omni}" \
     --pairs "${PAIRS:-300}" --epochs "${EPOCHS:-2}" --accum "${ACCUM:-4}" \
     --lam-kl "${LAMKL:-1.0}" --lam-anchor "${LAMANCHOR:-1.0}" --delta "${DELTA:-0.0}" \
     --beta-kl "${BETAKL:-0.01}" --seed "${SEED:-0}" --eval-every "${EVALEVERY:-10}" \
-    --save-dir "runs/anchored_${MODEL:-qwen3-omni}${EXP:+_$EXP}"
+    --save-dir "runs/anchored_${MODEL:-qwen3-omni}${EXP:+_$EXP}" \
+    ${EXTRA[@]+"${EXTRA[@]}"}
 
 echo "=== Done $(date) ==="
