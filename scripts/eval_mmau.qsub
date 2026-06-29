@@ -1,0 +1,44 @@
+#!/bin/bash
+#PBS -N rlvib_mmau
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o rlvib_mmau.qsub.log
+
+# MMAU audio-understanding MCQ (Sound/Music/Speech). Download (LOGIN node) into data/MMAU/
+# (gitignored): the split json -> data/MMAU/mmau-test-mini.json and the audios under data/MMAU/
+# so each item's audio_id resolves (see https://github.com/Sakshi113/MMAU). Then:
+#   qsub -v "MODEL=qwen2.5-omni" scripts/eval_mmau.qsub                       # base
+#   qsub -v "MODEL=qwen2.5-omni,BOTTLENECK=runs/anchored_qwen2.5-omni_broad/bottleneck_step60.pt,TAG=_broad_step60" \
+#       scripts/eval_mmau.qsub                                                 # trained
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
+conda activate "${CONDA_ENV:-rlvib}"
+set -u
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+MMAU_JSON="${MMAU_JSON:-$PWD/data/MMAU/mmau-test-mini.json}"
+MMAU_ROOT="${MMAU_ROOT:-$PWD/data/MMAU}"
+BN_ARG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
+
+echo "=== Node: $(hostname)  Date: $(date)  model=${MODEL:-qwen2.5-omni}  bottleneck=${BOTTLENECK:-none} ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/mmau_${MODEL:-qwen2.5-omni}${TAG}_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_mmau --model "${MODEL:-qwen2.5-omni}" \
+    --json-path "$MMAU_JSON" --audio-root "$MMAU_ROOT" --limit "${LIMIT:-0}" $BN_ARG \
+    --out "runs/mmau_${MODEL:-qwen2.5-omni}${TAG}.json"
+
+echo "=== Done $(date) ==="
