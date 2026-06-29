@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore")
 for _n in ("transformers", "qwen_vl_utils", "qwen_omni_utils"):
     logging.getLogger(_n).setLevel(logging.ERROR)
 
-from rlvib.data.cmm import CMMDataset  # noqa: E402
+from rlvib.data.cmm import AUDIO_SUBSETS, CMMDataset  # noqa: E402
 from rlvib.eval.attention_av import av_attention_fraction, modality_ids  # noqa: E402
 from rlvib.eval.timeout import time_limit  # noqa: E402
 from rlvib.models import get_model  # noqa: E402
@@ -74,12 +74,15 @@ def main() -> int:
         print("WARNING: no placeholder tokens found for this modality -- the fraction will be 0. "
               "Check the tokenizer/config token names in rlvib.eval.attention_av.", flush=True)
 
+    if args.modality == "audio" and args.subsets is None:
+        args.subsets = list(AUDIO_SUBSETS)          # audio tokens only exist in these CMM subsets
+        print(f"[audio] no --subsets given; using audio-bearing CMM subsets {args.subsets}", flush=True)
     ds = CMMDataset(args.json_path, args.data_root, sub_categories=args.subsets)
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"[{args.modality}]-attention over CMM: {n}/{len(ds)} clips | fps={args.fps} | "
           f"query={args.query}", flush=True)
 
-    fractions, av_counts, layer_acc = [], [], []
+    fractions, av_counts, layer_acc, empty = [], [], [], 0
     bar = tqdm(range(n), desc=f"attn-{args.modality}", unit="clip", dynamic_ncols=True)
     for i in bar:
         item = ds[i]
@@ -92,17 +95,21 @@ def main() -> int:
             with time_limit(args.gen_timeout):
                 frac, n_av, _, per_layer = av_attention_fraction(model, msg, av_ids=av_ids,
                                                                  use_audio_in_video=uaiv, query=args.query)
-            fractions.append(frac)
-            av_counts.append(n_av)
-            if args.per_layer:
-                layer_acc.append(per_layer)
-            bar.set_postfix(mean=f"{100 * statistics.fmean(fractions):.2f}%", refresh=False)
         except Exception as e:  # noqa: BLE001 -- skip a bad/oom/hanging clip, keep going
             print(f"\n[skip clip {i}] {type(e).__name__}: {e}", flush=True)
+            continue
+        if n_av == 0:                          # clip has no tokens of this modality -> don't dilute the mean
+            empty += 1
+            continue
+        fractions.append(frac)
+        av_counts.append(n_av)
+        if args.per_layer:
+            layer_acc.append(per_layer)
+        bar.set_postfix(mean=f"{100 * statistics.fmean(fractions):.2f}%", refresh=False)
 
     res = {
         "model": args.model, "tag": args.tag, "modality": args.modality, "bottleneck": args.bottleneck,
-        "fps": args.fps, "query": args.query, "n": len(fractions),
+        "fps": args.fps, "query": args.query, "n": len(fractions), "n_empty": empty,
         "mean": statistics.fmean(fractions) if fractions else None,
         "median": statistics.median(fractions) if fractions else None,
         "stdev": statistics.pstdev(fractions) if len(fractions) > 1 else 0.0,
@@ -119,7 +126,8 @@ def main() -> int:
     print(f"\n=== {args.modality}-attention {args.model}{tag} ===")
     if m is not None:
         print(f"  mean={100 * m:.2f}%  median={100 * res['median']:.2f}%  stdev={100 * res['stdev']:.2f}  "
-              f"(n={res['n']}, avg {args.modality} tokens={res['av_tokens_mean']:.0f})")
+              f"(n={res['n']} clips with {args.modality}, {empty} skipped empty, "
+              f"avg {args.modality} tokens={res['av_tokens_mean']:.0f})")
         if "per_layer_mean" in res:
             prof = "  ".join(f"L{k}:{v:.1f}" for k, v in enumerate(res["per_layer_mean"]))
             print(f"  per-layer (%): {prof}")
