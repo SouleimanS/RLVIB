@@ -10,7 +10,7 @@
 \setbeamertemplate{blocks}[rounded][shadow=false]
 \setbeamerfont{frametitle}{size=\large,series=\bfseries}
 \setbeamercolor{frametitle}{fg=blue!45!black}
-
+\usepackage{pgfplots}\pgfplotsset{compat=1.18}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
 \usepackage{booktabs}
@@ -36,9 +36,9 @@
       (o) at ([xshift=3mm]b.east) {\color{green!48!black}ours: #5 $\boldsymbol{\checkmark}$};
   \end{tikzpicture}}
 
-\title{\textbf{Cheap Audio Grounding for Frozen AV--LLMs}}
+\title{\textbf{Audio Grounding for Frozen AV--LLMs}}
 \subtitle{Preference-optimization collapse, a two-anchor fix, and an honest result}
-\author{Souleiman Sbais}
+\author{Souleiman Sbai}
 \date{\today}
 
 \begin{document}
@@ -50,9 +50,9 @@
 \vspace{-2em}
 \begin{block}{TL;DR --- a progress update}
 \small Train a \textbf{tiny adapter} on a \textbf{frozen} audio--visual model to make it use audio more.
-Na\"ive DPO \textbf{collapses} it completely; a \textbf{two-part fix} prevents that. Honest result: the fix
-works cleanly \emph{as a fix}, but the grounding gain is \textbf{small} and shows up on \textbf{one of three}
-models. The last third is decisions I want your input on.
+Na\"ive offline RL-DPO \textbf{collapses} it completely; a \textbf{two-part fix} prevents that. Honest result: the fix
+works cleanly \emph{as a fix}, but the grounding gain is \textbf{small} and shows up on \textbf{two of three}
+models.
 \end{block}
 \end{frame}}
 
@@ -103,12 +103,12 @@ Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze ev
 \end{frame}
 
 % --- 4. Setup / what was actually run ---
-\begin{frame}{Setup (so the numbers are concrete)}
+\begin{frame}{Setup}
 \begin{columns}[T]
 \begin{column}{0.5\textwidth}
 \textbf{Training}
 \begin{itemize}\small
-\item Data: \textbf{300 audio-swapped AVE clips}, \textbf{2 epochs}.
+\item Data: \textbf{1000 audio-swapped AVE clips}, \textbf{3 epochs}.
 \item Loss weights: $\beta{=}0.1$, $\lambda_a{=}1$, $\lambda_{kl}{=}2$, $\beta_{kl}{=}0.01$.
 \item Only the two adapters update; backbone frozen.
 \end{itemize}
@@ -119,7 +119,6 @@ Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze ev
 \item \textbf{AVHBench} --- the target (AV hallucination).
 \item \textbf{CMM} --- capability: \textbf{PA} + \textbf{HR}.
 \item \textbf{DAVE} --- diagnostic (base only).
-\item $300$-example subsets; \textbf{150 val} (select) / \textbf{150 test} (report); \textbf{paired} tests.
 \end{itemize}
 \end{column}
 \end{columns}
@@ -145,23 +144,49 @@ Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze ev
 so preferring the \textbf{heard} answer is only possible by \textbf{attending to the audio}.
 \end{frame}
 
-% --- 6. What broke ---
+% --- 6. Qualitative: audio-swap mechanism (BEFORE the numbers) ---
+\begin{frame}{The mechanism on real clips (audio swapped in)}
+\centering
+\begin{tabular}{@{}c@{}}
+\exrow{as_flute}{\emph{see} flute, \textbf{hear (overlaid) train horn}}{``Which event do you hear?''}{``flute''}{``train horn''} \\[2.5mm]
+\exrow{as_airplane}{\emph{see} airplane, \textbf{hear (overlaid) clock}}{``Which event do you hear?''}{``airplane''}{``clock''}
+\end{tabular}
+\vfill
+\small Base names what it \emph{sees}; ours names what it \emph{hears}.
+\end{frame}
+
+% --- 7. What broke ---
 \begin{frame}{What broke: na\"ive DPO collapses the model}
 \begin{itemize}
-\item Standard DPO $\Rightarrow$ perception accuracy \textbf{0.95 $\to$ 0.01}; converges to a near-constant ``no''.
+\item Standard DPO $\Rightarrow$ perception accuracy \textbf{0.95 $\to$ 0.1}; converges to a near-constant ``no''.
 \end{itemize}
 \vfill
 \begin{center}
 \setbeamercolor{block body}{bg=red!8}
 \begin{block}{The trap}
 Answering ``no'' to everything looks \textbf{perfect} on a hallucination metric --- you never affirm anything
-false. \textbf{Watch the wrong metric and the collapse is invisible.} (Back to this on the benchmarks slide.)
+false. \textbf{Wrong training metric!} 
 \end{block}
 \end{center}
 \end{frame}
 
-% --- 7. Why it broke ---
-\begin{frame}{Why it broke (a documented failure mode, not a bug)}
+% --- Read the loss: trained vs frozen (place before "Why it broke") ---
+\begin{frame}{Read the loss: what's trained, what's frozen}
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}r@{\quad}l@{}}
+\textcolor{trn}{\textbf{trained}}        & $\theta$ = the two VIB adapters \ (inside: $\mu(x),\ \sigma(x)$) \\
+\textcolor{trn}{\textbf{move with }$\theta$} & $c_p,\ r_p$ \ (policy log-probs), \quad $p_\theta$ \\
+\textcolor{frz}{\textbf{frozen base}}     & $c_r,\ r_r$ \ (reference $=$ bypass), \quad $p_{\text{base}}$ \\
+\textbf{fixed}                            & $\beta,\ \beta_{kl},\ \lambda_a,\ \lambda_{kl},\ \delta$ \ (hyperparams); \ the sigmoid in $-\log\sigma$ \\
+\end{tabular}
+\vfill
+{\small Subscript $p$ = \textcolor{trn}{policy} (adapter \emph{on}) \ $\cdot$ \ subscript $r$ = \textcolor{frz}{reference} (adapter \emph{bypassed} $=$ frozen base).\\
+Only $\theta$ is a learnable parameter --- the \textcolor{trn}{policy side} moves, the \textcolor{frz}{reference side} is constant.}
+\end{frame}
+
+% --- 8. Why it broke ---
+\begin{frame}{Why it broke}
 \[ \mathcal L_0=\underbrace{-\log\sigma\!\big(\beta[(c_p{-}c_r){-}(r_p{-}r_r)]\big)}_{\text{swap-DPO margin}}\;+\;\underbrace{\beta_{kl}\,\mathrm{KL}_{\text{VIB}}}_{\text{rate on the adapter only}} \]
 \vspace{-0.4em}
 \begin{itemize}\small
@@ -171,7 +196,7 @@ false. \textbf{Watch the wrong metric and the collapse is invisible.} (Back to t
 \end{itemize}
 \end{frame}
 
-% --- 8. The fix ---
+% --- 9. The fix ---
 \begin{frame}{The fix: two anchors}
 {\small Add two terms to the na\"ive loss:}
 \vspace{-0.3em}
@@ -188,7 +213,41 @@ false. \textbf{Watch the wrong metric and the collapse is invisible.} (Back to t
 \end{itemize}
 \end{frame}
 
-% --- 9. Ablation (strongest result) ---
+% --- 10. Qualitative: AVHBench (BEFORE the numbers) ---
+\begin{frame}{What the AVHBench failures look like (real, base vs ours)}
+\centering
+\begin{tabular}{@{}c@{}}
+\exrow{avh_a2v}{\textbf{audio $\to$ video}}{``Is the power tool visible?'' --- it is not.}{``Yes''}{``No''} \\[2.5mm]
+\exrow{avh_v2a}{\textbf{video $\to$ audio}}{``Is the bird making sound?'' --- it is silent.}{``Yes''}{``No''} \\[2.5mm]
+\exrow{avh_match}{\textbf{AV matching}}{``Do audio and video match?'' --- they do not.}{``Yes''}{``No''}
+\end{tabular}
+\end{frame}
+
+
+
+% --- 11. Benchmarks: what the numbers mean ---
+\begin{frame}{What the metrics mean}
+\begin{itemize}
+\item \textbf{AVHBench} = the \textbf{target} (audio--visual hallucination); three yes/no tasks:
+\vspace{0.06in}
+  \begin{itemize}\footnotesize
+  \item \textbf{A$\to$V} (audio-driven \emph{video} hall.): ``is the queried object \emph{visible}?'' --- audio tempts a false ``yes''.
+  \item \textbf{V$\to$A} (video-driven \emph{audio} hall.): ``is the queried sound \emph{audible}?'' --- \textbf{our audio-grounding probe}.
+  \item \textbf{AV-match}: ``do the audio and video \emph{match}?''
+  \end{itemize}
+\vspace{0.12in}
+\item \textbf{CMM} = capability, two axes:
+\vspace{0.06in}
+  \begin{itemize}\footnotesize
+  \item \textbf{PA} (perception): on \emph{present} items --- correctly says ``yes, it's there'' (catches under-perception).
+  \item \textbf{HR} (resistance): on \emph{absent} items --- correctly says ``no, it isn't'' (catches hallucination).
+  \end{itemize}
+\vspace{0.12in}
+\item \textbf{DAVE} = \textbf{diagnostic}: audio--visual \textbf{multiple-choice}; each question needs \emph{both} modalities --- a general AV check, \emph{not} a hallucination probe.
+\end{itemize}
+\end{frame}
+
+% --- 12. Ablation (strongest result) ---
 \begin{frame}{Ablation (Qwen3-Omni): both anchors are necessary}
 \centering
 \begin{tabular}{lccc}
@@ -203,66 +262,59 @@ na\"ive swap-DPO       & 0.673 & 0.939 & 0.774 \\
 \bottomrule
 \end{tabular}
 \vfill
-{\footnotesize\textbf{+both, AVHBench by type:} A$\to$V $0.65{\to}0.68$ \ $\cdot$ \ V$\to$A $0.72{\to}0.78$ \ $\cdot$ \ AV-match $0.54{\to}0.63$ \ (overall $0.647{\to}0.707$).}\\[2pt]
-{\small Each \emph{alone} fails differently --- chosen-only PA$\to$0.30, KL-only HR$\to$0.66; \textbf{only both} stay healthy \emph{and} score best.}
-\end{frame}
-
-% --- 10. Benchmarks: what the numbers mean ---
-\begin{frame}{What the metrics mean (and why the collapse hid)}
-\begin{itemize}\small
-\item \textbf{AVHBench} = the \textbf{target} (audio--visual hallucination).
-\item \textbf{CMM} = capability, two axes:
-  \begin{itemize}\scriptsize
-  \item \textbf{PA} (perception): on \emph{present} items --- correctly says ``yes, it's there'' (catches under-perception).
-  \item \textbf{HR} (resistance): on \emph{absent} items --- correctly says ``no, it isn't'' (catches hallucination).
-  \end{itemize}
-\end{itemize}
-\vfill
-\begin{block}{The collapse, in metric terms}
-\small All-``no'' $\Rightarrow$ \textbf{HR$\to$1.0} but \textbf{PA$\to$0}: HR alone says ``perfect''. \textbf{Watch both} --- they map onto the anchors (chosen$\leftrightarrow$PA, KL$\leftrightarrow$HR).
-\end{block}
-\end{frame}
-
-% --- 11. Qualitative: AVHBench (BEFORE the numbers) ---
-\begin{frame}{What the AVHBench failures look like (real, base vs ours)}
-\centering
-\begin{tabular}{@{}c@{}}
-\exrow{avh_a2v}{\textbf{audio $\to$ video}}{``Is the power tool visible?'' --- it is not.}{``Yes''}{``No''} \\[2.5mm]
-\exrow{avh_v2a}{\textbf{video $\to$ audio}}{``Is the bird making sound?'' --- it is silent.}{``Yes''}{``No''} \\[2.5mm]
-\exrow{avh_match}{\textbf{AV matching}}{``Do audio and video match?'' --- they do not.}{``Yes''}{``No''}
+\begin{tabular}{lccc}
+\hline
+Task & Baseline & Ours & $\Delta$ \\
+\hline
+A$\to$V      & 0.65  & 0.68  & +0.03 \\
+V$\to$A      & 0.72  & 0.78  & +0.06 \\
+AV-match     & 0.54  & 0.63  & +0.09 \\
+\hline
+Overall      & 0.647 & 0.707 & +0.060 \\
+\hline
 \end{tabular}
 \end{frame}
 
-% --- 12. Qualitative: audio-swap mechanism (BEFORE the numbers) ---
-\begin{frame}{The mechanism on real clips (audio swapped in)}
-\centering
-\begin{tabular}{@{}c@{}}
-\exrow{as_flute}{\emph{see} flute, \textbf{hear (overlaid) train horn}}{``Which event do you hear?''}{``flute''}{``train horn''} \\[2.5mm]
-\exrow{as_airplane}{\emph{see} airplane, \textbf{hear (overlaid) clock}}{``Which event do you hear?''}{``airplane''}{``clock''}
-\end{tabular}
-\vfill
-\small Base names what it \emph{sees}; ours names what it \emph{hears}.
-\end{frame}
+
+
+
+
+
 
 % --- Generalization ---
 \begin{frame}{Generalization: uneven across backbones}
 \centering
-\begin{tabular}{lccc}
+\begin{table}[tb]\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Global comparison (full-set accuracy; higher is better). $V\!\to\!A$ is the video-driven \emph{audio}-hallucination probe (the ``grounds in
+what it hears'' axis); $A\!\to\!V$ is the audio-driven \emph{video}-hallucination probe (the ``grounds in what it sees'' axis). AV-m = AV-match. CMM = capability (PA + HR). }
+\label{tab:main}
+\begin{tabular}{l cccc ccc c}
 \toprule
-backbone & AVHBench (base $\to$ ours) & paired & verdict \\
+& \multicolumn{4}{c}{AVHBench} & \multicolumn{3}{c}{CMM} & \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-8}
+Model & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR & overall & DAVE \\
 \midrule
-Qwen3-Omni    & 0.647 $\to$ \textbf{0.707} & $p{=}0.007$ pooled & positive \\
-Qwen2.5-Omni  & 0.620 $\to$ 0.673          & $p{=}0.13$ (n.s.)  & trend \\
-VideoLLaMA2   & 0.667 $\to$ 0.613          & $p{=}0.29$         & null \\
+Gemini    & 0.850 & 0.747 & 0.603 & 0.718 & 0.907 & 0.628 & 0.768 & --- \\
+GPT-4o  & 0.846 & 0.510 & 0.501 & 0.579 & 0.359 & 0.892 & 0.626 & --- \\
+\midrule
+Qwen3-Omni            & 0.838 & 0.812 & 0.653 & 0.761 & 0.900 & 0.733 & 0.816 & --- \\
+\quad + ours          & \textbf{0.854} & \textbf{0.840} & \textbf{0.790} & \textbf{0.825} & 0.868 & 0.669 & 0.768 & --- \\
+\midrule
+Qwen2.5-Omni          & 0.822 & 0.803 & \textbf{0.581} & 0.729 & 0.848 & 0.761 & 0.805 & --- \\
+\quad + ours          & \textbf{0.828} & \textbf{0.831} & 0.549 & \textbf{0.730} & 0.834 & 0.794 & 0.814 & --- \\
+\midrule
+VideoLLaMA2           & \textbf{0.801} & 0.775 & \textbf{0.568} & \textbf{0.707} & 0.614 & 0.654 & 0.634 & --- \\
+\quad + ours          & 0.688 & \textbf{0.789} & 0.555 & 0.684 & 0.450 & 0.736 & 0.593 & --- \\
 \bottomrule
 \end{tabular}
+\end{table}
 \vfill
-\small The null is \textbf{informative}: VideoLLaMA2 barely uses audio (its audio tokens are prunable with
-near-zero loss), so the swap signal has \textbf{nothing to grab}. Needs a backbone that uses audio.
+
 \end{frame}
 
 % --- 15. What the module actually learned ---
-\begin{frame}{The twist: what the module actually learned}
+\begin{frame}{What the module actually learned}
 \centering
 \begin{tikzpicture}[font=\small]
   \node[draw,rounded corners,fill=trn!22,minimum width=68mm,minimum height=11mm,align=center] (v)
@@ -270,22 +322,200 @@ near-zero loss), so the swap signal has \textbf{nothing to grab}. Needs a backbo
   \node[draw,rounded corners,fill=gray!12,minimum width=68mm,minimum height=11mm,align=center,below=4mm of v] (a)
     {\textbf{audio module}: $\approx$ pass-through (does almost nothing)};
 \end{tikzpicture}
+
+\vspace{0.3em}
+{\footnotesize\textbf{How we measure it:} per token, the relative edit
+$\;\|W_{\text{out}}z\|/\|x\|\;$ --- the size of the change the module adds, relative to the token
+($0=$ unchanged, $1=$ as large as the token).}
+\vspace{0.15in}
+
 \begin{itemize}\small
 \item ``Audio grounding'' is achieved by \textbf{reshaping the vision stream}; the frozen LM resolves the conflict.
 \item The information bottleneck barely compresses at these settings.
-\item $\Rightarrow$ two framing nouns (``\emph{audio}'', ``\emph{information bottleneck}'') don't describe what happens. A real finding --- how to frame it?
 \end{itemize}
 \end{frame}
 
-% --- 16. Methodology I trust ---
-\begin{frame}{Methodology (so you trust the numbers)}
-\begin{itemize}\small
-\item \textbf{Val/test split} per benchmark: choose checkpoints on val, report on a disjoint test half.
-\item \textbf{Paired} significance tests (McNemar + bootstrap), not bare averages.
-\item \textbf{Constant-answer detector} confirms the selected model didn't quietly collapse.
-\item Caught + fixed a \textbf{parser bug} (scored one model's prose answers as errors); \textbf{no change} to the
-Qwen models $\Rightarrow$ the fix is cleanly isolated.
+\begin{frame}{GRPO on a Frozen AV-LLM via a VIB Adapter}
+\textbf{Setup.} The audio-visual LLM is \emph{frozen}; the only trainable
+parameters are a tiny \emph{per-modality} Variational Information Bottleneck
+(audio, vision) wrapping the modality-adapter outputs.
+\[
+  z = \mu(x) + \sigma(x)\odot\epsilon,\qquad
+  y = x + W_{\text{out}}\,z,\qquad W_{\text{out}}\!\stackrel{\text{init}}{=}0
+\]
+$W_{\text{out}}$ zero-init $\Rightarrow$ identity at init (base for free);
+\textbf{exploration comes from the reparam noise} $\sigma\odot\epsilon$.
+
+\medskip
+\textbf{Rollout \& reward (verifiable, no reward model).}
+For a yes/no grounding question, draw a group of $G$ samples; the action is a
+categorical over the candidate answer tokens $\{\text{yes},\text{no},(\text{abstain})\}$.
+\[
+  r_i = +1\ (\text{correct}),\quad 0\ (\text{abstain}),\quad -1\ (\text{hallucinate})
+\]
+
+\textbf{Group-relative advantage \& objective.}
+\[
+  A_i = \frac{r_i-\mathrm{mean}(r)}{\mathrm{std}(r)+\varepsilon},\qquad
+  \mathcal{L} = -\tfrac{1}{G}\!\sum_i A_i \log\pi(a_i\mid x)
+  \;+\;\beta_{\mathrm{kl}}\,\mathrm{KL}\!\big(q(z|x)\,\|\,\mathcal N(0,I)\big)
+  \;+\;\lambda_{\mathrm{ref}}\,\mathrm{KL}(\text{base}\,\|\,\pi)
+\]
+
+\end{frame}
+
+% ======================= SLIDE 2 =======================
+\begin{frame}{Signal Collapse: Diagnosis, First Results, Remedy}
+\textbf{The collapse.} A near-deterministic frozen policy $+$ an \emph{easy}
+verifiable reward makes most groups \emph{unanimous} $\Rightarrow A_i\equiv 0
+\Rightarrow$ the policy gradient vanishes (``KL-regularized RL is designed to
+mode-collapse''). Only the KL terms move the adapter --- back toward identity.
+
+\medskip
+\textbf{First results} (Qwen3-Omni, AVE yes/no probe):
+\begin{itemize}
+  \item Strong base: probe acc $\approx 0.97$, $p_{\text{correct}}\approx 0.875$.
+  \item $\mathrm{adv\_std}=0$ on $\sim\!2/3$ of steps $\Rightarrow$ \emph{no learning signal}.
+  
 \end{itemize}
+
+\medskip
+\textbf{Next lever:} harder \emph{counterfactual (swap)} items
+        $\Rightarrow$ genuine uncertainty $\Rightarrow$ reward variance.
+
+\end{frame}
+
+
+% --- 17. Next plan: prompt-aware bottleneck ---
+\begin{frame}{Next: make the bottleneck \emph{prompt-aware}}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.6mm]},
+  enc/.style={draw,rounded corners,fill=frz!12,minimum width=13mm,minimum height=8mm,align=center},
+  vib/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum width=18mm,minimum height=9mm,align=center},
+  film/.style={draw,very thick,dashed,rounded corners,fill=trn!30,draw=trn!80!black,minimum width=20mm,minimum height=8mm,align=center},
+  op/.style={draw,circle,inner sep=1pt,fill=trn!18},
+  io/.style={align=center}]
+  % main token path (top row)
+  \node[io] (xin) {modality\\tokens $x$};
+  \node[vib,right=8mm of xin] (vib) {VIB$_q$\\$\mu(x{,}q),\,\sigma(x{,}q)$};
+  \node[op,right=9mm of vib] (gate) {$\times$};
+  \node[io,right=9mm of gate] (yout) {$y=x+g(q)\,W_{\text{out}}z$};
+  \draw[->] (xin)--(vib);
+  \draw[->] (vib)--node[above]{$z$}(gate);
+  \draw[->] (gate)--(yout);
+  % prompt-conditioning path (bottom row -- the new part)
+  \node[film,below=12mm of vib] (film) {FiLM $\gamma(q),\beta(q)$};
+  \node[enc,left=8mm of film] (tenc) {text enc.\\\textcolor{frz}{frozen}};
+  \node[io,left=7mm of tenc] (qin) {question\\\emph{``\dots do you hear?''}};
+  \draw[->] (qin)--(tenc);
+  \draw[->] (tenc)--node[above]{$q$}(film);
+  \draw[->,trn!80!black,thick] (film)--node[right]{\textcolor{trn}{modulate}}(vib);
+  \draw[->,trn!80!black,thick,dashed] (film.east) to[out=0,in=-90] (gate.south);
+  \node[font=\tiny,below=3mm of tenc]
+    {\textcolor{trn}{$\blacksquare$ new (trained)}\quad\textcolor{frz}{$\blacksquare$ frozen}};
+\end{tikzpicture}
+
+\vspace{0.6em}
+{\footnotesize\textbf{FiLM} (feature-wise linear modulation): the question sets a per-feature
+\textbf{scale} $\gamma(q)$ and \textbf{shift} $\beta(q)$ on the bottleneck's activations,
+$\ \mathrm{FiLM}(h\mid q)=\gamma(q)\odot h+\beta(q)$ --- two tiny linear maps, backbone stays frozen.}
+\vspace{0.4em}
+
+\begin{columns}[T]
+\begin{column}{0.49\textwidth}
+\textbf{Today --- unconditional}
+\begin{itemize}\scriptsize
+\item One fixed transform per modality, \emph{same for every question}.
+\item Conflict is dumped on the frozen LM; the audio VIB collapses to a pass-through.
+\end{itemize}
+\end{column}
+\begin{column}{0.49\textwidth}
+\textbf{Next --- prompt-aware}
+\begin{itemize}\scriptsize
+\item Question modulates $\mu,\sigma$ and an output gate $g(q)$ via \textbf{FiLM}.
+\item \emph{Keep audio when asked about sound}, vision when asked about looks: \textbf{selective} grounding.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Same weights, different harness: the Qwen2.5-Omni pipeline}
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    AVHBench (acc, \%) & \textbf{Old pipeline} & \textbf{Corrected pipeline} \\
+    \midrule
+    A$\to$V (video) & 80.5 & 82.2 \\
+    V$\to$A (audio) & \textbf{69.0} & \textbf{80.3} \\
+    AV-Matching     & 75.5 & 58.1 \\
+    \bottomrule
+  \end{tabular}
+
+  {\scriptsize Corrected $=$ our full-set re-run (n$=$5302), $\approx$ published Qwen2.5-Omni.\par}
+  \vspace{0.2em}
+  {\scriptsize Changes (model \emph{untouched}): \textbf{+system prompt}\;\textbar\; suffix
+  \texttt{"single word\ldots"}$\rightarrow$\texttt{"yes or no."}\;\textbar\; fps $2\!\rightarrow\!1$\par}
+
+  \vspace{0.4em}
+  \begin{columns}[T]
+    \begin{column}{0.47\textwidth}\centering
+      \IfFileExists{figures/qwen25_avhbench_low.png}%
+        {\includegraphics[width=\linewidth]{figures/qwen25_avhbench_low.png}}%
+        {\fbox{\parbox[c][2.4cm][c]{\linewidth}{\centering\tiny\ttfamily figures/qwen25\_avhbench\_low.png}}}\\
+      {\scriptsize \textbf{Paper A} (lower harness) $\approx$ our \emph{old}}
+    \end{column}
+    \begin{column}{0.47\textwidth}\centering
+      \IfFileExists{figures/qwen25_avhbench_high.png}%
+        {\includegraphics[width=\linewidth]{figures/qwen25_avhbench_high.png}}%
+        {\fbox{\parbox[c][2.4cm][c]{\linewidth}{\centering\tiny\ttfamily figures/qwen25\_avhbench\_high.png}}}\\
+      {\scriptsize \textbf{Paper B} (higher harness) $\approx$ our \emph{corrected}}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.3em}
+  {\small Identical weights score $\sim$3--4 pts apart across published harnesses
+  $\;\Rightarrow\;$ it is the \textbf{evaluation pipeline}, not the model.}
+\end{frame}
+
+\begin{frame}{Why Qwen3-Omni grounds audio--visual best}
+\begin{columns}[T]
+\begin{column}{0.60\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=7pt, width=\linewidth, height=5.0cm,
+  ymin=45, ymax=92, ylabel={AVHBench acc (\%)},
+  symbolic x coords={A$\to$V, V$\to$A, AV-Match}, xtick=data,
+  enlarge x limits=0.30, ymajorgrids, tick label style={font=\scriptsize},
+  ylabel style={font=\scriptsize},
+  legend style={at={(0.5,1.15)}, anchor=south, legend columns=3, font=\scriptsize},
+  nodes near coords, every node near coord/.append style={font=\tiny}]
+\addplot coordinates {(A$\to$V,80.1)(V$\to$A,77.5)(AV-Match,56.8)}; % VideoLLaMA2
+\addplot coordinates {(A$\to$V,82.2)(V$\to$A,80.3)(AV-Match,58.1)}; % Qwen2.5
+\addplot coordinates {(A$\to$V,83.8)(V$\to$A,81.2)(AV-Match,65.3)}; % Qwen3
+\legend{VideoLLaMA2, Qwen2.5-Omni, Qwen3-Omni}
+\end{axis}
+\end{tikzpicture}
+{\scriptsize AVHBench accuracy, our corrected harness (full set, n$=$5302).}
+\end{column}
+\begin{column}{0.40\textwidth}\small
+\textbf{The audio path is the driver}
+\begin{itemize}\footnotesize
+  \item Encoder: \textbf{AuT} (from scratch, 20M h) $>$ Whisper-v3 $\gg$ \emph{bolted-on} BEATs
+  \item Joint omni training + \textbf{TMRoPE} time-alignment\\(vs VideoLLaMA2's separate audio)
+  \item \textbf{30B-A3B MoE} capacity
+\end{itemize}
+\vspace{0.4em}
+\textbf{Where the edge shows}
+\begin{itemize}\footnotesize
+  \item AV-Matching: highest (real integration)
+  \item Audio: MMAU \textbf{+12}, WorldSense \textbf{+8.6} vs Qwen2.5
+\end{itemize}
+\end{column}
+\end{columns}
+\vspace{0.2em}
+{\scriptsize Qwen3-Omni leads on \textbf{all three} probes; the margin is largest on
+\textbf{AV-Matching} (real cross-modal integration), and it clears VideoLLaMA2 on every axis.}
 \end{frame}
 
 \end{document}
