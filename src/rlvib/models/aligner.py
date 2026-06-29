@@ -8,7 +8,6 @@ frozen; only f_a/f_v train, contrastively (matched audio<->video vs mismatched).
 """
 from __future__ import annotations
 
-import torch
 import torch.nn as nn
 
 

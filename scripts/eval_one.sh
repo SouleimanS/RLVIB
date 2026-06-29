@@ -23,7 +23,12 @@ CMM_JSON="${CMM_JSON:-data/CMM/all_data_final_reorg.json}"
 CMM_ROOT="${CMM_ROOT:-data/CMM}"
 
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+# The rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded; under `set -u` that's
+# an "unbound variable" abort when it's unset (which it should be -- see the git/OpenSSL gotcha).
+# conda's hooks aren't -u-safe, so relax nounset just across activation. (rlvib_vl2 lacks the hook.)
+set +u
 conda activate "${CONDA_ENV:-rlvib}"
+set -u
 export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 export TRANSFORMERS_OFFLINE=1
 # Pin to ONE GPU. device_map='auto' otherwise shards the 30B-MoE qwen3 across GPUs and its MoE
