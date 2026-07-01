@@ -133,20 +133,27 @@ def _keep(n, dev):
     return set(range(dev, n)) if dev > 0 else _testset(n)
 
 
-def _one(model, exp, step, dev=0, suffix=""):
+def _side(model, exp, step, sx):
+    """(avhbench, cmm) records for one side: exp=None -> the no-adapter base run; else the
+    exp/step checkpoint. Lets --vs pair two ADAPTED checkpoints (e.g. DPO vs FiLM)."""
+    if exp is None:
+        return _records(f"runs/avhbench_{model}{sx}.json"), _records(f"runs/cmm_{model}{sx}.json")
+    return (_records(f"runs/avhbench_{model}_{exp}{sx}_step{step}.json"),
+            _records(f"runs/cmm_{model}_{exp}{sx}_step{step}.json"))
+
+
+def _one(model, exp, step, dev=0, suffix="", base=None):
     sx = f"_{suffix}" if suffix else ""
-    xt = f"_{exp}" if exp else ""
-    base_a = _records(f"runs/avhbench_{model}{sx}.json")
-    base_c = _records(f"runs/cmm_{model}{sx}.json")
-    adt_a = _records(f"runs/avhbench_{model}{xt}{sx}_step{step}.json")
-    adt_c = _records(f"runs/cmm_{model}{xt}{sx}_step{step}.json")
+    base_a, base_c = _side(model, base[0] if base else None, base[1] if base else None, sx)
+    adt_a, adt_c = _side(model, exp, step, sx)
     if not all((base_a, base_c, adt_a, adt_c)):
-        print(f"  missing JSONs ({model} exp={exp} step={step} suffix={suffix or '-'})")
+        print(f"  missing JSONs ({model} {base or 'base'} vs {exp}@{step} suffix={suffix or '-'})")
         return None
     keep_a = _keep(min(len(base_a), len(adt_a)), dev)
     keep_c = _keep(min(len(base_c), len(adt_c)), dev)
     scope = f"held-out records[{dev}:]" if dev else "test half"
-    print(f"\n=== {model}  exp={exp or '-'}  step={step}  ({scope}) ===")
+    lhs = f"{base[0]}@{base[1]}" if base else "base"
+    print(f"\n=== {model}  {lhs} -> {exp}@{step}  ({scope})  [left=base col, right=adapted col] ===")
     bc, ac = _paired(base_a, adt_a, keep_a, _avh_correct)
     bcd = _report("AVHBench", bc, ac, adapt_yes=_yes_rate(adt_a, keep_a))
     for short, full in (("A->V", "Audio-driven Video Hallucination"),
@@ -170,8 +177,14 @@ def main() -> int:
     ap.add_argument("--dev", type=int, default=0,
                     help="full-eval: report on records[DEV:] (full minus the DEV-size dev subset)")
     ap.add_argument("--suffix", default="", help="read *_{suffix}.json eval files (e.g. 'full')")
+    ap.add_argument("--vs", default="", help="exp:step -> use THIS checkpoint (e.g. broad:60) as the "
+                    "baseline instead of the no-adapter base, for a paired DPO-vs-FiLM test")
     args = ap.parse_args()
 
+    base = None
+    if args.vs:
+        _e, _s = args.vs.split(":")
+        base = (_e, int(_s))
     if args.pool:
         B = C = 0
         for tok in args.pool.split(","):
@@ -184,7 +197,7 @@ def main() -> int:
         print(f"\n=== POOLED AVHBench across seeds: b={B} c={C} "
               f"McNemar p={p:.4f}{'  *' if p < 0.05 else ''} ===")
     else:
-        _one(args.model, args.exp, args.step, args.dev, args.suffix)
+        _one(args.model, args.exp, args.step, args.dev, args.suffix, base=base)
     return 0
 
 
