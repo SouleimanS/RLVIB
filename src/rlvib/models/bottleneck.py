@@ -311,6 +311,9 @@ def load_attached(model, ckpt_path):
     import torch
 
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    if ck.get("cls") == "LoRAAdapter":                 # LoRA baseline: its own attach path
+        from rlvib.models.lora import load_attached_lora
+        return load_attached_lora(model, ck)
     cls = {"VariationalBottleneck": VariationalBottleneck,
            "ResidualBottleneck": ResidualBottleneck,
            "FiLMVariationalBottleneck": FiLMVariationalBottleneck}.get(

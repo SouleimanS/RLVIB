@@ -46,6 +46,9 @@ EXTRA=()
 [ -n "${LAMGATE:-}" ]     && EXTRA+=(--lam-gate "$LAMGATE")
 [ -n "${GATETARGET:-}" ]  && EXTRA+=(--gate-target "$GATETARGET")
 [ -n "${LR:-}" ]          && EXTRA+=(--lr "$LR")
+[ -n "${LORA:-}" ]        && EXTRA+=(--lora)
+[ -n "${LORARANK:-}" ]    && EXTRA+=(--lora-rank "$LORARANK")
+[ -n "${LORAALPHA:-}" ]   && EXTRA+=(--lora-alpha "$LORAALPHA")
 
 python -u scripts/train_swap_anchored.py --model "${MODEL:-qwen3-omni}" \
     --pairs "${PAIRS:-300}" --epochs "${EPOCHS:-2}" --accum "${ACCUM:-4}" \

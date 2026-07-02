@@ -176,7 +176,17 @@ def main() -> int:
                     help="[FiLM] gate-usage hinge weight: push the question-relevant modality's gate "
                          "above --gate-target (audio on HEAR, vision on SEE). 0 = off (rely on SEE data).")
     ap.add_argument("--gate-target", type=float, default=0.6, help="[FiLM] target gate for --lam-gate.")
+    # --- LoRA baseline (the "why not LoRA?" control; same attach points + same recipe) ---
+    ap.add_argument("--lora", action="store_true",
+                    help="train a LoRA baseline on the adapter Linears instead of the VIB "
+                         "(identical anchored swap-DPO recipe; no IB rate term).")
+    ap.add_argument("--lora-rank", type=int, default=16)
+    ap.add_argument("--lora-alpha", type=float, default=32.0)
     args = ap.parse_args()
+    if args.lora and args.film:
+        ap.error("--lora and --film are mutually exclusive (LoRA is the unconditional control)")
+    if args.lora and args.init_from:
+        ap.error("--init-from is the FiLM warm-start; LoRA trains from its zero-init")
     args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
     torch.manual_seed(args.seed)
     # massive-activation backbones (VideoLLaMA2) need the scale-invariant VIB input;
@@ -184,8 +194,17 @@ def main() -> int:
     nin = args.normalize_input or args.model == "videollama2"
 
     m = get_model(args.model)
-    cls = FiLMVariationalBottleneck if args.film else VariationalBottleneck
-    bns, handles = attach_bottlenecks(m, cls=cls, normalize_input=nin)
+    if args.lora:
+        from rlvib.models.lora import attach_lora
+        bns, handles = attach_lora(m, r=args.lora_rank, alpha=args.lora_alpha)
+        cls_name = "LoRAAdapter"
+        n_train = sum(p.numel() for p in bns.parameters())
+        print(f"[lora] r={args.lora_rank} alpha={args.lora_alpha}  wrapped={list(bns.keys())}  "
+              f"trainable={n_train / 1e6:.2f}M", flush=True)
+    else:
+        cls = FiLMVariationalBottleneck if args.film else VariationalBottleneck
+        bns, handles = attach_bottlenecks(m, cls=cls, normalize_input=nin)
+        cls_name = cls.__name__
     if args.init_from:                                 # warm-start the core (Stage 1 -> Stage 2)
         ck = torch.load(args.init_from, map_location="cpu", weights_only=False)
         missing, unexpected = bns.load_state_dict(ck["state_dict"], strict=False)
@@ -268,8 +287,10 @@ def main() -> int:
                 bns.train()
                 ckpt = os.path.join(args.save_dir, f"bottleneck_step{step}.pt")
                 torch.save({"state_dict": bns.state_dict(), "dim": m.hidden_dim,
-                            "cls": cls.__name__, "model": args.model, "normalize_input": nin,
-                            "cond_dim": (bns["audio"].cond_dim if args.film else None)}, ckpt)
+                            "cls": cls_name, "model": args.model, "normalize_input": nin,
+                            "cond_dim": (bns["audio"].cond_dim if args.film else None),
+                            "rank": (args.lora_rank if args.lora else None),
+                            "alpha": (args.lora_alpha if args.lora else None)}, ckpt)
                 flag = "  <-- COLLAPSE ALARM" if (fy < 0.15 or fy > 0.85) else ""
                 print(f"[probe step {step}] frac_yes={fy:.2f} (base {base_yes:.2f}) acc={ac:.2f}  "
                       f"saved {os.path.basename(ckpt)}{flag}{rmsg}", flush=True)
