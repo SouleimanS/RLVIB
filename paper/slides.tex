@@ -526,57 +526,53 @@ loss \emph{form} & \multicolumn{2}{c}{unchanged (swap-DPO $+$ two anchors $+$ $\
 I(Z;X\mid Q)\;\le\;\mathbb E_{x,q}\,\mathrm{KL}\!\big(q_\phi(z\mid x,q)\,\big\|\,\mathcal N(0,I)\big)
 \]
 \begin{center}
-\begin{minipage}{0.92\textwidth}\footnotesize
-Same KL term, read conditionally: for each $q$ the bound holds with the $q$-independent prior; average over $q$.\\
-The code may now \textbf{keep the bits that answer \emph{this} question} --- instead of one budget for all questions.
+\begin{minipage}{0.94\textwidth}\footnotesize
+\textbf{Read, left to right:} $I(Z;X\,|\,Q)$ $=$ the bits the code $z$ keeps about the stream $x$
+\emph{once the question is known} --- and it is capped by the \emph{same} KL penalty we already pay in
+the loss (the $q$-independent prior makes the bound hold per question; average over $q$).\\
+\textbf{Practical meaning:} the bit-budget is now spent \emph{per question} --- keep audio bits for an
+audio question, drop them for a visual one --- instead of one fixed allocation for all questions.
 \end{minipage}
 \end{center}
 \end{frame}
 
 % --- 18.iv FiLM math (the forcing lemma) ---
 \begin{frame}{FiLM, formally: why the question \emph{must} be read}
-{\footnotesize\textbf{Setup --- one single clip.} The audio is swapped: you \textbf{see a dog} ($A$)
-but \textbf{hear a bell} ($B$). Ask the \emph{same clip} two questions:\\
-\centerline{``What do you \textbf{HEAR}?'' $\to$ correct: \textbf{bell} \qquad\qquad
-``What do you \textbf{SEE}?'' $\to$ correct: \textbf{dog}}
-The correct answer \textbf{flips} --- but pixels and waveform are \emph{identical};
-\textbf{only the question text differs}.}
+{\footnotesize\textbf{Setup --- one clip, audio swapped:} you \textbf{see a dog} ($A$) but
+\textbf{hear a bell} ($B$). Ask it two questions: \emph{``What do you \textbf{HEAR}?''} $\to$
+\textbf{bell}\ \ $\cdot$\ \ \emph{``What do you \textbf{SEE}?''} $\to$ \textbf{dog}.
+Same pixels, same waveform --- \textbf{only the question text differs}.}
 \vspace{0.1em}
 \par
-{\scriptsize\textbf{Loss per question} $=-\log\sigma(m)$, where the margin $m$ $=$ how strongly the
-adapter prefers the \emph{correct} answer:\quad
-$m{=}{+}2$ (right) $\to$ loss $0.13$\ \ $\cdot$\ \ $m{=}0$ (50/50) $\to$ $0.69$\ \ $\cdot$\ \
-$m{=}{-}2$ (wrong) $\to$ $2.13$.}
+{\scriptsize\textbf{Loss per question} $=-\log\sigma(m)$; $m$ $=$ how strongly the adapter prefers the
+\emph{correct} answer:\ \ $m{=}{+}2$ (right) $\to 0.13$\ $\cdot$\ $m{=}0$ (50/50) $\to 0.69$\ $\cdot$\
+$m{=}{-}2$ (wrong) $\to 2.13$.}
 \vspace{0.1em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{Lemma (question-blind adapters have a loss floor)}
-\scriptsize Ignoring $q$ $\Rightarrow$ the \emph{same} answer to both questions $\Rightarrow$ the two
-margins are exact negatives, $m_{\text{see}}=-m_{\text{hear}}$, so
-\vspace{-0.3em}
-\[
--\log\sigma(m)-\log\sigma(-m)\;=\;-\log\!\big[\sigma(m)\,\sigma(-m)\big]\;\ge\;2\log 2\;\approx\;1.39 .
-\]
+\scriptsize Ignoring $q$ $\Rightarrow$ the \emph{same} answer to both questions $\Rightarrow$
+$m_{\text{see}}=-m_{\text{hear}}$, so
+$\ -\log\sigma(m)-\log\sigma(-m)=-\log[\sigma(m)\sigma(-m)]\;\ge\;2\log 2\approx 1.39$.
 \end{block}
 \end{center}
 \vspace{-0.2em}
 \centering
-\renewcommand{\arraystretch}{1.15}
-{\footnotesize
+\renewcommand{\arraystretch}{1.05}
+{\scriptsize
 \begin{tabular}{l l cc c}
 \toprule
-adapter & answers & HEAR loss & SEE loss & total \\
+adapter & answers (HEAR / SEE) & HEAR loss & SEE loss & total \\
 \midrule
 blind, leans ``bell'' ($m{=}2$) & ``bell'' / ``bell'' & $0.13$ & $2.13$ & $2.26$ \\
 blind, plays safe ($m{=}0$)     & 50/50 / 50/50       & $0.69$ & $0.69$ & $\mathbf{1.39}$ (the floor) \\
-\textbf{aware} ($m_{\text{hear}}{=}m_{\text{see}}{=}2$) & ``bell'' / ``dog'' & $0.13$ & $0.13$ & $\mathbf{0.26\ (\to 0)}$ \\
+\textbf{aware}                  & ``bell'' / ``dog''  & $0.13$ & $0.13$ & $\mathbf{0.26\ (\to 0)}$ \\
 \bottomrule
 \end{tabular}}
-\vspace{0.5em}
+\vspace{0.3em}
 \par
-{\footnotesize\textbf{Corollary.} Blind adapters are stuck $\ge 1.39$ per pair; aware ones reach $0$ ---
-so minimizing the HEAR$+$SEE loss \textbf{forces the adapter to read $q$}: routing comes from the
-\emph{data construction}, not a regularizer.}
+{\footnotesize\textbf{Corollary:} blind $\ge 1.39$ per pair, aware $\to 0$ $\Rightarrow$ minimizing the
+HEAR$+$SEE loss \textbf{forces the adapter to read $q$} --- routing from \emph{data construction}, not a regularizer.}
 \end{frame}
 
 
@@ -629,6 +625,13 @@ discordant pairs summed over the 3 training seeds)\ \ $\cdot$\ \ $^{\dagger}$ $=
 ($0.05\le p<0.10$)\ \ $\cdot$\ \ no mark $=$ a tie.\\
 3 training seeds per adapter; $\Delta$ $=$ mean$\pm$std across seeds.
 Held-out $=$ full set minus the 300-item selection subset (select on val, report here).}
+\vspace{0.3em}
+\par
+{\scriptsize\emph{McNemar's test}: both models answer the \emph{same} items, so only the
+\textbf{disagreements} carry information --- count $b$ $=$ items only the \emph{left} model gets right,
+$c$ $=$ items only the \emph{right} model gets right, and test whether $c$ exceeds $b$ beyond chance
+(exact binomial under $H_0\!: c/(b{+}c){=}\tfrac12$). ``Pooled'' $=$ $b,c$ summed over the 3 seeds
+before testing.}
 \vfill
 \begin{center}
 {\small\textbf{Read:} both adapters give a \emph{real} gain; FiLM's is the larger and the most
