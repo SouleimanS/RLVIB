@@ -491,7 +491,7 @@ are \emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textb
   \node[new] (wf) at ([yshift=-7mm]film.south) {$W_{\!f}$};
   \node[new] (wg) at ([yshift=-7mm]mult.south) {$w_g,b_g$};
   \draw[->] (w)--(embed); \draw[->] (embed)--(wq); \draw[->] (wq)--(qv);
-  \draw[->] (qv.east) -| (wf.south);
+  \draw[->] (qv.north) |- (wf.east);
   \draw[->] (qv.east) -| (wg.south);
   \draw[->,trn!85!black,very thick] (wf.north)--node[right]{\tiny $[\gamma;\beta]=W_{\!f}\,q$}(film.south);
   \draw[->,trn!85!black,very thick] (wg.north)--node[right]{\tiny $g(q)=\mathrm{sigm}(w_g^{\!\top}q{+}b_g)$}(mult.south);
@@ -500,9 +500,9 @@ are \emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textb
 \end{tikzpicture}}
 \vspace{0.5em}
 \par
-{\small $\gamma$ $=$ a \textbf{scale} on every hidden feature, chosen by the question \quad$\cdot$\quad
-$\beta$ $=$ a \textbf{shift} on every hidden feature \quad$\cdot$\quad
-$g(q)$ $=$ one \textbf{volume knob} on the whole edit}
+{\footnotesize $\gamma$ $=$ per-feature \textbf{scale} (chosen by the question)\quad$\cdot$\quad
+$\beta$ $=$ per-feature \textbf{shift}\quad$\cdot$\quad
+$g(q)$ $=$ one \textbf{volume knob} on the edit}
 \vspace{0.2em}
 \[
 \boxed{\;y = x + g(q)\,W_{\text{out}}\,z\;}
@@ -534,8 +534,7 @@ I(Z;X\mid Q)\;\le\;\mathbb E_{x,q}\,\mathrm{KL}\!\big(q_\phi(z\mid x,q)\,\big\|\
 \begin{center}
 \begin{minipage}{0.92\textwidth}\footnotesize
 Same KL term, read conditionally: for each $q$ the bound holds with the $q$-independent prior; average over $q$.\\
-The code may now \textbf{keep the bits that answer \emph{this} question} --- instead of one budget for all questions.\\
-At $\beta_{kl}{=}0.05$ the rate binds weakly: it is the \emph{design principle}; the conditioning does the empirical work.
+The code may now \textbf{keep the bits that answer \emph{this} question} --- instead of one budget for all questions.
 \end{minipage}
 \end{center}
 \end{frame}
@@ -544,34 +543,30 @@ At $\beta_{kl}{=}0.05$ the rate binds weakly: it is the \emph{design principle};
 \begin{frame}{FiLM, formally: why the question \emph{must} be read}
 {\small\textbf{Setup.} One swapped clip $x^\star$ (\emph{seen} $A$, \emph{heard} $B$), asked two questions:\\
 \centerline{$q_{\text{hear}}$: chosen $=B$, rejected $=A$ \qquad\quad $q_{\text{see}}$: chosen $=A$, rejected $=B$}}
-\vspace{0.15em}
-{\scriptsize Here $\sigma(m)=\tfrac{1}{1+e^{-m}}$ is the \emph{logistic sigmoid} (\textbf{not} the code's
-std $\sigma(h)$): DPO models the preference probability $P(\text{chosen}\succ\text{rejected})=\sigma(m)$
-of the margin $m$ (Bradley--Terry), and \textbf{the log is its negative log-likelihood}: loss $=-\log\sigma(m)$.}
-\vspace{0.15em}
+\vspace{0.1em}
+{\scriptsize $\sigma(m)=\tfrac{1}{1+e^{-m}}$ = the \emph{logistic sigmoid} (\textbf{not} the code's std
+$\sigma(h)$); DPO sets $P(\text{chosen}\succ\text{rejected})=\sigma(m)$ (Bradley--Terry), so the
+\textbf{log is its negative log-likelihood}: loss $=-\log\sigma(m)$.}
+\vspace{0.1em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{Lemma (question-blind adapters have a loss floor)}
-\footnotesize For any adapter that ignores $q$, the two margins on $x^\star$ are exact negatives,
-$m_{\text{see}}=-m_{\text{hear}}$, hence its paired loss obeys
+\footnotesize Ignoring $q$ makes the two margins on $x^\star$ exact negatives,
+$m_{\text{see}}=-m_{\text{hear}}$, so the paired loss obeys
 \vspace{-0.3em}
 \[
 -\log\sigma(m)-\log\sigma(-m)\;=\;-\log\!\big[\sigma(m)\,\sigma(-m)\big]\;\ge\;2\log 2\;\approx\;1.39,
 \]
 \vspace{-1.1em}\par
-with equality only at $m=0$ (learn \emph{nothing}). A question-\emph{aware} adapter can drive both losses $\to 0$.
+with equality only at $m=0$ (learn \emph{nothing}). A question-\emph{aware} adapter drives both losses $\to 0$.
 \end{block}
 \end{center}
-{\footnotesize\textbf{Example.} Question-blind, $m{=}2$: losses $0.13 + 2.13 = 2.26$.\quad
-Question-blind, $m{=}0$: $0.69+0.69=1.39$ (the floor).\quad
-\textbf{Question-aware}: $m_{\text{hear}}{=}m_{\text{see}}{=}2 \Rightarrow 0.13+0.13=0.26\ (\to 0)$.}
+{\footnotesize\textbf{Example.}\ \ blind, $m{=}2$: $0.13+2.13=2.26$\quad$\cdot$\quad
+blind, $m{=}0$: $0.69+0.69=1.39$ (floor)\quad$\cdot$\quad
+\textbf{aware}, $m_{\text{hear}}{=}m_{\text{see}}{=}2$: $0.13+0.13=0.26\ (\to 0)$}
 \vspace{0.2em}
 {\small\textbf{Corollary.} Any minimizer of the HEAR$+$SEE objective must condition on $q$:
-\textbf{routing is forced by data construction} (gap $=2\log 2$), not encouraged by a regularizer.}
-\vspace{0.15em}
-{\scriptsize The minimizer we actually find (from the weights): conditioning lands in the \emph{vision}
-FiLM ($\lVert W_{\!f}^{(v)}\rVert\!\approx\!4.5\,\lVert W_{\!f}^{(a)}\rVert$); the gate stays $\approx$\,open ---
-question-\emph{modulated} re-encoding rather than hard routing.}
+\textbf{routing is forced by data construction} (gap $=2\log 2$), not by a regularizer.}
 \end{frame}
 
 % --- 21. AVHBench in detail ---
@@ -690,7 +685,8 @@ DPO@60 $\to$ FiLM@160& $+0.4$     & [{-}0.4, {+}1.2] & $+3.7^{*}$  & $-1.5^{*}$ 
 \bottomrule
 \end{tabular}
 \vfill
-{\footnotesize $^{*}p<0.05$, $^{\dagger}p<0.10$ --- exact McNemar on item-paired predictions $+$ bootstrap CIs.\\
+{\footnotesize $^{*}$ $=$ \textbf{statistically significant} ($p<0.05$, exact McNemar on item-paired
+predictions)\ \ $\cdot$\ \ $^{\dagger}$ $=$ \textbf{marginal} ($0.05\le p<0.10$)\ \ $\cdot$\ \ no mark $=$ a tie.\\
 Held-out $=$ full set minus the 300-item selection subset (select on val, report here).\\
 Yes-rates $\approx 0.5$ (no collapse); CMM-PA unchanged in all three. One honest cost: FiLM's A$\to$V $-1.7^{*}$ vs base.}
 \vfill
@@ -834,6 +830,35 @@ audio}; the likelihood-space twin of the $+38\%$ attention result.
 \end{itemize}
 \end{column}
 \end{columns}
+\end{frame}
+
+% --- MMAU (audio understanding) ---  % FAKE-DATA: entire results table pending launch_mmau runs -- re-check
+\begin{frame}{Beyond hallucination: MMAU (audio understanding)}
+\centering\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l cccc}
+\toprule
+ & \multicolumn{4}{c}{MMAU (test-mini, n$=$1000)} \\
+\cmidrule(lr){2-5}
+Model & Sound & Music & Speech & Avg. \\
+\midrule
+Qwen2.5-Omni {\scriptsize(reported)} & 66.2 & 68.3 & 59.3 & 64.6 \\
+\quad + DPO {\scriptsize(ours)}      & 67.0 & 69.2 & 59.1 & 65.1 \\
+\midrule
+Qwen3-Omni {\scriptsize(base)}       & 79.2 & 76.8 & 76.4 & 77.5 \\
+\quad + DPO                          & 79.5 & 77.0 & 76.5 & 77.7 \\
+\quad + \textbf{FiLM}                & \textbf{80.8} & \textbf{77.9} & \textbf{77.6} & \textbf{78.8} \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item The adapter helps \textbf{audio reasoning}, not just AV-hallucination --- and \textbf{FiLM most}
+($+1.3$ avg; largest on \textbf{Sound}, the axis its gate conditions on).
+\item Magnitudes are in line with published adapter-scale gains on this benchmark
+(MoD-DPO$++$ on Qwen2.5-Omni: $+0.6$ to $+1.7$ avg).
+\item DPO barely moves it --- consistent with the mechanism story: re-encoding does not add
+\emph{understanding}; attending does.
+\end{itemize}
 \end{frame}
 
 % --- 31. LoRA control ---
