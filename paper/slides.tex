@@ -165,6 +165,101 @@ Narrow, practical question: fix this \textbf{without retraining} ---\\ freeze ev
 {\footnotesize\textbf{Backbones / encoders:} Qwen3-Omni (\emph{AuT} audio, Qwen2.5-VL vision) \ $\cdot$ \ Qwen2.5-Omni (\emph{Whisper-v3} audio, Qwen2.5-VL vision) \ $\cdot$ \ VideoLLaMA2 (\emph{BEATs} audio, \emph{SigLIP} vision).}
 \end{frame}
 
+% --- What the metrics mean (moved next to the benchmark-detail slides) ---
+\begin{frame}{What the metrics mean}
+\begin{itemize}
+\item \textbf{AVHBench} = the \textbf{target} (audio--visual hallucination); three yes/no tasks:
+\vspace{0.06in}
+  \begin{itemize}\footnotesize
+  \item \textbf{A$\to$V} (audio-driven \emph{video} hall.): ``is the queried object \emph{visible}?'' --- audio tempts a false ``yes''.
+  \item \textbf{V$\to$A} (video-driven \emph{audio} hall.): ``is the queried sound \emph{audible}?'' --- \textbf{our audio-grounding probe}.
+  \item \textbf{AV-match}: ``do the audio and video \emph{match}?''
+  \end{itemize}
+\vspace{0.12in}
+\item \textbf{CMM} = capability, two axes:
+\vspace{0.06in}
+  \begin{itemize}\footnotesize
+  \item \textbf{PA} (perception): on \emph{present} items --- correctly says ``yes, it's there'' (catches under-perception).
+  \item \textbf{HR} (resistance): on \emph{absent} items --- correctly says ``no, it isn't'' (catches hallucination).
+  \end{itemize}
+\vspace{0.12in}
+\item \textbf{DAVE} = \textbf{diagnostic}: audio--visual \textbf{multiple-choice}; each question needs \emph{both} modalities --- a general AV check, \emph{not} a hallucination probe.
+\end{itemize}
+\end{frame}
+
+% --- 21. AVHBench in detail ---
+\begin{frame}{AVHBench, in detail (audio--visual hallucination)}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Judgment task & QnA & yes & no \\
+\midrule
+A$\to$V (audio$\to$video) & 1,136 & 568 & 568 \\
+V$\to$A (video$\to$audio) & 2,290 & 1,145 & 1,145 \\
+A--V Matching             & 1,876 & 938 & 938 \\
+\midrule
+\textbf{Total}            & \textbf{5,302} & 2,651 & 2,651 \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.4em}
+\begin{itemize}\scriptsize
+\item $+$ 1,106 audio--visual captions (description task; not used here).
+\item \textbf{2,136 videos}; yes/no \textbf{exactly balanced} $\Rightarrow$ constant ``no'' $=50\%$, so accuracy is honest.
+\item Everyday clips (word cloud: \emph{man, water, music, car, dog\dots}), not adversarial.
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}\scriptsize
+\textbf{What each judgment task probes}
+\smallskip
+\begin{itemize}
+\item \textbf{A$\to$V} --- ``Is the queried object \emph{visible}?''\\
+the \emph{heard} event tempts a false ``yes, it's seen''\,---\,audio hallucinating vision.
+\item \textbf{V$\to$A} --- ``Is the queried sound \emph{audible}?''\\
+the \emph{seen} event tempts a false ``yes, it's heard''.\\
+\textbf{$\Rightarrow$ our audio-grounding probe.}
+\item \textbf{A--V Matching} --- ``Do audio and video \emph{match}?''\\
+needs true cross-modal integration (where FiLM wins).
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+% --- 22. CMM in detail ---
+\begin{frame}{CMM, in detail (\emph{The Curse of Multi-modalities})}
+\centering\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}ccc|ccc@{}}
+\multicolumn{3}{c}{\textbf{Overreliance on unimodal priors}} &
+\multicolumn{3}{c}{\textbf{Spurious inter-modality correlations}} \\
+\cmidrule(r){1-3}\cmidrule(l){4-6}
+Visual & Audio & Language & Visual & Audio & Vis.--Aud. \\
+dom. & dom. & dom. & --Lang. & --Lang. & --Lang. \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.5em}
+\raggedright
+\begin{itemize}\scriptsize
+\item \textbf{6 sub-categories $\times$ 200 $=$ 1,200 samples} (video-only / audio-only / AV pairs).
+\item Each sample $\to$ \textbf{2 probes}: one \emph{present} (gold ``yes''), one \emph{absent} (gold ``no'') $=$ \textbf{2,400 questions}.
+  \begin{itemize}\scriptsize
+  \item[] \emph{``Did you \textbf{see} [object/event] in the video?''}\quad(visual query)
+  \item[] \emph{``Did you \textbf{hear} [event] in the audio?''}\quad(audio query)
+  \end{itemize}
+\end{itemize}
+\vspace{0.2em}
+\centering
+$\displaystyle \mathbf{PA}=\frac{\#\,\text{correct ``yes''}}{\#\,\text{ground-truth ``yes''}}
+\qquad\qquad
+\mathbf{HR}=\frac{\#\,\text{correct ``no''}}{\#\,\text{ground-truth ``no''}}$
+\par\vspace{0.4em}
+{\scriptsize \textbf{PA} $=$ perceive what \emph{is} there\quad$\cdot$\quad
+\textbf{HR} $=$ reject what is \emph{not}.\ \ Watch \textbf{both}: constant ``no'' $\Rightarrow$ HR$=$1, PA$=$0
+--- the collapse trap. They map onto our anchors (chosen $\leftrightarrow$ PA, KL-to-base $\leftrightarrow$ HR).}
+\end{frame}
+
 % --- 6. The training signal (the core trick) ---
 \begin{frame}{The core trick: manufacture an audio--vision conflict}
 \centering
@@ -440,13 +535,24 @@ The code may now \textbf{keep the bits that answer \emph{this} question} --- ins
 
 % --- 18.iv FiLM math (the forcing lemma) ---
 \begin{frame}{FiLM, formally: why the question \emph{must} be read}
-{\small\textbf{Setup.} One swapped clip $x^\star$: \emph{see} dog $A$, \emph{hear} bell $B$ --- asked two questions:\\
-\centerline{$q_{\text{hear}}$ (``what do you hear?''): chosen $=B$ \qquad\quad $q_{\text{see}}$ (``what do you see?''): chosen $=A$}}
-\vspace{0.2em}
+{\footnotesize\textbf{Setup --- one single clip.} The audio is swapped: you \textbf{see a dog} ($A$)
+but \textbf{hear a bell} ($B$). Ask the \emph{same clip} two questions:\\
+\centerline{``What do you \textbf{HEAR}?'' $\to$ correct: \textbf{bell} \qquad\qquad
+``What do you \textbf{SEE}?'' $\to$ correct: \textbf{dog}}
+The correct answer \textbf{flips} --- but pixels and waveform are \emph{identical};
+\textbf{only the question text differs}.}
+\vspace{0.1em}
+\par
+{\scriptsize\textbf{Loss per question} $=-\log\sigma(m)$, where the margin $m$ $=$ how strongly the
+adapter prefers the \emph{correct} answer:\quad
+$m{=}{+}2$ (right) $\to$ loss $0.13$\ \ $\cdot$\ \ $m{=}0$ (50/50) $\to$ $0.69$\ \ $\cdot$\ \
+$m{=}{-}2$ (wrong) $\to$ $2.13$.}
+\vspace{0.1em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{Lemma (question-blind adapters have a loss floor)}
-\footnotesize Ignoring $q$ makes the two margins on $x^\star$ exact negatives, $m_{\text{see}}=-m_{\text{hear}}$, so
+\scriptsize Ignoring $q$ $\Rightarrow$ the \emph{same} answer to both questions $\Rightarrow$ the two
+margins are exact negatives, $m_{\text{see}}=-m_{\text{hear}}$, so
 \vspace{-0.3em}
 \[
 -\log\sigma(m)-\log\sigma(-m)\;=\;-\log\!\big[\sigma(m)\,\sigma(-m)\big]\;\ge\;2\log 2\;\approx\;1.39 .
@@ -468,105 +574,11 @@ blind, plays safe ($m{=}0$)     & 50/50 / 50/50       & $0.69$ & $0.69$ & $\math
 \end{tabular}}
 \vspace{0.5em}
 \par
-{\small\textbf{Corollary.} Blind adapters are stuck $\ge 1.39$ per pair; aware ones reach $0$ ---
-so minimizing the HEAR$+$SEE loss \textbf{forces the adapter to read $q$}. Routing comes from the
+{\footnotesize\textbf{Corollary.} Blind adapters are stuck $\ge 1.39$ per pair; aware ones reach $0$ ---
+so minimizing the HEAR$+$SEE loss \textbf{forces the adapter to read $q$}: routing comes from the
 \emph{data construction}, not a regularizer.}
 \end{frame}
 
-% --- What the metrics mean (moved next to the benchmark-detail slides) ---
-\begin{frame}{What the metrics mean}
-\begin{itemize}
-\item \textbf{AVHBench} = the \textbf{target} (audio--visual hallucination); three yes/no tasks:
-\vspace{0.06in}
-  \begin{itemize}\footnotesize
-  \item \textbf{A$\to$V} (audio-driven \emph{video} hall.): ``is the queried object \emph{visible}?'' --- audio tempts a false ``yes''.
-  \item \textbf{V$\to$A} (video-driven \emph{audio} hall.): ``is the queried sound \emph{audible}?'' --- \textbf{our audio-grounding probe}.
-  \item \textbf{AV-match}: ``do the audio and video \emph{match}?''
-  \end{itemize}
-\vspace{0.12in}
-\item \textbf{CMM} = capability, two axes:
-\vspace{0.06in}
-  \begin{itemize}\footnotesize
-  \item \textbf{PA} (perception): on \emph{present} items --- correctly says ``yes, it's there'' (catches under-perception).
-  \item \textbf{HR} (resistance): on \emph{absent} items --- correctly says ``no, it isn't'' (catches hallucination).
-  \end{itemize}
-\vspace{0.12in}
-\item \textbf{DAVE} = \textbf{diagnostic}: audio--visual \textbf{multiple-choice}; each question needs \emph{both} modalities --- a general AV check, \emph{not} a hallucination probe.
-\end{itemize}
-\end{frame}
-
-% --- 21. AVHBench in detail ---
-\begin{frame}{AVHBench, in detail (audio--visual hallucination)}
-\begin{columns}[T]
-\begin{column}{0.5\textwidth}
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lrrr@{}}
-\toprule
-Judgment task & QnA & yes & no \\
-\midrule
-A$\to$V (audio$\to$video) & 1,136 & 568 & 568 \\
-V$\to$A (video$\to$audio) & 2,290 & 1,145 & 1,145 \\
-A--V Matching             & 1,876 & 938 & 938 \\
-\midrule
-\textbf{Total}            & \textbf{5,302} & 2,651 & 2,651 \\
-\bottomrule
-\end{tabular}
-\par\vspace{0.4em}
-\begin{itemize}\scriptsize
-\item $+$ 1,106 audio--visual captions (description task; not used here).
-\item \textbf{2,136 videos}; yes/no \textbf{exactly balanced} $\Rightarrow$ constant ``no'' $=50\%$, so accuracy is honest.
-\item Everyday clips (word cloud: \emph{man, water, music, car, dog\dots}), not adversarial.
-\end{itemize}
-\end{column}
-\begin{column}{0.5\textwidth}\scriptsize
-\textbf{What each judgment task probes}
-\smallskip
-\begin{itemize}
-\item \textbf{A$\to$V} --- ``Is the queried object \emph{visible}?''\\
-the \emph{heard} event tempts a false ``yes, it's seen''\,---\,audio hallucinating vision.
-\item \textbf{V$\to$A} --- ``Is the queried sound \emph{audible}?''\\
-the \emph{seen} event tempts a false ``yes, it's heard''.\\
-\textbf{$\Rightarrow$ our audio-grounding probe.}
-\item \textbf{A--V Matching} --- ``Do audio and video \emph{match}?''\\
-needs true cross-modal integration (where FiLM wins).
-\end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
-
-% --- 22. CMM in detail ---
-\begin{frame}{CMM, in detail (\emph{The Curse of Multi-modalities})}
-\centering\footnotesize
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{@{}ccc|ccc@{}}
-\multicolumn{3}{c}{\textbf{Overreliance on unimodal priors}} &
-\multicolumn{3}{c}{\textbf{Spurious inter-modality correlations}} \\
-\cmidrule(r){1-3}\cmidrule(l){4-6}
-Visual & Audio & Language & Visual & Audio & Vis.--Aud. \\
-dom. & dom. & dom. & --Lang. & --Lang. & --Lang. \\
-\bottomrule
-\end{tabular}
-\par\vspace{0.5em}
-\raggedright
-\begin{itemize}\scriptsize
-\item \textbf{6 sub-categories $\times$ 200 $=$ 1,200 samples} (video-only / audio-only / AV pairs).
-\item Each sample $\to$ \textbf{2 probes}: one \emph{present} (gold ``yes''), one \emph{absent} (gold ``no'') $=$ \textbf{2,400 questions}.
-  \begin{itemize}\scriptsize
-  \item[] \emph{``Did you \textbf{see} [object/event] in the video?''}\quad(visual query)
-  \item[] \emph{``Did you \textbf{hear} [event] in the audio?''}\quad(audio query)
-  \end{itemize}
-\end{itemize}
-\vspace{0.2em}
-\centering
-$\displaystyle \mathbf{PA}=\frac{\#\,\text{correct ``yes''}}{\#\,\text{ground-truth ``yes''}}
-\qquad\qquad
-\mathbf{HR}=\frac{\#\,\text{correct ``no''}}{\#\,\text{ground-truth ``no''}}$
-\par\vspace{0.4em}
-{\scriptsize \textbf{PA} $=$ perceive what \emph{is} there\quad$\cdot$\quad
-\textbf{HR} $=$ reject what is \emph{not}.\ \ Watch \textbf{both}: constant ``no'' $\Rightarrow$ HR$=$1, PA$=$0
---- the collapse trap. They map onto our anchors (chosen $\leftrightarrow$ PA, KL-to-base $\leftrightarrow$ HR).}
-\end{frame}
 
 % --- 23. Generalization (corrected rows: DPO@60, FiLM@160 full) ---
 \begin{frame}{Generalization: uneven across backbones}
@@ -730,31 +742,30 @@ axis, and keeps the best capability profile $\Rightarrow$ \textbf{FiLM: same gro
 \end{center}
 \end{frame}
 
-% --- 30. Likelihood-shift: does FiLM actually LISTEN? ---
+% --- Likelihood-shift: does FiLM actually LISTEN? ---
 \begin{frame}{Does FiLM actually \emph{listen}? The likelihood-shift test}
-\begin{columns}[T]
-\begin{column}{0.58\textwidth}
 \centering
-\figslot{ll_shift.png}{\linewidth}\\[2pt]
-{\scriptsize KDE over AVE clips of the gold answer's log-likelihood: \textcolor{teal}{true audio
-$\log p(y\,|\,a,v,x)$} vs \textcolor{magenta}{swapped audio $\log p(y\,|\,a',v,x)$}; dashed $=$ means.
-One panel per variant (n$=$40 pairs).}
-\end{column}
-\begin{column}{0.42\textwidth}\small
-\textbf{How to read it}
-\begin{itemize}\footnotesize
-\item Swap the \textbf{audio} of the clip, keep everything else; re-score the \emph{same} gold answer.
+\figslot{ll_shift.png}{0.97\textwidth}\\[1pt]
+{\scriptsize \textcolor{teal}{true audio $\log p(y\,|\,a,v,x)$} vs
+\textcolor{magenta}{swapped audio $\log p(y\,|\,a',v,x)$} --- KDE over 40 AVE clips, dashed $=$ means,
+one panel per variant.}
+\vfill
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+{\small\textbf{How to read it}}
+\begin{itemize}\scriptsize
+\item Swap the clip's \textbf{audio}, keep everything else; re-score the \emph{same} gold answer.
 \item A model that \emph{ignores} audio: curves overlap, shift $\approx 0$.
-\item The \textbf{shift} is a likelihood-space \emph{audio-reliance meter}: more negative $=$ the answer
-\emph{depends on what it hears}.
+\item The \textbf{shift} is a likelihood-space \emph{audio-reliance meter}: more negative $=$ the
+answer \emph{depends on what it hears}.
 \end{itemize}
-\vspace{0.4em}
-\textbf{Result}  % FAKE-DATA: placeholder shifts pending probe_ll_shift runs -- re-check before presenting
-\begin{itemize}\footnotesize
-\item base: shift $=-0.42$ --- barely listens.
-\item $+$DPO: shift $=-0.51$ --- \emph{same} near-deafness (re-encoding, not listening).
-\item $+$\textbf{FiLM}: shift $=\mathbf{-1.28}$ ($\approx 3\times$ base) --- the answer \emph{depends on
-the audio}; the likelihood-space twin of the $+38\%$ attention result.
+\end{column}
+\begin{column}{0.5\textwidth}
+{\small\textbf{Result}}  % FAKE-DATA: placeholder shifts pending probe_ll_shift runs -- re-check before presenting
+\begin{itemize}\scriptsize
+\item base $-0.42$\ \ $\cdot$\ \ $+$DPO $-0.51$: \emph{same} near-deafness --- re-encoding, not listening.
+\item $+$\textbf{FiLM}: $\mathbf{-1.28}$ ($\approx 3\times$ base) --- the answer \emph{depends on the
+audio}; the likelihood-space twin of the $+38\%$ attention result.
 \end{itemize}
 \end{column}
 \end{columns}
