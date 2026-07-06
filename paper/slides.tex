@@ -620,23 +620,24 @@ DPO@60 $\to$ FiLM@160& $+0.4\pm 0.4$     & [{-}0.4, {+}1.2] & $+3.7^{*}$  & $-1.
 \bottomrule
 \end{tabular}
 \vfill
-{\footnotesize $^{*}$ $=$ \textbf{statistically significant} ($p<0.05$, \textbf{pooled} exact McNemar:
-discordant pairs summed over the 3 training seeds)\ \ $\cdot$\ \ $^{\dagger}$ $=$ \textbf{marginal}
-($0.05\le p<0.10$)\ \ $\cdot$\ \ no mark $=$ a tie.\\
-3 training seeds per adapter; $\Delta$ $=$ mean$\pm$std across seeds.
-Held-out $=$ full set minus the 300-item selection subset (select on val, report here).}
-\vspace{0.3em}
-\par
-{\scriptsize\emph{McNemar's test}: both models answer the \emph{same} items, so only the
-\textbf{disagreements} carry information --- count $b$ $=$ items only the \emph{left} model gets right,
-$c$ $=$ items only the \emph{right} model gets right, and test whether $c$ exceeds $b$ beyond chance
-(exact binomial under $H_0\!: c/(b{+}c){=}\tfrac12$). ``Pooled'' $=$ $b,c$ summed over the 3 seeds
-before testing.}
-\vfill
-\begin{center}
-{\small\textbf{Read:} both adapters give a \emph{real} gain; FiLM's is the larger and the most
-capability-preserving.\\ Head-to-head they tie overall --- but the gain \emph{travels by different axes}.}
-\end{center}
+{\footnotesize Every item is answered by \emph{both} models, so the comparison lives in the
+\textbf{disagreements}: out of $N$ paired items, $b$ $=$ items only the \emph{left} model gets right,
+$c$ $=$ items only the \emph{right} model gets right. The gain and its uncertainty follow directly:}
+\vspace{-0.3em}
+\[
+\Delta \;=\; \frac{c-b}{N}
+\qquad\qquad
+\text{95\% CI:}\ \ \Delta \;\pm\; 1.96\cdot\frac{\sqrt{(b+c)-(c-b)^2/N}}{N}
+\]
+\vspace{-0.7em}
+{\footnotesize\emph{McNemar} then asks whether the $b/c$ split could be a fair coin (exact binomial
+under $H_0\!: c/(b{+}c){=}\tfrac12$): $^{*}$ $=$ $p<0.05$ with $b,c$ \textbf{pooled} over the 3
+training seeds\ \ $\cdot$\ \ $^{\dagger}$ $=$ marginal ($0.05\le p<0.10$)\ \ $\cdot$\ \ no mark $=$ tie.
+$\Delta$ $=$ mean$\pm$std across seeds; held-out $=$ full set minus the 300-item selection subset
+(select on val, report here).\\
+\emph{E.g.}\ base$\to$DPO (one seed): $b{=}152$, $c{=}411$ $\Rightarrow$
+$\Delta = 259/5002 = +5.2$; a fair coin on $563$ disagreements makes $411$ vs $152$ astronomically
+unlikely $\Rightarrow$ $^{*}$.}
 \end{frame}
 
 % --- 26. Why Qwen3-Omni grounds best ---
