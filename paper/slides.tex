@@ -465,7 +465,8 @@ the adapter cannot treat them differently \emph{even in principle}.
 
 % --- 18.ii FiLM math (build): condition it, in three small steps ---
 \begin{frame}{FiLM, step by step: give that machinery the question}
-\textbf{Step 1 --- the question as one vector} (no new encoder):
+\textbf{Step 1 --- the question (its tokens $w_{1:L}$) as one vector $q$} (no new encoder;
+$E$ = the LLM's own frozen embedding table, $W_q$ = a small trained projection):
 \[
 q \;=\; W_q\,\underbrace{\tfrac1L\textstyle\sum_{t} E(w_t)}_{\text{frozen embedding, mean-pool}}
 \]
