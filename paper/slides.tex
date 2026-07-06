@@ -411,32 +411,48 @@ $\ \mathrm{FiLM}(h\mid q)=\gamma(q)\odot h+\beta(q)$ --- two tiny linear maps, b
 \end{columns}
 \end{frame}
 
-% --- 18.i FiLM math (recap): the question-blind machinery ---
-\begin{frame}{Before FiLM: the machinery so far is \emph{question-blind} (recap)}
-\textbf{The adapter} (unconditional VIB) --- one transform per modality $m\in\{a,v\}$:
-\vspace{-0.2em}
-\[
-h=\mathrm{GELU}(W_e x)\qquad
-z\sim\mathcal N\!\big(\mu(h),\operatorname{diag}\sigma^2(h)\big)\qquad
-y=x+W_{\text{out}}\,z
-\]
-\textbf{Its KL term is a \emph{rate}}: the $\mathrm{KL}_{\text{VIB}}$ in the loss,
-$\ \mathbb E_x\,\mathrm{KL}\big(q_\phi(z\,|\,x)\,\|\,\mathcal N(0,I)\big)$, is a variational
-\textbf{upper bound on $I(Z;X)$} --- how many bits of the stream the code keeps.
-\vspace{0.2em}
-\textbf{The objective} (from the fix slide):
-\vspace{-0.3em}
-\[
-\mathcal L=\underbrace{-\log\sigma\big(\beta[(c_p{-}c_r)-(r_p{-}r_r)]\big)}_{\text{swap-DPO}}
-+\;\lambda_a\underbrace{(\cdots)}_{\text{chosen anchor}}
-+\;\lambda_{kl}\,\mathrm{KL}(p_{\text{base}}\|\,p_\theta)
-+\;\beta_{kl}\,\mathrm{KL}_{\text{VIB}}
-\]
+% --- 18.i FiLM math (recap): the branch we train + the VIB bound ---
+\begin{frame}{Before FiLM (recap): the branch we train, and its rate}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2.5mm and 5mm,
+  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=7mm,align=center},
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=7mm,align=center},
+  op/.style={draw,circle,inner sep=1.5pt},
+  io/.style={align=center}]
+  \node[io] (x) {$x$\\[-2pt]{\tiny adapter output}};
+  \node[trn,right=of x] (enc) {$W_e$, GELU};
+  \node[trn,right=of enc] (ms) {$\mu(h),\,\sigma(h)$};
+  \node[op,right=of ms] (z) {$z$};
+  \node[trn,right=of z] (wout) {$W_{\text{out}}$\\[-2pt]{\tiny zero-init}};
+  \node[op,right=of wout] (add) {$+$};
+  \node[frzs,right=of add] (llm) {frozen\\LLM};
+  \draw[->] (x)--(enc); \draw[->] (enc)--(ms);
+  \draw[->] (ms)--node[above]{\tiny $\mu{+}\sigma{\odot}\epsilon$}(z);
+  \draw[->] (z)--(wout); \draw[->] (wout)--(add);
+  \draw[->] (add)--node[above]{\tiny $y$}(llm);
+  \draw[->] (x.north) to[out=35,in=145] node[above,pos=0.5]{\tiny skip: $y=x+\cdots$} (add.north);
+  \node[frzs,below=6mm of ms,fill=gray!10] (prior) {$\mathcal N(0,I)$ prior};
+  \draw[<->,dashed,thick,trn!80!black] (ms.south)--node[right]{\tiny $\mathrm{KL}_{\text{VIB}}$ (rate)}(prior.north);
+  \node[font=\tiny,below=1mm of prior]
+    {\textcolor{trn}{$\blacksquare$ trained}\quad\textcolor{frz}{$\blacksquare$ frozen}\quad
+     one such branch per modality ($a$, $v$), inserted at the adapter output};
+\end{tikzpicture}
+\vspace{0.4em}
+\begin{center}
+\setbeamercolor{block body}{bg=blue!6}
+\begin{block}{}
+\centering
+$\displaystyle I(Z;X)\;\le\;\mathbb E_x\,\mathrm{KL}\!\big(q_\phi(z\mid x)\,\big\|\,\mathcal N(0,I)\big)\;=\;\mathrm{KL}_{\text{VIB}}$
+\quad{\scriptsize [Alemi et al., \emph{Deep Variational Information Bottleneck}, ICLR 2017]}
+\end{block}
+\end{center}
+{\small The KL in our loss is the standard variational \textbf{upper bound on the rate} --- how many
+bits of the stream the code $z$ keeps.}
 \vfill
 \begin{center}
 \setbeamercolor{block body}{bg=red!6}
 \begin{block}{}
-\centering\small \textbf{Every symbol is question-blind}: $\mu(x),\sigma(x)$, the code, the edit are
+\centering\small \textbf{Every box above is question-blind}: $\mu,\sigma$, the code, the edit are
 \emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textbf{see}?'' ---
 the adapter cannot treat them differently \emph{even in principle}.
 \end{block}
