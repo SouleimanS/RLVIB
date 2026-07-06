@@ -411,39 +411,81 @@ $\ \mathrm{FiLM}(h\mid q)=\gamma(q)\odot h+\beta(q)$ --- two tiny linear maps, b
 \end{columns}
 \end{frame}
 
-% --- 18. FiLM formally (i): the model ---
-\begin{frame}{FiLM, formally (i): a question-conditioned bottleneck}
-Per modality $m\in\{a,v\}$: tokens $x\in\mathbb R^{T\times d}$, question tokens $w_{1:L}$.
+% --- 18.i FiLM math (recap): the question-blind machinery ---
+\begin{frame}{Before FiLM: the machinery so far is \emph{question-blind} (recap)}
+\textbf{The adapter} (unconditional VIB) --- one transform per modality $m\in\{a,v\}$:
 \vspace{-0.2em}
 \[
-q = W_q\,\underbrace{\tfrac1L\textstyle\sum_{t}E(w_t)}_{\text{frozen embed., mean-pool}}
-\qquad h=\mathrm{GELU}(W_e x) \qquad [\gamma;\beta]=W_{\!f}\,q
+h=\mathrm{GELU}(W_e x)\qquad
+z\sim\mathcal N\!\big(\mu(h),\operatorname{diag}\sigma^2(h)\big)\qquad
+y=x+W_{\text{out}}\,z
 \]
-\vspace{-0.7em}
+\textbf{Its KL term is a \emph{rate}}: the $\mathrm{KL}_{\text{VIB}}$ in the loss,
+$\ \mathbb E_x\,\mathrm{KL}\big(q_\phi(z\,|\,x)\,\|\,\mathcal N(0,I)\big)$, is a variational
+\textbf{upper bound on $I(Z;X)$} --- how many bits of the stream the code keeps.
+\vspace{0.2em}
+\textbf{The objective} (from the fix slide):
+\vspace{-0.3em}
 \[
-\tilde h=(1+\mathrm{clamp}(\gamma))\odot h+\beta \qquad
-z\sim\mathcal N\!\big(\mu(\tilde h),\operatorname{diag}\sigma^2(\tilde h)\big) \qquad
-g(q)=\mathrm{sigm}(w_g^{\!\top}q+b_g)
+\mathcal L=\underbrace{-\log\sigma\big(\beta[(c_p{-}c_r)-(r_p{-}r_r)]\big)}_{\text{swap-DPO}}
++\;\lambda_a\underbrace{(\cdots)}_{\text{chosen anchor}}
++\;\lambda_{kl}\,\mathrm{KL}(p_{\text{base}}\|\,p_\theta)
++\;\beta_{kl}\,\mathrm{KL}_{\text{VIB}}
 \]
-\vspace{-0.7em}
+\vfill
+\begin{center}
+\setbeamercolor{block body}{bg=red!6}
+\begin{block}{}
+\centering\small \textbf{Every symbol is question-blind}: $\mu(x),\sigma(x)$, the code, the edit are
+\emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textbf{see}?'' ---
+the adapter cannot treat them differently \emph{even in principle}.
+\end{block}
+\end{center}
+\end{frame}
+
+% --- 18.ii FiLM math (build): condition it, in three small steps ---
+\begin{frame}{FiLM, step by step: give that machinery the question}
+\textbf{Step 1 --- the question as one vector} (no new encoder):
 \[
+q \;=\; W_q\,\underbrace{\tfrac1L\textstyle\sum_{t} E(w_t)}_{\text{frozen embedding, mean-pool}}
+\]
+\textbf{Step 2 --- let $q$ modulate the hidden activations} (FiLM: a per-feature scale $+$ shift):
+\[
+[\gamma;\beta]=W_{\!f}\,q \qquad
+h\ \longrightarrow\ \tilde h=(1+\mathrm{clamp}(\gamma))\odot h+\beta
+\qquad\Rightarrow\qquad \mu(x)\to\mu(x,q),\ \ \sigma(x)\to\sigma(x,q)
+\]
+\textbf{Step 3 --- let $q$ gate the edit} (one scalar per modality):
+\[
+g(q)=\mathrm{sigm}(w_g^{\!\top}q+b_g)\in(0,1) \qquad\qquad
 \boxed{\;y \;=\; x \;+\; g(q)\,W_{\text{out}}\,z\;}
 \]
-\vspace{-0.6em}
+\vspace{-0.4em}
 \begin{itemize}\small
-\item \textbf{Proposition (identity at init, for every $q$).} $W_{\text{out}}{=}0$ and $W_{\!f}{=}0$
-($\gamma{=}\beta{=}0$) $\Rightarrow y\equiv x$ \emph{and} the KL rate equals the unconditional VIB's.
-\emph{Proof:} the residual is $g\cdot 0\cdot z=0$, any $q,g$. $\square$\quad
-Consequence: \texttt{bypass} still returns the \textbf{exact frozen base} --- the DPO reference stays free.
-\item Trainable per modality: $W_e,W_\mu,W_\sigma,W_{\text{out}},W_{\!f},w_g$ ($+$ shared $W_q$); backbone frozen.
+\item \textbf{Proposition (identity at init, for every $q$).} $W_{\text{out}}{=}0,\ W_{\!f}{=}0$
+($\gamma{=}\beta{=}0$) $\Rightarrow y\equiv x$ and the KL rate equals the unconditional VIB's.
+\emph{Proof:} the residual is $g\cdot 0\cdot z=0$ for any $q,g$. $\square$\quad
+So \texttt{bypass} still returns the \textbf{exact frozen base}: the DPO reference stays free.
+\item New trainables: $W_{\!f}, w_g$ per modality $+$ one shared $W_q$; everything else as before.
 \end{itemize}
 \end{frame}
 
-% --- 19. FiLM formally (ii): the information view ---
-\begin{frame}{FiLM, formally (ii): compress what is irrelevant \emph{to this question}}
-\textbf{Unconditional VIB} minimizes a variational bound on the \emph{rate} $I(Z;X)$ ---
-the same compression for every question.
-\vspace{0.3em}
+% --- 18.iii FiLM math (what changes): old symbol -> new symbol ---
+\begin{frame}{What actually changes in the math}
+\centering
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \textbf{before (question-blind)} & \textbf{after (FiLM)} \\
+\midrule
+posterior / code & $q_\phi(z\,|\,x)$ & $q_\phi(z\,|\,x,\textcolor{trn}{q})$ \\
+rate its KL bounds & $I(Z;X)$ & $I(Z;X\,|\,\textcolor{trn}{Q})$ \\
+policy the loss reads & $p_\theta(\cdot\,|\,x)$ & $p_\theta(\cdot\,|\,x,\textcolor{trn}{q})$ \\
+swap pairs per clip & HEAR only & HEAR $+$ \textcolor{trn}{SEE} (same clip) \\
+loss \emph{form} & \multicolumn{2}{c}{unchanged (swap-DPO $+$ two anchors $+$ $\beta_{kl}\mathrm{KL}$)} \\
+\bottomrule
+\end{tabular}
+\vspace{0.6em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{}
@@ -451,19 +493,16 @@ the same compression for every question.
 $\displaystyle I(Z;X\mid Q)\;\le\;\mathbb E_{x,q}\,\mathrm{KL}\!\big(q_\phi(z\mid x,q)\,\big\|\,\mathcal N(0,I)\big)$
 \end{block}
 \end{center}
-\vspace{-0.2em}
-{\small The \emph{same} KL term, read conditionally: for each question $q$ the standard bound
-$I(Z;X\mid Q{=}q)\le\mathbb E_x\,\mathrm{KL}(q_\phi\Vert r)$ holds with the $q$-independent prior $r=\mathcal N(0,I)$;
-averaging over $q$ gives the boxed inequality. FiLM makes the posterior $q$-dependent, so the code can
-\textbf{keep the bits of the stream that answer \emph{this} question and discard the rest} ---
-an audio question keeps audio bits; a visual question does not pay for them.}
-\vfill
-{\footnotesize Honest note: at $\beta_{kl}{=}0.05$ the rate binds only weakly --- the conditional-rate view is
-the \emph{design principle}; the conditioning (FiLM $+$ gate) does the empirical work.}
+{\small Same KL term, read conditionally (the per-$q$ bound holds with the $q$-independent prior; average
+over $q$). The code may now \textbf{keep the bits that answer \emph{this} question} --- audio bits for an
+audio question --- instead of one budget for all questions.}
+\par\vspace{0.2em}
+{\footnotesize Honest note: at $\beta_{kl}{=}0.05$ the rate binds weakly --- this is the \emph{design
+principle}; the conditioning does the empirical work (hence the $\beta_{kl}$ sweep next week).}
 \end{frame}
 
-% --- 20. FiLM formally (iii): the forcing lemma ---
-\begin{frame}{FiLM, formally (iii): why the question \emph{must} be read}
+% --- 18.iv FiLM math (the forcing lemma) ---
+\begin{frame}{FiLM, formally: why the question \emph{must} be read}
 \textbf{Setup.} One swapped clip $x^\star$ (\emph{seen} $A$, \emph{heard} $B$), asked two questions:
 \[
 q_{\text{hear}}:\ \text{chosen}=B,\ \text{rejected}=A
