@@ -426,7 +426,7 @@ $\ \mathrm{FiLM}(h\mid q)=\gamma(q)\odot h+\beta(q)$ --- two tiny linear maps, b
   \node[trn,right=of z] (wout) {$W_{\text{out}}$\\[-2pt]{\tiny zero-init}};
   \node[op,right=of wout] (add) {$+$};
   \node[frzs,right=of add] (llm) {frozen\\LLM};
-  \draw[->] (x)--(enc); \draw[->] (enc)--(ms);
+  \draw[->] (x)--(enc); \draw[->] (enc)--node[above]{\tiny $h$}(ms);
   \draw[->] (ms)--node[above]{\tiny $\mu{+}\sigma{\odot}\epsilon$}(z);
   \draw[->] (z)--(wout); \draw[->] (wout)--(add);
   \draw[->] (add)--node[above]{\tiny $y$}(llm);
@@ -446,8 +446,12 @@ $\displaystyle I(Z;X)\;\le\;\mathbb E_x\,\mathrm{KL}\!\big(q_\phi(z\mid x)\,\big
 \quad{\scriptsize [Alemi et al., \emph{Deep Variational Information Bottleneck}, ICLR 2017]}
 \end{block}
 \end{center}
-{\small The KL in our loss is the standard variational \textbf{upper bound on the rate} --- how many
-bits of the stream the code $z$ keeps.}
+{\scriptsize\textbf{Notation:} $x$ = the modality's token stream (audio or vision adapter output);
+$W_e$ = the adapter's encoder weights and $h=\mathrm{GELU}(W_e x)$ its hidden activations;
+$\mu(h),\sigma(h)$ = mean/std heads defining the posterior $q_\phi(z\,|\,x)=\mathcal N(\mu,\operatorname{diag}\sigma^2)$
+over the stochastic code $z$, with $\phi$ = all adapter parameters and $\epsilon\sim\mathcal N(0,I)$ the
+reparametrization noise; $W_{\text{out}}$ = zero-init output map producing the edit added back onto $x$.
+The bound says: $\mathrm{KL}_{\text{VIB}}$ caps the \emph{bits $z$ keeps about $x$} (the rate).}
 \vfill
 \begin{center}
 \setbeamercolor{block body}{bg=red!6}
