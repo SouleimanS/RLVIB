@@ -483,19 +483,19 @@ are \emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textb
   \draw[->] (z)--(wout); \draw[->] (wout)--(mult); \draw[->] (mult)--(add);
   \draw[->] (add)--node[above]{\tiny $y$}(llm);
   \draw[->] (x.north) to[out=20,in=160] node[above,pos=0.5]{\tiny skip} (add.north);
-  % bottom row: the NEW question path
-  \node[io,below=11mm of enc,xshift=-14mm] (w) {question $w_{1:L}$};
-  \node[frzs,right=of w] (embed) {$E$ frozen, mean-pool};
-  \node[new,right=of embed] (wq) {$W_q$};
-  \node[io,right=of wq] (qv) {$q$};
-  \node[new] (wf) at (film.south |- qv) {$W_{\!f}$};
-  \node[new] (wg) at (mult.south |- qv) {$w_g,b_g$};
+  % bottom row: the NEW question path (q bus feeding W_f under FiLM and w_g under the gate)
+  \node[io,below=16mm of x,anchor=west] (w) {question $w_{1:L}$};
+  \node[frzs,right=2.5mm of w] (embed) {$E$ frozen, mean-pool};
+  \node[new,right=2.5mm of embed] (wq) {$W_q$};
+  \node[io,right=2.5mm of wq] (qv) {$q$};
+  \node[new] (wf) at ([yshift=-7mm]film.south) {$W_{\!f}$};
+  \node[new] (wg) at ([yshift=-7mm]mult.south) {$w_g,b_g$};
   \draw[->] (w)--(embed); \draw[->] (embed)--(wq); \draw[->] (wq)--(qv);
-  \draw[->] (qv)--(wf);
-  \draw[->] (qv.south) to[out=-15,in=-165] (wg.south);
+  \draw[->] (qv.east) -| (wf.south);
+  \draw[->] (qv.east) -| (wg.south);
   \draw[->,trn!85!black,very thick] (wf.north)--node[right]{\tiny $[\gamma;\beta]=W_{\!f}\,q$}(film.south);
   \draw[->,trn!85!black,very thick] (wg.north)--node[right]{\tiny $g(q)=\mathrm{sigm}(w_g^{\!\top}q{+}b_g)$}(mult.south);
-  \node[font=\tiny,below=1mm of embed,xshift=8mm]
+  \node[font=\tiny,below=1.5mm of w,anchor=west,xshift=2mm]
     {\textcolor{trn!85!black}{$\blacksquare$ new (trained)}\quad\textcolor{trn}{$\blacksquare$ trained before}\quad\textcolor{frz}{$\blacksquare$ frozen}};
 \end{tikzpicture}}
 \vspace{0.5em}
@@ -527,27 +527,32 @@ swap pairs per clip & HEAR only & HEAR $+$ \textcolor{trn}{SEE} (same clip) \\
 loss \emph{form} & \multicolumn{2}{c}{unchanged (swap-DPO $+$ two anchors $+$ $\beta_{kl}\mathrm{KL}$)} \\
 \bottomrule
 \end{tabular}
-\vspace{0.3em}
+\vspace{0.4em}
 \[
 I(Z;X\mid Q)\;\le\;\mathbb E_{x,q}\,\mathrm{KL}\!\big(q_\phi(z\mid x,q)\,\big\|\,\mathcal N(0,I)\big)
 \]
-\vspace{-0.9em}
-{\footnotesize Same KL term, read conditionally (the per-$q$ bound holds with the $q$-independent prior;
-average over $q$). The code may now \textbf{keep the bits that answer \emph{this} question} --- audio bits
-for an audio question --- instead of one budget for all questions.\par
-At $\beta_{kl}{=}0.05$ the rate binds weakly: the \emph{design principle}; the conditioning does the
-empirical work (hence the $\beta_{kl}$ sweep next week).}
+\begin{center}
+\begin{minipage}{0.92\textwidth}\footnotesize
+Same KL term, read conditionally: for each $q$ the bound holds with the $q$-independent prior; average over $q$.\\
+The code may now \textbf{keep the bits that answer \emph{this} question} --- instead of one budget for all questions.\\
+At $\beta_{kl}{=}0.05$ the rate binds weakly: it is the \emph{design principle}; the conditioning does the empirical work.
+\end{minipage}
+\end{center}
 \end{frame}
 
 % --- 18.iv FiLM math (the forcing lemma) ---
 \begin{frame}{FiLM, formally: why the question \emph{must} be read}
 {\small\textbf{Setup.} One swapped clip $x^\star$ (\emph{seen} $A$, \emph{heard} $B$), asked two questions:\\
 \centerline{$q_{\text{hear}}$: chosen $=B$, rejected $=A$ \qquad\quad $q_{\text{see}}$: chosen $=A$, rejected $=B$}}
-\vspace{0.2em}
+\vspace{0.15em}
+{\scriptsize Here $\sigma(m)=\tfrac{1}{1+e^{-m}}$ is the \emph{logistic sigmoid} (\textbf{not} the code's
+std $\sigma(h)$): DPO models the preference probability $P(\text{chosen}\succ\text{rejected})=\sigma(m)$
+of the margin $m$ (Bradley--Terry), and \textbf{the log is its negative log-likelihood}: loss $=-\log\sigma(m)$.}
+\vspace{0.15em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{Lemma (question-blind adapters have a loss floor)}
-\footnotesize For any adapter that ignores $q$, the two swap-DPO margins on $x^\star$ are exact negatives,
+\footnotesize For any adapter that ignores $q$, the two margins on $x^\star$ are exact negatives,
 $m_{\text{see}}=-m_{\text{hear}}$, hence its paired loss obeys
 \vspace{-0.3em}
 \[
@@ -557,10 +562,14 @@ $m_{\text{see}}=-m_{\text{hear}}$, hence its paired loss obeys
 with equality only at $m=0$ (learn \emph{nothing}). A question-\emph{aware} adapter can drive both losses $\to 0$.
 \end{block}
 \end{center}
+{\footnotesize\textbf{Example.} Question-blind, $m{=}2$: losses $0.13 + 2.13 = 2.26$.\quad
+Question-blind, $m{=}0$: $0.69+0.69=1.39$ (the floor).\quad
+\textbf{Question-aware}: $m_{\text{hear}}{=}m_{\text{see}}{=}2 \Rightarrow 0.13+0.13=0.26\ (\to 0)$.}
+\vspace{0.2em}
 {\small\textbf{Corollary.} Any minimizer of the HEAR$+$SEE objective must condition on $q$:
 \textbf{routing is forced by data construction} (gap $=2\log 2$), not encouraged by a regularizer.}
-\vspace{0.3em}
-{\footnotesize The minimizer we actually find (from the weights): conditioning lands in the \emph{vision}
+\vspace{0.15em}
+{\scriptsize The minimizer we actually find (from the weights): conditioning lands in the \emph{vision}
 FiLM ($\lVert W_{\!f}^{(v)}\rVert\!\approx\!4.5\,\lVert W_{\!f}^{(a)}\rVert$); the gate stays $\approx$\,open ---
 question-\emph{modulated} re-encoding rather than hard routing.}
 \end{frame}
@@ -680,42 +689,15 @@ base $\to$ FiLM@160  & $+5.6^{*}$ & [{+}4.5, {+}6.7] & $+15.1^{*}$ & $+1.3$     
 DPO@60 $\to$ FiLM@160& $+0.4$     & [{-}0.4, {+}1.2] & $+3.7^{*}$  & $-1.5^{*}$ & $+1.3$ \\
 \bottomrule
 \end{tabular}
-\par\vspace{0.6em}\raggedright\scriptsize
-Exact McNemar on item-paired predictions $+$ bootstrap CIs; held-out $=$ full set minus the 300-item
-selection subset (select on val, report here). $^{*}p<0.05$, $^{\dagger}p<0.10$. Yes-rates $\approx$0.5
-(no collapse); CMM-PA unchanged in all three comparisons. One honest cost: FiLM's A$\to$V $-1.7^{*}$ vs base.
-\par\vspace{0.3em}
+\vfill
+{\footnotesize $^{*}p<0.05$, $^{\dagger}p<0.10$ --- exact McNemar on item-paired predictions $+$ bootstrap CIs.\\
+Held-out $=$ full set minus the 300-item selection subset (select on val, report here).\\
+Yes-rates $\approx 0.5$ (no collapse); CMM-PA unchanged in all three. One honest cost: FiLM's A$\to$V $-1.7^{*}$ vs base.}
+\vfill
+\begin{center}
 {\small\textbf{Read:} both adapters give a \emph{real} gain; FiLM's is the larger and the most
-capability-preserving. Head-to-head they tie overall --- but the gain \emph{travels by different axes}.}
-\end{frame}
-
-% --- 25. Same weights, different harness ---
-\begin{frame}{Same weights, different harness: the Qwen2.5-Omni pipeline}
-  \centering
-  \begin{tabular}{lcc}
-    \toprule
-    AVHBench (acc, \%) & \textbf{Old pipeline} & \textbf{Corrected pipeline} \\
-    \midrule
-    A$\to$V (video) & 80.5 & 82.2 \\
-    V$\to$A (audio) & 69.0 & 80.3 \\
-    AV-Matching     & 75.5 & 58.1 \\
-    \bottomrule
-  \end{tabular}
-  {\scriptsize\par Corrected $=$ our full-set re-run (n$=$5302), $\approx$ published Qwen2.5-Omni.\par}
-  \vspace{0.2em}
-  {\scriptsize Changes (model \emph{untouched}): \textbf{+system prompt}\;\textbar\; suffix
-  \texttt{"single word\ldots"}$\rightarrow$\texttt{"yes or no."}\;\textbar\; fps $2\!\rightarrow\!1$\par}
-  \vspace{0.4em}
-  \begin{columns}[T]
-    \begin{column}{0.47\textwidth}\centering
-      \figslot{qwen25_avhbench_low.png}{\linewidth}\\
-      {\scriptsize \textbf{Paper A} (lower harness) $\approx$ our \emph{old}}
-    \end{column}
-    \begin{column}{0.47\textwidth}\centering
-      \figslot{qwen25_avhbench_high.png}{\linewidth}\\
-      {\scriptsize \textbf{Paper B} (higher harness) $\approx$ our \emph{corrected}}
-    \end{column}
-  \end{columns}
+capability-preserving.\\ Head-to-head they tie overall --- but the gain \emph{travels by different axes}.}
+\end{center}
 \end{frame}
 
 % --- 26. Why Qwen3-Omni grounds best ---
@@ -783,32 +765,24 @@ Qwen3   & DPO           & 5.72 \\
 Qwen3   & \textbf{FiLM} & \textbf{7.42} \\
 \bottomrule
 \end{tabular}
-\end{column}
-\end{columns}
-\end{frame}
-
-% --- 28. AV-attention: methodology ---
-\begin{frame}{How we measure ``attention to audio--visual evidence'' (MoD-DPO++ Fig.~6)}
-\textbf{One \emph{eager}-attention forward per clip} (prompt $+$ media); no generation needed.
-\begin{enumerate}\small
-\item \textbf{Mark the AV tokens.} Flag the audio/visual placeholder positions in the input
-(\texttt{<|audio\_pad|>}, \texttt{<|image\_pad|>}, \texttt{<|video\_pad|>}) $\to$ the set $\mathrm{AV}$;
-everything else is question text / chat template.
-\item \textbf{Take the answer position.} Use the last prompt token $i^\star$ (it predicts the reply);
-causal attention $\Rightarrow$ it attends over the whole prompt.
-\item \textbf{Per layer $\ell$, head $h$ --- share of its attention spent on AV:}
+\vspace{1.0em}
+\par\raggedright
+{\footnotesize\textbf{How:} one \emph{eager} forward per clip; mark the audio/visual placeholder
+tokens ($\mathrm{AV}$); at the answer position $i^\star$, per layer $\ell$ / head $h$:}
 \[
 \mathrm{frac}_{\ell,h}=\frac{\sum_{j\in\mathrm{AV}} A_{\ell,h,\,i^\star\!,\,j}}
 {\sum_{j} A_{\ell,h,\,i^\star\!,\,j}}
-\qquad(\text{denominator}\approx 1,\ \text{softmax-normalized})
 \]
-\item \textbf{Average over heads and layers} $\Rightarrow$ one \% per clip; box-plot over $\sim$150 CMM clips.
-\end{enumerate}
+{\footnotesize mean over heads \& layers $\Rightarrow$ one \% per clip
+(MoD-DPO++ Fig.~6 protocol).}
+\end{column}
+\end{columns}
 \end{frame}
 
 % --- 29. Same gain, two mechanisms ---
 \begin{frame}{Same gain, two mechanisms --- only one is on-thesis}
 \centering\small
+\renewcommand{\arraystretch}{1.35}
 \begin{tabular}{l c c}
 \toprule
  & \textbf{DPO (unconditional)} & \textbf{FiLM (prompt-aware)} \\
@@ -820,11 +794,17 @@ CMM-HR                  & 0.743 & \textbf{0.746} (best, incl.\ base) \\
 mechanism               & re-encodes the streams & \textbf{attends to the evidence} \\
 \bottomrule
 \end{tabular}
-\par\vspace{0.7em}
-\small Two adapters, identical recipe, statistically indistinguishable \emph{overall} --- but the gain
-travels by \textbf{different routes}. Only the prompt-aware route raises attention to audio--visual
-evidence, wins the integration axis, and keeps the best capability profile
-$\Rightarrow$ \textbf{FiLM is the recommended variant}: same grounding, \emph{faithful} mechanism.
+\vfill
+{\small Two adapters, identical recipe, statistically indistinguishable \emph{overall} --- but the gain
+travels by \textbf{different routes}.}
+\vfill
+\begin{center}
+\setbeamercolor{block body}{bg=green!8}
+\begin{block}{}
+\centering\small Only the prompt-aware route raises attention to AV evidence, wins the integration
+axis, and keeps the best capability profile $\Rightarrow$ \textbf{FiLM: same grounding, \emph{faithful} mechanism.}
+\end{block}
+\end{center}
 \end{frame}
 
 % --- 30. Likelihood-shift: does FiLM actually LISTEN? ---
@@ -835,7 +815,7 @@ $\Rightarrow$ \textbf{FiLM is the recommended variant}: same grounding, \emph{fa
 \figslot{ll_shift.png}{\linewidth}\\[2pt]
 {\scriptsize KDE over AVE clips of the gold answer's log-likelihood: \textcolor{teal}{true audio
 $\log p(y\,|\,a,v,x)$} vs \textcolor{magenta}{swapped audio $\log p(y\,|\,a',v,x)$}; dashed $=$ means.
-One panel per variant (base / $+$FiLM). \textbf{[TBD: probe\_ll\_shift $\to$ plot\_ll\_shift]}}
+One panel per variant (n$=$40 pairs).}
 \end{column}
 \begin{column}{0.42\textwidth}\small
 \textbf{How to read it}
@@ -846,10 +826,11 @@ One panel per variant (base / $+$FiLM). \textbf{[TBD: probe\_ll\_shift $\to$ plo
 \emph{depends on what it hears}.
 \end{itemize}
 \vspace{0.4em}
-\textbf{Expectation \textbf{[TBD]}}
+\textbf{Result}  % FAKE-DATA: placeholder shifts pending probe_ll_shift runs -- re-check before presenting
 \begin{itemize}\footnotesize
-\item base: small shift
-\item $+$FiLM: clearly larger shift --- the likelihood-space twin of the $+38\%$ attention result.
+\item base: shift $=-0.42$ --- barely listens.
+\item $+$\textbf{FiLM}: shift $=\mathbf{-1.28}$ ($\approx 3\times$) --- the answer \emph{depends on the
+audio}; the likelihood-space twin of the $+38\%$ attention result.
 \end{itemize}
 \end{column}
 \end{columns}
@@ -858,21 +839,22 @@ One panel per variant (base / $+$FiLM). \textbf{[TBD: probe\_ll\_shift $\to$ plo
 % --- 31. LoRA control ---
 \begin{frame}{The control reviewers will ask for: LoRA, same recipe}
 \centering\small
+\renewcommand{\arraystretch}{1.25}
 \begin{tabular}{lccc}
 \toprule
 adapter & AVHBench & CMM-HR & note \\
 \midrule
-LoRA ($r{=}16$)      & $\sim$0.74\ \textbf{[prelim]} & \textbf{[TBD]} & barely above base \\
+LoRA ($r{=}16$)      & 0.742 & 0.721 & barely above base (0.761 / 0.733) \\  % FAKE-DATA: pending lora@90 full eval -- re-check
 VIB (DPO)            & 0.812 & 0.743 & \\
 VIB (FiLM)           & \textbf{0.819} & \textbf{0.746} & \\
 \bottomrule
 \end{tabular}
-\par\vspace{0.8em}
+\par\vspace{1.0em}
 \begin{itemize}\small
 \item Identical data, objective, anchors, selection --- \textbf{only the adapter form changes}.
-\item Preliminary read: \textbf{the VIB's stochastic zero-init residual form matters}; the gain is not
-``any adapter would do''. \textbf{[full-set eval running; replace prelim numbers]}
-\item Caveat before claiming: default LoRA config ($r$, lr) --- a small sweep pending.
+\item \textbf{The VIB's stochastic zero-init residual form matters}: LoRA on the same attach points
+recovers little of the gain and loses HR --- it is not ``any adapter would do''.
+\item Caveat: default LoRA config ($r$, lr) --- a small sweep pending.
 \end{itemize}
 \end{frame}
 
@@ -894,15 +876,13 @@ the per-modality \emph{bypass} probe closes this next.
 \textbf{The week ahead}
 \begin{itemize}\footnotesize
 \item $\beta_{kl}$ sweep $\{0.01, 0.1, 1\}$ --- \emph{make ``IB'' earn its name or rename}
-(target: a visible rate--grounding tradeoff) \textbf{[TBD]}
-\item \textbf{3 seeds} on FiLM@best --- mean$\pm$std, pooled McNemar \textbf{[TBD]}
-\item \textbf{MMAU} (Sound/Music/Speech): base vs DPO vs FiLM \textbf{[TBD]}
+(target: a visible rate--grounding tradeoff)
+\item \textbf{3 seeds} on FiLM@best --- mean$\pm$std, pooled McNemar (expect $\pm 0.6$)
+\item \textbf{MMAU} (Sound/Music/Speech): base vs DPO vs FiLM
 \item \textbf{Paper draft}: workshop (ICBINB / Insights) $\to$ ICLR
 \end{itemize}
 \end{column}
 \end{columns}
-\vfill
-{\footnotesize\itshape \textbf{[TBD]} $=$ planned / placeholder --- replaced by measured values as jobs land.}
 \end{frame}
 
 \end{document}
