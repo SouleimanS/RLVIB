@@ -414,87 +414,87 @@ $\ \mathrm{FiLM}(h\mid q)=\gamma(q)\odot h+\beta(q)$ --- two tiny linear maps, b
 % --- 18.i FiLM math (recap): the branch we train + the VIB bound ---
 \begin{frame}{Before FiLM (recap): the branch we train, and its rate}
 \centering
-\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2.5mm and 5mm,
-  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=7mm,align=center},
-  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=7mm,align=center},
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 4mm,
+  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=6mm,align=center},
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center},
   op/.style={draw,circle,inner sep=1.5pt},
   io/.style={align=center}]
-  \node[io] (x) {$x$\\[-2pt]{\tiny adapter output}};
+  \node[io] (x) {$x$ {\tiny(adapter out)}};
   \node[trn,right=of x] (enc) {$W_e$, GELU};
   \node[trn,right=of enc] (ms) {$\mu(h),\,\sigma(h)$};
   \node[op,right=of ms] (z) {$z$};
-  \node[trn,right=of z] (wout) {$W_{\text{out}}$\\[-2pt]{\tiny zero-init}};
+  \node[trn,right=of z] (wout) {$W_{\text{out}}$ {\tiny 0-init}};
   \node[op,right=of wout] (add) {$+$};
-  \node[frzs,right=of add] (llm) {frozen\\LLM};
+  \node[frzs,right=of add] (llm) {frozen LLM};
   \draw[->] (x)--(enc); \draw[->] (enc)--node[above]{\tiny $h$}(ms);
   \draw[->] (ms)--node[above]{\tiny $\mu{+}\sigma{\odot}\epsilon$}(z);
   \draw[->] (z)--(wout); \draw[->] (wout)--(add);
   \draw[->] (add)--node[above]{\tiny $y$}(llm);
-  \draw[->] (x.north) to[out=35,in=145] node[above,pos=0.5]{\tiny skip: $y=x+\cdots$} (add.north);
-  \node[frzs,below=6mm of ms,fill=gray!10] (prior) {$\mathcal N(0,I)$ prior};
+  \draw[->] (x.north) to[out=25,in=155] node[above,pos=0.5]{\tiny skip: $y=x+\cdots$} (add.north);
+  \node[frzs,below=3mm of ms,fill=gray!10] (prior) {$\mathcal N(0,I)$ prior};
   \draw[<->,dashed,thick,trn!80!black] (ms.south)--node[right]{\tiny $\mathrm{KL}_{\text{VIB}}$ (rate)}(prior.north);
-  \node[font=\tiny,below=1mm of prior]
+  \node[font=\tiny,below=0.5mm of prior]
     {\textcolor{trn}{$\blacksquare$ trained}\quad\textcolor{frz}{$\blacksquare$ frozen}\quad
-     one such branch per modality ($a$, $v$), inserted at the adapter output};
+     one branch per modality ($a$, $v$), at the adapter output};
 \end{tikzpicture}
-\vspace{0.4em}
+\vspace{0.2em}
+\[
+I(Z;X)\;\le\;\mathbb E_x\,\mathrm{KL}\!\big(q_\phi(z\mid x)\,\big\|\,\mathcal N(0,I)\big)\;=\;\mathrm{KL}_{\text{VIB}}
+\]
+\vspace{-1.1em}
 \begin{center}
-\setbeamercolor{block body}{bg=blue!6}
-\begin{block}{}
-\centering
-$\displaystyle I(Z;X)\;\le\;\mathbb E_x\,\mathrm{KL}\!\big(q_\phi(z\mid x)\,\big\|\,\mathcal N(0,I)\big)\;=\;\mathrm{KL}_{\text{VIB}}$
-\quad{\scriptsize [Alemi et al., \emph{Deep Variational Information Bottleneck}, ICLR 2017]}
-\end{block}
+{\scriptsize [Alemi et al., \emph{Deep Variational Information Bottleneck}, ICLR 2017] ---
+the KL in our loss caps the \emph{bits $z$ keeps about $x$} (the rate).}
 \end{center}
-{\scriptsize\textbf{Notation:} $x$ = the modality's token stream (audio or vision adapter output);
-$W_e$ = the adapter's encoder weights and $h=\mathrm{GELU}(W_e x)$ its hidden activations;
-$\mu(h),\sigma(h)$ = mean/std heads defining the posterior $q_\phi(z\,|\,x)=\mathcal N(\mu,\operatorname{diag}\sigma^2)$
-over the stochastic code $z$, with $\phi$ = all adapter parameters and $\epsilon\sim\mathcal N(0,I)$ the
-reparametrization noise; $W_{\text{out}}$ = zero-init output map producing the edit added back onto $x$.
-The bound says: $\mathrm{KL}_{\text{VIB}}$ caps the \emph{bits $z$ keeps about $x$} (the rate).}
-\vfill
+{\scriptsize\textbf{Notation:} $x$ = the modality's token stream; $h=\mathrm{GELU}(W_e x)$ the
+adapter's hidden activations; $\mu(h),\sigma(h)$ define the posterior
+$q_\phi(z\,|\,x)=\mathcal N(\mu,\operatorname{diag}\sigma^2)$ over the code $z$
+($\phi$ = adapter params, $\epsilon$ = reparam noise); $W_{\text{out}}$ = zero-init output map.}
+\vspace{0.2em}
 \begin{center}
-\setbeamercolor{block body}{bg=red!6}
-\begin{block}{}
-\centering\small \textbf{Every box above is question-blind}: $\mu,\sigma$, the code, the edit are
-\emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textbf{see}?'' ---
-the adapter cannot treat them differently \emph{even in principle}.
-\end{block}
+{\small\textcolor{red!70!black}{\textbf{Nothing here reads the question}} --- $\mu,\sigma,z$, the edit
+are \emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textbf{see}?''}
 \end{center}
 \end{frame}
 
 % --- 18.ii FiLM math (build): condition it, in three small steps ---
 \begin{frame}{FiLM, step by step: give that machinery the question}
-\textbf{Step 1 --- the question (its tokens $w_{1:L}$) as one vector $q$} (no new encoder;
-$E$ = the LLM's own frozen embedding table, $W_q$ = a small trained projection):
+{\small\textbf{Step 1 --- encode the question into one vector.}}
+\vspace{-0.4em}
 \[
-q \;=\; W_q\,\underbrace{\tfrac1L\textstyle\sum_{t} E(w_t)}_{\text{frozen embedding, mean-pool}}
+q \;=\; W_q\,\tfrac1L\textstyle\sum_{t} E(w_t)
 \]
-\textbf{Step 2 --- let $q$ modulate the hidden activations} (FiLM: a per-feature scale $+$ shift):
+\vspace{-1.2em}
+\begin{center}
+{\scriptsize $w_{1:L}$ = the question's tokens;\ $E$ = the LLM's own \emph{frozen} embedding table;\
+$W_q$ = a small trained projection.}
+\end{center}
+{\small\textbf{Step 2 --- let $q$ modulate the hidden activations} (FiLM: per-feature scale $+$ shift).}
+\vspace{-0.4em}
 \[
-[\gamma;\beta]=W_{\!f}\,q \qquad
-h\ \longrightarrow\ \tilde h=(1+\mathrm{clamp}(\gamma))\odot h+\beta
-\qquad\Rightarrow\qquad \mu(x)\to\mu(x,q),\ \ \sigma(x)\to\sigma(x,q)
+[\gamma;\beta]=W_{\!f}\,q \qquad\quad \tilde h=(1+\gamma)\odot h+\beta
 \]
-\textbf{Step 3 --- let $q$ gate the edit} (one scalar per modality):
+\vspace{-1.2em}
+\begin{center}
+{\scriptsize so the code's heads now read the question: $\mu(x)\to\mu(x,q)$,\ \ $\sigma(x)\to\sigma(x,q)$.}
+\end{center}
+{\small\textbf{Step 3 --- let $q$ gate the edit} (one scalar per modality).}
+\vspace{-0.4em}
 \[
-g(q)=\mathrm{sigm}(w_g^{\!\top}q+b_g)\in(0,1) \qquad\qquad
+g(q)=\mathrm{sigm}(w_g^{\!\top}q+b_g)\in(0,1) \qquad\quad
 \boxed{\;y \;=\; x \;+\; g(q)\,W_{\text{out}}\,z\;}
 \]
-\vspace{-0.4em}
-\begin{itemize}\small
-\item \textbf{Proposition (identity at init, for every $q$).} $W_{\text{out}}{=}0,\ W_{\!f}{=}0$
-($\gamma{=}\beta{=}0$) $\Rightarrow y\equiv x$ and the KL rate equals the unconditional VIB's.
-\emph{Proof:} the residual is $g\cdot 0\cdot z=0$ for any $q,g$. $\square$\quad
-So \texttt{bypass} still returns the \textbf{exact frozen base}: the DPO reference stays free.
-\item New trainables: $W_{\!f}, w_g$ per modality $+$ one shared $W_q$; everything else as before.
-\end{itemize}
+\vspace{-0.6em}
+{\footnotesize\textbf{Identity at init, for every $q$}: $W_{\text{out}}{=}0,\ W_{\!f}{=}0$
+$\Rightarrow y\equiv x$ (the residual is $g\cdot 0\cdot z=0$) $\Rightarrow$ \texttt{bypass} still
+returns the \textbf{exact frozen base} --- the DPO reference stays free.\quad
+New trainables: $W_{\!f},w_g$ per modality $+$ one shared $W_q$.}
 \end{frame}
 
 % --- 18.iii FiLM math (what changes): old symbol -> new symbol ---
 \begin{frame}{What actually changes in the math}
 \centering
-\renewcommand{\arraystretch}{1.5}
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{@{}lll@{}}
 \toprule
  & \textbf{before (question-blind)} & \textbf{after (FiLM)} \\
@@ -506,49 +506,42 @@ swap pairs per clip & HEAR only & HEAR $+$ \textcolor{trn}{SEE} (same clip) \\
 loss \emph{form} & \multicolumn{2}{c}{unchanged (swap-DPO $+$ two anchors $+$ $\beta_{kl}\mathrm{KL}$)} \\
 \bottomrule
 \end{tabular}
-\vspace{0.6em}
-\begin{center}
-\setbeamercolor{block body}{bg=blue!6}
-\begin{block}{}
-\centering
-$\displaystyle I(Z;X\mid Q)\;\le\;\mathbb E_{x,q}\,\mathrm{KL}\!\big(q_\phi(z\mid x,q)\,\big\|\,\mathcal N(0,I)\big)$
-\end{block}
-\end{center}
-{\small Same KL term, read conditionally (the per-$q$ bound holds with the $q$-independent prior; average
-over $q$). The code may now \textbf{keep the bits that answer \emph{this} question} --- audio bits for an
-audio question --- instead of one budget for all questions.}
-\par\vspace{0.2em}
-{\footnotesize Honest note: at $\beta_{kl}{=}0.05$ the rate binds weakly --- this is the \emph{design
-principle}; the conditioning does the empirical work (hence the $\beta_{kl}$ sweep next week).}
+\vspace{0.3em}
+\[
+I(Z;X\mid Q)\;\le\;\mathbb E_{x,q}\,\mathrm{KL}\!\big(q_\phi(z\mid x,q)\,\big\|\,\mathcal N(0,I)\big)
+\]
+\vspace{-0.9em}
+{\footnotesize Same KL term, read conditionally (the per-$q$ bound holds with the $q$-independent prior;
+average over $q$). The code may now \textbf{keep the bits that answer \emph{this} question} --- audio bits
+for an audio question --- instead of one budget for all questions.\par
+At $\beta_{kl}{=}0.05$ the rate binds weakly: the \emph{design principle}; the conditioning does the
+empirical work (hence the $\beta_{kl}$ sweep next week).}
 \end{frame}
 
 % --- 18.iv FiLM math (the forcing lemma) ---
 \begin{frame}{FiLM, formally: why the question \emph{must} be read}
-\textbf{Setup.} One swapped clip $x^\star$ (\emph{seen} $A$, \emph{heard} $B$), asked two questions:
-\[
-q_{\text{hear}}:\ \text{chosen}=B,\ \text{rejected}=A
-\qquad\qquad
-q_{\text{see}}:\ \text{chosen}=A,\ \text{rejected}=B
-\]
+{\small\textbf{Setup.} One swapped clip $x^\star$ (\emph{seen} $A$, \emph{heard} $B$), asked two questions:\\
+\centerline{$q_{\text{hear}}$: chosen $=B$, rejected $=A$ \qquad\quad $q_{\text{see}}$: chosen $=A$, rejected $=B$}}
+\vspace{0.2em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{Lemma (question-blind adapters have a loss floor)}
-\small For any adapter that ignores $q$, the two swap-DPO margins on $x^\star$ are exact negatives,
+\footnotesize For any adapter that ignores $q$, the two swap-DPO margins on $x^\star$ are exact negatives,
 $m_{\text{see}}=-m_{\text{hear}}$, hence its paired loss obeys
+\vspace{-0.3em}
 \[
 -\log\sigma(m)-\log\sigma(-m)\;=\;-\log\!\big[\sigma(m)\,\sigma(-m)\big]\;\ge\;2\log 2\;\approx\;1.39,
 \]
-with equality only at $m=0$ (learn \emph{nothing}). A question-\emph{aware} adapter can drive both
-losses $\to 0$.
+\vspace{-1.1em}\par
+with equality only at $m=0$ (learn \emph{nothing}). A question-\emph{aware} adapter can drive both losses $\to 0$.
 \end{block}
 \end{center}
-\textbf{Corollary.} Any minimizer of the HEAR$+$SEE objective must condition on $q$:
-\textbf{routing is forced by data construction} --- with a quantified gap ($2\log 2$) --- not
-encouraged by a regularizer.
-\vfill
-{\footnotesize The minimizer we actually find (from the trained weights): conditioning lands in the
-\emph{vision} FiLM ($\lVert W_{\!f}^{(v)}\rVert\!\approx\!4.5\,\lVert W_{\!f}^{(a)}\rVert$); the gate stays
-$\approx$\,open --- question-\emph{modulated} re-encoding rather than hard routing.}
+{\small\textbf{Corollary.} Any minimizer of the HEAR$+$SEE objective must condition on $q$:
+\textbf{routing is forced by data construction} (gap $=2\log 2$), not encouraged by a regularizer.}
+\vspace{0.3em}
+{\footnotesize The minimizer we actually find (from the weights): conditioning lands in the \emph{vision}
+FiLM ($\lVert W_{\!f}^{(v)}\rVert\!\approx\!4.5\,\lVert W_{\!f}^{(a)}\rVert$); the gate stays $\approx$\,open ---
+question-\emph{modulated} re-encoding rather than hard routing.}
 \end{frame}
 
 % --- 21. AVHBench in detail ---
@@ -821,7 +814,7 @@ $\Rightarrow$ \textbf{FiLM is the recommended variant}: same grounding, \emph{fa
 \figslot{ll_shift.png}{\linewidth}\\[2pt]
 {\scriptsize KDE over AVE clips of the gold answer's log-likelihood: \textcolor{teal}{true audio
 $\log p(y\,|\,a,v,x)$} vs \textcolor{magenta}{swapped audio $\log p(y\,|\,a',v,x)$}; dashed $=$ means.
-One panel per variant (base / $+$FiLM). \textbf{[TBD --- generate with probe\_ll\_shift $+$ plot\_ll\_shift]}}
+One panel per variant (base / $+$FiLM). \textbf{[TBD: probe\_ll\_shift $\to$ plot\_ll\_shift]}}
 \end{column}
 \begin{column}{0.42\textwidth}\small
 \textbf{How to read it}
@@ -846,7 +839,7 @@ One panel per variant (base / $+$FiLM). \textbf{[TBD --- generate with probe\_ll
 \centering\small
 \begin{tabular}{lccc}
 \toprule
-adapter (same attach points, same anchored swap-DPO) & AVHBench & CMM-HR & note \\
+adapter & AVHBench & CMM-HR & note \\
 \midrule
 LoRA ($r{=}16$)      & $\sim$0.74\ \textbf{[prelim]} & \textbf{[TBD]} & barely above base \\
 VIB (DPO)            & 0.812 & 0.743 & \\
