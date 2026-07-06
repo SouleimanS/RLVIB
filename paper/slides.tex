@@ -196,41 +196,38 @@ so preferring the \textbf{heard} answer is only possible by \textbf{attending to
 \vfill
 {\small Subscript $p$ = \textcolor{trn}{policy} (adapter \emph{on}) \ $\cdot$ \ subscript $r$ = \textcolor{frz}{reference} (adapter \emph{bypassed} $=$ frozen base).\\
 Only $\theta$ is a learnable parameter --- the \textcolor{trn}{policy side} moves, the \textcolor{frz}{reference side} is constant.}
+\vspace{0.3em}
+{\small $\sigma(m)=\tfrac{1}{1+e^{-m}}$ $=$ the \emph{logistic sigmoid}: DPO sets
+$P(\text{chosen}\succ\text{rejected})=\sigma(\text{margin})$ (Bradley--Terry), so
+$-\log\sigma$ is its \textbf{negative log-likelihood}.}
 \end{frame}
 
-% --- 10. Why it broke ---
-\begin{frame}{Why it broke}
-\[ \mathcal L_0=\underbrace{-\log\sigma\!\big(\beta[(c_p{-}c_r){-}(r_p{-}r_r)]\big)}_{\text{swap-DPO margin}}\;+\;\underbrace{\beta_{kl}\,\mathrm{KL}_{\text{VIB}}}_{\text{rate on the adapter only}} \]
+% --- Why it broke + the fix (merged; naive loss and anchored loss side by side) ---
+\begin{frame}{Why it broke --- and the fix: two anchors}
+{\small\textbf{The na\"ive loss} (swap-DPO $+$ the adapter's rate):}
 \vspace{-0.4em}
-\begin{itemize}\small
-\item $c_p,r_p$ = policy log-probs of chosen/rejected letters; $c_r,r_r$ = the frozen base.
-\item \textbf{Likelihood displacement}: the margin grows while \emph{both} $c_p$ and $r_p$ \emph{fall} $\Rightarrow$ the chosen answer gets \emph{less} likely.
-\item $\mathrm{KL}_{\text{VIB}}$ limits the adapter's \emph{rate}, \textbf{not the output} $\Rightarrow$ nothing stops the drift to constant ``no''.
-\end{itemize}
-\end{frame}
-
-% --- 11. The fix + what it changes on real clips (merged: fix / swap-mechanism / failures) ---
-\begin{frame}{The fix: two anchors --- and what it changes on real clips}
-{\small Add two terms to the na\"ive loss:}
+\[ \mathcal L_0=\underbrace{-\log\sigma\!\big(\beta[(c_p{-}c_r){-}(r_p{-}r_r)]\big)}_{\text{swap-DPO margin}}\;+\;\underbrace{\beta_{kl}\,\mathrm{KL}_{\text{VIB}}}_{\text{rate on the adapter only}} \]
+\vspace{-0.9em}
+\begin{center}
+{\footnotesize\textbf{Likelihood displacement}: the margin can grow while \emph{both} $c_p$ and $r_p$
+\emph{fall} $\Rightarrow$ drift to a constant ``no'' --- and $\mathrm{KL}_{\text{VIB}}$ constrains the
+adapter's \emph{rate}, not its \emph{output}.}
+\end{center}
+\vspace{0.1em}
+{\small\textbf{The fix --- add two anchors}:}
 \vspace{-0.3em}
 \begin{align*}
 \mathcal L =\ & \underbrace{-\log\sigma(\beta[(c_p{-}c_r){-}(r_p{-}r_r)])}_{\text{swap-DPO}}
- \;+\; \lambda_a\,\underbrace{\big({-}\log\sigma(\beta(c_p{-}c_r){-}\delta)\big)}_{\textcolor{trn}{\textbf{chosen anchor}}}
- \;+\; \lambda_{kl}\,\underbrace{\mathrm{KL}\!\big(p_{\text{base}}\,\|\,p_\theta\big)}_{\textcolor{trn}{\textbf{KL-to-base}}}
+ \;+\; \lambda_a\,\underbrace{\big({-}\log\sigma(\beta(c_p{-}c_r){-}\delta)\big)}_{\textcolor{trn}{\textbf{chosen anchor}}} \\[2pt]
+ &+\; \lambda_{kl}\,\underbrace{\mathrm{KL}\!\big(p_{\text{base}}(\cdot|x)\,\|\,p_\theta(\cdot|x)\big)}_{\textcolor{trn}{\textbf{KL-to-base}}}
  \;+\; \beta_{kl}\,\mathrm{KL}_{\text{VIB}}
 \end{align*}
-\vspace{-0.4em}
+\vspace{-0.5em}
 \begin{center}
-{\footnotesize \textcolor{trn}{\textbf{chosen anchor}} pins the chosen log-prob $\ge$ base $\Rightarrow$
-protects \textbf{PA}\quad$\cdot$\quad\textcolor{trn}{\textbf{KL-to-base}} keeps non-swap outputs near base
-$\Rightarrow$ protects \textbf{HR}}
+{\small \textcolor{trn}{\textbf{chosen anchor}} pins the chosen log-prob $\ge$ base $\Rightarrow$
+protects \textbf{PA}\quad$\cdot$\quad\textcolor{trn}{\textbf{KL-to-base}} keeps non-swap outputs near
+base $\Rightarrow$ protects \textbf{HR}}
 \end{center}
-\vfill
-\centering
-\begin{tabular}{@{}c@{}}
-\exrow{as_flute}{\emph{see} flute, \textbf{hear (overlaid) train horn}}{``Which event do you hear?''}{``flute''}{``train horn''} \\[2.5mm]
-\exrow{avh_v2a}{\textbf{video $\to$ audio} (AVHBench)}{``Is the bird making sound?'' --- it is silent.}{``Yes''}{``No''}
-\end{tabular}
 \end{frame}
 
 % --- 14. Ablation (old protocol; caption added) ---
@@ -443,35 +440,37 @@ The code may now \textbf{keep the bits that answer \emph{this} question} --- ins
 
 % --- 18.iv FiLM math (the forcing lemma) ---
 \begin{frame}{FiLM, formally: why the question \emph{must} be read}
-{\small\textbf{Setup.} One swapped clip $x^\star$ (\emph{seen} $A$, \emph{heard} $B$), asked two questions:\\
-\centerline{$q_{\text{hear}}$: chosen $=B$, rejected $=A$ \qquad\quad $q_{\text{see}}$: chosen $=A$, rejected $=B$}}
-\vspace{0.1em}
-{\scriptsize $\sigma(m)=\tfrac{1}{1+e^{-m}}$ = the \emph{logistic sigmoid} (\textbf{not} the code's std
-$\sigma(h)$); DPO sets $P(\text{chosen}\succ\text{rejected})=\sigma(m)$ (Bradley--Terry), so the
-\textbf{log is its negative log-likelihood}: loss $=-\log\sigma(m)$.}
-\vspace{0.1em}
+{\small\textbf{Setup.} One swapped clip $x^\star$: \emph{see} dog $A$, \emph{hear} bell $B$ --- asked two questions:\\
+\centerline{$q_{\text{hear}}$ (``what do you hear?''): chosen $=B$ \qquad\quad $q_{\text{see}}$ (``what do you see?''): chosen $=A$}}
+\vspace{0.2em}
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{Lemma (question-blind adapters have a loss floor)}
-\footnotesize Ignoring $q$ makes the two margins on $x^\star$ exact negatives,
-$m_{\text{see}}=-m_{\text{hear}}$, so the paired loss obeys
+\footnotesize Ignoring $q$ makes the two margins on $x^\star$ exact negatives, $m_{\text{see}}=-m_{\text{hear}}$, so
 \vspace{-0.3em}
 \[
--\log\sigma(m)-\log\sigma(-m)\;=\;-\log\!\big[\sigma(m)\,\sigma(-m)\big]\;\ge\;2\log 2\;\approx\;1.39,
+-\log\sigma(m)-\log\sigma(-m)\;=\;-\log\!\big[\sigma(m)\,\sigma(-m)\big]\;\ge\;2\log 2\;\approx\;1.39 .
 \]
-\vspace{-1.1em}\par
-with equality only at $m=0$ (learn \emph{nothing}). A question-\emph{aware} adapter drives both losses $\to 0$.
 \end{block}
 \end{center}
-{\footnotesize\textbf{Example (the dog-with-bell clip: \emph{see} dog $A$, \emph{hear} bell $B$).}
-A question-blind adapter that leans ``bell'' ($m_{\text{hear}}{=}2$, loss $0.13$) gives the \emph{same}
-answer when asked what it \emph{sees} --- so $m_{\text{see}}{=}{-}2$, loss $2.13$: total $2.26$. Playing
-it safe ($m{=}0$) costs $0.69+0.69=1.39$ --- the floor. Only \emph{reading the question} lets it say
-``bell'' to HEAR \emph{and} ``dog'' to SEE ($m_{\text{hear}}{=}m_{\text{see}}{=}2$): $0.13+0.13\to 0$.}
-\vspace{0.2em}
-{\small\textbf{Corollary (from the example).} Every question-blind adapter is stuck $\ge 1.39$ per pair
-while a question-aware one can reach $0$ --- so gradient descent on the HEAR$+$SEE loss \emph{must}
-push the adapter to read $q$: \textbf{routing is forced by data construction}, not by a regularizer.}
+\vspace{-0.2em}
+\centering
+\renewcommand{\arraystretch}{1.15}
+{\footnotesize
+\begin{tabular}{l l cc c}
+\toprule
+adapter & answers & HEAR loss & SEE loss & total \\
+\midrule
+blind, leans ``bell'' ($m{=}2$) & ``bell'' / ``bell'' & $0.13$ & $2.13$ & $2.26$ \\
+blind, plays safe ($m{=}0$)     & 50/50 / 50/50       & $0.69$ & $0.69$ & $\mathbf{1.39}$ (the floor) \\
+\textbf{aware} ($m_{\text{hear}}{=}m_{\text{see}}{=}2$) & ``bell'' / ``dog'' & $0.13$ & $0.13$ & $\mathbf{0.26\ (\to 0)}$ \\
+\bottomrule
+\end{tabular}}
+\vspace{0.5em}
+\par
+{\small\textbf{Corollary.} Blind adapters are stuck $\ge 1.39$ per pair; aware ones reach $0$ ---
+so minimizing the HEAR$+$SEE loss \textbf{forces the adapter to read $q$}. Routing comes from the
+\emph{data construction}, not a regularizer.}
 \end{frame}
 
 % --- What the metrics mean (moved next to the benchmark-detail slides) ---
@@ -802,8 +801,8 @@ Qwen3-Omni {\scriptsize(base)}       & 79.2 & 76.8 & 76.4 & 77.5 \\
 adapter (Qwen3-Omni) & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR \\
 \midrule
 none (frozen base)        & 0.838 & 0.812 & 0.653 & 0.761 & 0.900 & 0.733 \\
-LoRA $r{=}16$             & 0.801 & 0.789 & 0.612 & 0.742 & 0.871 & 0.721 \\
-LoRA $r{=}64$ ($4\times$ params) & 0.809 & 0.794 & 0.633 & 0.752 & 0.868 & 0.716 \\
+LoRA $r{=}16$             & 0.836 & 0.820 & 0.686 & 0.778 & 0.885 & 0.735 \\
+LoRA $r{=}64$ ($4\times$ params) & 0.838 & 0.823 & 0.699 & 0.784 & 0.883 & 0.734 \\
 VIB (DPO)                 & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 \\
 VIB (\textbf{FiLM})       & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} \\
 \bottomrule
@@ -811,8 +810,8 @@ VIB (\textbf{FiLM})       & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.
 \vfill
 \begin{itemize}\small
 \item Identical data, objective, anchors, selection --- \textbf{only the adapter form changes}.
-\item LoRA recovers $<\!30\%$ of the VIB gain and \textbf{loses HR} (0.733$\to$0.72) --- and
-\textbf{rank is not the problem}: $4\times$ the parameters buys $+1$ point.
+\item LoRA helps ($+1.7$ over base) but recovers only $\sim\!\tfrac13$ of the VIB gain ($+5.1$) ---
+and \textbf{rank is not the problem}: $4\times$ the parameters buys $+0.6$.
 \item The lever is the \textbf{stochastic zero-init residual} (reparam noise $+$ identity-at-init
 $+$ exact bypass reference) --- not ``any adapter would do''.
 \end{itemize}
