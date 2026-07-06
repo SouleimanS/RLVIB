@@ -20,10 +20,11 @@
 \definecolor{frz}{RGB}{40,95,175}     % frozen
 \definecolor{trn}{RGB}{210,120,20}    % trained
 
-% figure slot with a build-safe fallback box
+% figure slot with a build-safe fallback box (\detokenize: underscores in the filename
+% would otherwise be read as math subscripts in the fallback text -> "Missing $ inserted")
 \newcommand{\figslot}[2]{\IfFileExists{figures/#1}%
   {\includegraphics[width=#2]{figures/#1}}%
-  {\fbox{\parbox[c][2.6cm][c]{#2}{\centering\tiny\ttfamily figures/#1}}}}
+  {\fbox{\parbox[c][2.6cm][c]{#2}{\centering\tiny\ttfamily\detokenize{figures/#1}}}}}
 % frame thumbnail, with a build-safe fallback box
 \newcommand{\frm}[1]{\IfFileExists{figures/#1}{\includegraphics[height=15mm]{figures/#1}}%
   {\fcolorbox{gray}{gray!12}{\parbox[c][14mm][c]{20mm}{\centering\tiny\ttfamily #1}}}}
