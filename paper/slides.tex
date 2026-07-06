@@ -457,38 +457,59 @@ are \emph{identical} for ``what do you \textbf{hear}?'' and ``what do you \textb
 \end{center}
 \end{frame}
 
-% --- 18.ii FiLM math (build): condition it, in three small steps ---
-\begin{frame}{FiLM, step by step: give that machinery the question}
-{\small\textbf{Step 1 --- encode the question into one vector.}}
-\vspace{-0.4em}
+% --- 18.ii FiLM (schema): what gamma and beta do ---
+\begin{frame}{FiLM: the question turns two knobs, $\gamma$ (scale) and $\beta$ (shift)}
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 3.5mm,
+  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=6mm,align=center},
+  new/.style={draw,very thick,rounded corners,fill=trn!40,draw=trn!85!black,minimum height=6mm,align=center},
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center},
+  op/.style={draw,circle,inner sep=1.5pt},
+  io/.style={align=center}]
+  % top row: the branch from the previous slide
+  \node[io] (x) {$x$};
+  \node[trn,right=of x] (enc) {$W_e$, GELU};
+  \node[new,right=of enc] (film) {$\tilde h=(1{+}\gamma)\odot h+\beta$};
+  \node[trn,right=of film] (ms) {$\mu,\sigma$};
+  \node[op,right=of ms] (z) {$z$};
+  \node[trn,right=of z] (wout) {$W_{\text{out}}$};
+  \node[op,right=of wout] (mult) {$\times$};
+  \node[op,right=of mult] (add) {$+$};
+  \node[frzs,right=of add] (llm) {frozen LLM};
+  \draw[->] (x)--(enc); \draw[->] (enc)--node[above]{\tiny $h$}(film);
+  \draw[->] (film)--node[above]{\tiny $\tilde h$}(ms);
+  \draw[->] (ms)--node[above]{\tiny $\mu{+}\sigma{\odot}\epsilon$}(z);
+  \draw[->] (z)--(wout); \draw[->] (wout)--(mult); \draw[->] (mult)--(add);
+  \draw[->] (add)--node[above]{\tiny $y$}(llm);
+  \draw[->] (x.north) to[out=20,in=160] node[above,pos=0.5]{\tiny skip} (add.north);
+  % bottom row: the NEW question path
+  \node[io,below=11mm of enc,xshift=-14mm] (w) {question $w_{1:L}$};
+  \node[frzs,right=of w] (embed) {$E$ frozen, mean-pool};
+  \node[new,right=of embed] (wq) {$W_q$};
+  \node[io,right=of wq] (qv) {$q$};
+  \node[new] (wf) at (film.south |- qv) {$W_{\!f}$};
+  \node[new] (wg) at (mult.south |- qv) {$w_g,b_g$};
+  \draw[->] (w)--(embed); \draw[->] (embed)--(wq); \draw[->] (wq)--(qv);
+  \draw[->] (qv)--(wf);
+  \draw[->] (qv.south) to[out=-15,in=-165] (wg.south);
+  \draw[->,trn!85!black,very thick] (wf.north)--node[right]{\tiny $[\gamma;\beta]=W_{\!f}\,q$}(film.south);
+  \draw[->,trn!85!black,very thick] (wg.north)--node[right]{\tiny $g(q)=\mathrm{sigm}(w_g^{\!\top}q{+}b_g)$}(mult.south);
+  \node[font=\tiny,below=1mm of embed,xshift=8mm]
+    {\textcolor{trn!85!black}{$\blacksquare$ new (trained)}\quad\textcolor{trn}{$\blacksquare$ trained before}\quad\textcolor{frz}{$\blacksquare$ frozen}};
+\end{tikzpicture}}
+\vspace{0.5em}
+\par
+{\small $\gamma$ $=$ a \textbf{scale} on every hidden feature, chosen by the question \quad$\cdot$\quad
+$\beta$ $=$ a \textbf{shift} on every hidden feature \quad$\cdot$\quad
+$g(q)$ $=$ one \textbf{volume knob} on the whole edit}
+\vspace{0.2em}
 \[
-q \;=\; W_q\,\tfrac1L\textstyle\sum_{t} E(w_t)
+\boxed{\;y = x + g(q)\,W_{\text{out}}\,z\;}
 \]
-\vspace{-1.2em}
-\begin{center}
-{\scriptsize $w_{1:L}$ = the question's tokens;\ $E$ = the LLM's own \emph{frozen} embedding table;\
-$W_q$ = a small trained projection.}
-\end{center}
-{\small\textbf{Step 2 --- let $q$ modulate the hidden activations} (FiLM: per-feature scale $+$ shift).}
-\vspace{-0.4em}
-\[
-[\gamma;\beta]=W_{\!f}\,q \qquad\quad \tilde h=(1+\gamma)\odot h+\beta
-\]
-\vspace{-1.2em}
-\begin{center}
-{\scriptsize so the code's heads now read the question: $\mu(x)\to\mu(x,q)$,\ \ $\sigma(x)\to\sigma(x,q)$.}
-\end{center}
-{\small\textbf{Step 3 --- let $q$ gate the edit} (one scalar per modality).}
-\vspace{-0.4em}
-\[
-g(q)=\mathrm{sigm}(w_g^{\!\top}q+b_g)\in(0,1) \qquad\quad
-\boxed{\;y \;=\; x \;+\; g(q)\,W_{\text{out}}\,z\;}
-\]
-\vspace{-0.6em}
-{\footnotesize\textbf{Identity at init, for every $q$}: $W_{\text{out}}{=}0,\ W_{\!f}{=}0$
-$\Rightarrow y\equiv x$ (the residual is $g\cdot 0\cdot z=0$) $\Rightarrow$ \texttt{bypass} still
-returns the \textbf{exact frozen base} --- the DPO reference stays free.\quad
-New trainables: $W_{\!f},w_g$ per modality $+$ one shared $W_q$.}
+\vspace{-0.8em}
+{\footnotesize Zero-init ($W_{\!f}{=}0,\ W_{\text{out}}{=}0$) $\Rightarrow \gamma{=}\beta{=}0$ and $y{=}x$
+at init, for every $q$ --- \texttt{bypass} $=$ exact frozen base.}
 \end{frame}
 
 % --- 18.iii FiLM math (what changes): old symbol -> new symbol ---
