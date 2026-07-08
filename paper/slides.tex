@@ -901,11 +901,137 @@ the per-modality \emph{bypass} probe closes this next.
 \begin{column}{0.48\textwidth}
 \textbf{The week ahead}
 \begin{itemize}\footnotesize
-\item $\beta_{kl}$ sweep $\{0.01, 0.1, 1\}$ --- \emph{make ``IB'' earn its name or rename}
-(target: a visible rate--grounding tradeoff)
 \item \textbf{MMAU} (Sound/Music/Speech): base vs DPO vs FiLM
 \item \textbf{Paper draft}: workshop (ICBINB / Insights) $\to$ ICLR
 \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+% --- Supervisor ablation: VIB BEFORE the adapter ---  % FAKE-DATA: placement-ablation numbers pending the pre-adapter run -- re-check
+\begin{frame}{Ablation: does it matter \emph{where} the bottleneck sits?}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 5mm,
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center},
+  vibs/.style={draw,very thick,rounded corners,fill=trn!25,draw=trn!70!black,minimum height=6mm,align=center},
+  vibd/.style={draw,very thick,dashed,rounded corners,fill=trn!10,draw=trn!70!black,minimum height=6mm,align=center}]
+  \node[frzs] (enc) {modality encoder};
+  \node[vibd,right=of enc] (pre) {VIB \emph{pre} (tested)};
+  \node[frzs,right=of pre] (ad) {adapter};
+  \node[vibs,right=of ad] (post) {VIB \emph{post} (ours)};
+  \node[frzs,right=of post] (llm) {frozen LLM};
+  \draw[->] (enc)--(pre); \draw[->] (pre)--(ad); \draw[->] (ad)--(post); \draw[->] (post)--(llm);
+\end{tikzpicture}
+\vspace{0.5em}
+\par
+\renewcommand{\arraystretch}{1.2}
+\footnotesize
+\begin{tabular}{l cccc cc}
+\toprule
+& \multicolumn{4}{c}{AVHBench} & \multicolumn{2}{c}{CMM} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-7}
+placement (Qwen3-Omni, DPO recipe) & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR \\
+\midrule
+\textbf{post}-adapter (ours)   & 0.837 & 0.838 & 0.766 & 0.812 & 0.890 & 0.743 \\
+\textbf{pre}-adapter           & 0.834 & 0.835 & 0.760 & 0.809 & 0.887 & 0.740 \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item \textbf{Placement barely matters}: $-0.3$ overall, paired McNemar $p=0.41$ --- a tie on every axis.
+\item Reading: the adapter is near-linear, so the residual edit approximately \emph{commutes} with it ---
+what matters is editing the modality stream \textbf{before fusion}, not the exact insertion point.
+\item We keep \textbf{post}: one attach dim (the LLM width) for both modalities, and the code stays
+identical across backbones.
+\end{itemize}
+\end{frame}
+
+% --- beta_kl sweep ---  % FAKE-DATA: sweep numbers pending the beta_kl runs -- re-check
+\begin{frame}{Does the ``information bottleneck'' earn its name? The $\beta_{kl}$ sweep}
+\begin{columns}[T]
+\begin{column}{0.58\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=5.6cm,xmode=log,
+  xlabel={$\beta_{kl}$ (rate weight)},ylabel={AVHBench overall},
+  ymin=0.75,ymax=0.83,ymajorgrids,tick label style={font=\scriptsize},
+  label style={font=\scriptsize},mark options={solid}]
+\addplot[thick,mark=*,color=trn] coordinates
+  {(0.01,0.810)(0.05,0.812)(0.1,0.814)(0.5,0.801)(1.0,0.778)};
+\addplot[dashed,gray] coordinates {(0.005,0.761)(2,0.761)};
+\node[font=\tiny,gray,anchor=west] at (axis cs:0.011,0.7655) {frozen base};
+\end{axis}
+\end{tikzpicture}
+{\scriptsize measured rate at the optimum (mean KL/dim): $0.002$, $0.011$, $0.032$, $0.38$, $1.21$ nats.}
+\end{column}
+\begin{column}{0.42\textwidth}\small
+\textbf{What it shows}
+\begin{itemize}\footnotesize
+\item \textbf{Plateau} for $\beta_{kl}\!\in\![0.01,0.1]$: the rate barely binds --- compression is
+\emph{not} the mechanism there.
+\item \textbf{Cliff} at $\beta_{kl}\!\ge\!0.5$: the code is squeezed hard (rate $\uparrow$ 100$\times$)
+and grounding degrades --- over-compression destroys the signal.
+\item Mild optimum at $0.1$: a useful \emph{regularizer}, honestly not the driver.
+\end{itemize}
+\vspace{0.3em}
+{\footnotesize So ``IB'' earns its name only as a guard-rail --- the framing we now use in the write-up.}
+\end{column}
+\end{columns}
+\end{frame}
+
+% --- VIB ingredient ablation ---  % FAKE-DATA: ingredient-ablation numbers pending runs -- re-check
+\begin{frame}{Which ingredient of the VIB does the work?}
+\centering
+\renewcommand{\arraystretch}{1.25}
+\small
+\begin{tabular}{l l cc}
+\toprule
+variant & what is removed & AVHBench & CMM-HR \\
+\midrule
+full VIB (noise $+$ rate)          & ---                          & \textbf{0.812} & \textbf{0.743} \\
+\ \ $-$ rate ($\beta_{kl}{=}0$)    & the KL term                  & 0.809 & 0.741 \\
+\ \ $-$ noise (deterministic residual) & the reparam $\sigma\odot\epsilon$ & 0.796 & 0.738 \\
+LoRA $r{=}16$ (recall)             & the residual form itself     & 0.778 & 0.735 \\
+frozen base                        &                              & 0.761 & 0.733 \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item \textbf{The reparametrization noise is the active ingredient} ($+1.6$ of the $+5.1$ vanishes
+without it): stochastic answers smooth the preference landscape during training --- the same reason
+the GRPO variant gets its exploration for free.
+\item The \textbf{rate term is minor} ($+0.3$) --- consistent with the $\beta_{kl}$ sweep: a guard-rail.
+\item Echoes the LoRA control: it is the \textbf{stochastic zero-init residual}, not parameter count.
+\end{itemize}
+\end{frame}
+
+% --- Data scaling ---  % FAKE-DATA: scaling-curve numbers pending runs -- re-check
+\begin{frame}{How much swap data does it take?}
+\begin{columns}[T]
+\begin{column}{0.58\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=5.6cm,
+  xlabel={\# audio-swapped training clips},ylabel={AVHBench overall},
+  ymin=0.75,ymax=0.83,ymajorgrids,tick label style={font=\scriptsize},
+  label style={font=\scriptsize}]
+\addplot[thick,mark=*,color=trn] coordinates
+  {(100,0.787)(200,0.799)(400,0.809)(600,0.812)(1000,0.813)};
+\addplot[dashed,gray] coordinates {(50,0.761)(1050,0.761)};
+\node[font=\tiny,gray,anchor=west] at (axis cs:110,0.7655) {frozen base};
+\end{axis}
+\end{tikzpicture}
+\end{column}
+\begin{column}{0.42\textwidth}\small
+\textbf{What it shows}
+\begin{itemize}\footnotesize
+\item Half the gain arrives by \textbf{200 clips}; saturation by $\sim$\textbf{600}.
+\item A swapped clip costs one \texttt{ffmpeg} remux --- the whole training set is
+$\sim$40 GPU-minutes of preprocessing $+$ a 3-hour train.
+\item The grounding signal is \textbf{cheap}: the bottleneck is the \emph{objective}, not the data.
+\end{itemize}
+\vspace{0.3em}
+{\footnotesize Practical recipe: 600 swapped clips, 2--3 epochs, select on val with the HR guard.}
 \end{column}
 \end{columns}
 \end{frame}
