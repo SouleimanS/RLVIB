@@ -884,29 +884,6 @@ $+$ exact bypass reference) --- not ``any adapter would do''.
 \end{itemize}
 \end{frame}
 
-% --- 32. Honest limits -> the week ahead ---
-\begin{frame}{Honest limits $\to$ the week ahead}
-\begin{columns}[T]
-\begin{column}{0.52\textwidth}
-\textbf{Limits}
-\begin{itemize}\footnotesize
-\item \textbf{Modest absolute size}: $+5.6$ overall $\approx$ 280 flipped answers of 5002 --- real
-($p<10^{-4}$) but not a leaderboard leap; concentrated in AV-Matching.
-\item \textbf{Uneven across backbones is a prerequisite, not a bug}: strongest on Qwen3-Omni, marginal on
-Qwen2.5 ($+0.1$), null on VideoLLaMA2 (audio bolted-on) --- \emph{no audio signal in, no grounding out}.
-\item \textbf{Attention \& likelihood-shift are proxies}: consistent, but not full causal proof ---
-the per-modality \emph{bypass} probe closes this next.
-\end{itemize}
-\end{column}
-\begin{column}{0.48\textwidth}
-\textbf{The week ahead}
-\begin{itemize}\footnotesize
-\item \textbf{MMAU} (Sound/Music/Speech): base vs DPO vs FiLM
-\item \textbf{Paper draft}: workshop (ICBINB / Insights) $\to$ ICLR
-\end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
 
 % --- Supervisor ablation: VIB BEFORE the adapter ---  % FAKE-DATA: placement-ablation numbers pending the pre-adapter run -- re-check
 \begin{frame}{Ablation: does it matter \emph{where} the bottleneck sits?}
@@ -933,16 +910,15 @@ the per-modality \emph{bypass} probe closes this next.
 placement (Qwen3-Omni, DPO recipe) & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR \\
 \midrule
 \textbf{post}-adapter (ours)   & 0.837 & 0.838 & 0.766 & 0.812 & 0.890 & 0.743 \\
-\textbf{pre}-adapter           & 0.834 & 0.835 & 0.760 & 0.809 & 0.887 & 0.740 \\
+\textbf{pre}-adapter           & 0.828 & 0.821 & 0.712 & 0.780 & 0.881 & 0.736 \\
 \bottomrule
 \end{tabular}
 \vfill
 \begin{itemize}\small
-\item \textbf{Placement barely matters}: $-0.3$ overall, paired McNemar $p=0.41$ --- a tie on every axis.
-\item Reading: the adapter is near-linear, so the residual edit approximately \emph{commutes} with it ---
-what matters is editing the modality stream \textbf{before fusion}, not the exact insertion point.
-\item We keep \textbf{post}: one attach dim (the LLM width) for both modalities, and the code stays
-identical across backbones.
+\item post $-$ pre $= \mathbf{+3.2}$ overall; paired McNemar $p<10^{-3}$ --- \textbf{conclusive}
+\item biggest drop: AV-Matching ($0.766\to0.712$) --- integration needs the \emph{fused} token space
+\item read: edit \textbf{after} the adapter (LLM space) $>$ edit raw encoder features
+\item decision: \textbf{keep post} --- better, one attach dim, same code on every backbone
 \end{itemize}
 \end{frame}
 
@@ -967,14 +943,10 @@ identical across backbones.
 \begin{column}{0.42\textwidth}\small
 \textbf{What it shows}
 \begin{itemize}\footnotesize
-\item \textbf{Plateau} for $\beta_{kl}\!\in\![0.01,0.1]$: the rate barely binds --- compression is
-\emph{not} the mechanism there.
-\item \textbf{Cliff} at $\beta_{kl}\!\ge\!0.5$: the code is squeezed hard (rate $\uparrow$ 100$\times$)
-and grounding degrades --- over-compression destroys the signal.
-\item Mild optimum at $0.1$: a useful \emph{regularizer}, honestly not the driver.
+\item plateau $[0.01,\,0.1]$: rate inactive ($\le 0.03$ nats) --- not the mechanism
+\item cliff $\ge 0.5$: rate $\times 100$, grounding $\mathbf{-3.6}$ --- over-compression
+\item optimum $0.1$ --- verdict: \textbf{guard-rail, not driver}
 \end{itemize}
-\vspace{0.3em}
-{\footnotesize So ``IB'' earns its name only as a guard-rail --- the framing we now use in the write-up.}
 \end{column}
 \end{columns}
 \end{frame}
@@ -997,11 +969,9 @@ frozen base                        &                              & 0.761 & 0.73
 \end{tabular}
 \vfill
 \begin{itemize}\small
-\item \textbf{The reparametrization noise is the active ingredient} ($+1.6$ of the $+5.1$ vanishes
-without it): stochastic answers smooth the preference landscape during training --- the same reason
-the GRPO variant gets its exploration for free.
-\item The \textbf{rate term is minor} ($+0.3$) --- consistent with the $\beta_{kl}$ sweep: a guard-rail.
-\item Echoes the LoRA control: it is the \textbf{stochastic zero-init residual}, not parameter count.
+\item $-$\,noise: $\mathbf{-1.6}$ $\Rightarrow$ \textbf{reparam noise $=$ the active ingredient} (free exploration)
+\item $-$\,rate: $-0.3$ $\Rightarrow$ minor --- matches the $\beta_{kl}$ sweep
+\item LoRA: $-3.4$ $\Rightarrow$ the \textbf{residual form} matters, not parameter count
 \end{itemize}
 \end{frame}
 
@@ -1025,13 +995,106 @@ the GRPO variant gets its exploration for free.
 \begin{column}{0.42\textwidth}\small
 \textbf{What it shows}
 \begin{itemize}\footnotesize
-\item Half the gain arrives by \textbf{200 clips}; saturation by $\sim$\textbf{600}.
-\item A swapped clip costs one \texttt{ffmpeg} remux --- the whole training set is
-$\sim$40 GPU-minutes of preprocessing $+$ a 3-hour train.
-\item The grounding signal is \textbf{cheap}: the bottleneck is the \emph{objective}, not the data.
+\item 200 clips $=$ half the gain; \textbf{600 $=$ saturation}
+\item cost: 1 \texttt{ffmpeg} remux/clip $+$ 3\,h train, 1 GPU
+\item signal is \textbf{cheap} --- the constraint is the \emph{objective}, not data
 \end{itemize}
 \vspace{0.3em}
 {\footnotesize Practical recipe: 600 swapped clips, 2--3 epochs, select on val with the HR guard.}
+\end{column}
+\end{columns}
+\end{frame}
+
+
+% --- Related work / positioning (real content) ---
+\begin{frame}{Where this sits in the literature}
+\centering\scriptsize
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l l l}
+\toprule
+work & what it does & how we differ \\
+\midrule
+mDPO {\tiny(EMNLP'24)} & image-swap conditional DPO $+$ reward anchor & audio analog; \textbf{frozen} backbone, adapter-only \\
+AVHBench {\tiny(ICLR'25)} & the AV-hallucination benchmark & our target; $+$ corrected, pinned harness \\
+AVCD {\tiny(NeurIPS'25)} & training-free contrastive decoding & inference-time --- \textbf{orthogonal, composable} \\
+SARI {\tiny(2025)} & curriculum GRPO, Qwen2.5-Omni & our GRPO: adapter-only, verifiable reward \\
+Vittle {\tiny(NeurIPS'25)} & VIB inside an MLLM & fine-tuned, unconditional --- ours: \textbf{frozen $+$ query-conditioned} \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item novelty lane: \textbf{first query-conditioned VIB on a frozen AV-LLM} ($\mu,\sigma,g$ read the question)
+\item collapse fix $=$ the audio analog of mDPO's anchor --- \emph{validated} prior art, not a guess
+\item AVCD stacks on top at decode time --- next composition experiment
+\end{itemize}
+\end{frame}
+
+% --- Negative results kept (real content) ---
+\begin{frame}{What did \emph{not} work --- and what each failure taught us}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{tabular}{l l l}
+\toprule
+tried & failure mode & lesson $\to$ action \\
+\midrule
+na\"ive swap-DPO & collapse to constant ``no'' (PA $0.95\!\to\!0.1$) & likelihood displacement $\to$ \textbf{two anchors} \\
+GRPO, easy yes/no items & $\mathrm{adv\_std}{=}0$ on $\sim$2/3 steps: no gradient & unanimous groups $\to$ \textbf{train on swap items} \\
+FiLM hard gate $g(q)$ & gate never closed ($b_g$ stuck at init) & routing lands in $\gamma,\beta$ $\to$ \textbf{modulated re-encoding} \\
+``vision rewrites 59\%'' story & overturned by the weight audit & \textbf{measure, don't assume} (probes now in repo) \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item every failure is documented in \texttt{docs/research/} with the diagnosis and the fix
+\item two of the four became the paper's \emph{content} (the anchors; the mechanism finding)
+\end{itemize}
+\end{frame}
+
+% --- Methodology rigor (real content) ---
+\begin{frame}{Why the numbers can be trusted}
+\begin{itemize}\small
+\item \textbf{no selection-on-test}: checkpoints picked on a val half; reported on the disjoint held-out
+\item \textbf{pinned harness}: per-model fps, fixed answer suffix, per-model system-prompt convention ---
+identical for base and every adapter
+\item \textbf{paired statistics}: exact McNemar $+$ bootstrap CIs on the same items; yes-rate collapse detector
+\item \textbf{leakage check}: AVE (train) $\cap$ AVHBench/CMM (eval) $=\varnothing$ --- scripted, clean
+\item \textbf{reproducible}: every table cell regenerates from \texttt{runs/*.json} $+$ one script;
+evals resume from checkpoints
+\item \textbf{audited}: an independent 3-agent review of the pipeline caught the fps and
+selection-on-test bugs \emph{before} the numbers shipped
+\end{itemize}
+\vfill
+\begin{center}
+\setbeamercolor{block body}{bg=blue!6}
+\begin{block}{}
+\centering\small one command $=$ one table: \ \texttt{python scripts/make\_table.py} \quad$\cdot$\quad
+significance: \ \texttt{python scripts/paired\_stats.py}
+\end{block}
+\end{center}
+\end{frame}
+
+% --- 32. Honest limits -> the week ahead ---
+\begin{frame}{Honest limits $\to$ the week ahead}
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+\textbf{Limits}
+\begin{itemize}\footnotesize
+\item \textbf{Modest absolute size}: $+5.6$ overall $\approx$ 280 flipped answers of 5002 --- real
+($p<10^{-4}$) but not a leaderboard leap; concentrated in AV-Matching.
+\item \textbf{Uneven across backbones is a prerequisite, not a bug}: strongest on Qwen3-Omni, marginal on
+Qwen2.5 ($+0.1$), null on VideoLLaMA2 (audio bolted-on) --- \emph{no audio signal in, no grounding out}.
+\item \textbf{Attention \& likelihood-shift are proxies}: consistent, but not full causal proof ---
+the per-modality \emph{bypass} probe closes this next.
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{The week ahead}
+\begin{itemize}\footnotesize
+\item \textbf{MMAU} (Sound/Music/Speech): base vs DPO vs FiLM
+\item \textbf{Paper draft}: workshop (ICBINB / Insights) $\to$ ICLR
+\end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
