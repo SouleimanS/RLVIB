@@ -281,12 +281,14 @@ training target.}
 \end{frame}
 
 % ============ 9b. Likelihood displacement ============
-\begin{frame}{Why it collapses: likelihood displacement}
+\begin{frame}{Why it collapses: the loss never watches the winner}
 \begin{itemize}\small
-\item The loss watches only the \textbf{margin}, so it also falls when the rejected answer sinks
-\emph{faster} than the chosen one --- \textbf{both can sink together}.
-\item The freed probability mass must land somewhere: it drains onto a third answer that is always
-``safe'' on hallucination data --- the constant \textbf{``No''}.
+\item Answering \textbf{is an election}: every candidate answer gets votes ($=$ probability), and the
+model \emph{says} whichever answer has the most.
+\item The DPO loss judges \textbf{one duel only}: does ``bell'' poll above ``dog barking''? It never
+looks at who \textbf{wins the election}.
+\item Cheapest way to win the duel: take votes from \emph{both} --- just take more from ``dog
+barking''. The freed votes flow to a bystander nobody is watching: \textbf{``No''}.
 \end{itemize}
 \vspace{0.3em}
 \centering
@@ -295,9 +297,12 @@ training target.}
   \fill[green!60!black!55] (0mm,0mm)  rectangle (7mm,12mm);
   \fill[red!65!black!45]   (10mm,0mm) rectangle (17mm,10.1mm);
   \fill[gray!55]           (20mm,0mm) rectangle (27mm,1.9mm);
-  \node at (3.5mm,-2.5mm)  {chosen};
-  \node at (13.5mm,-2.5mm) {rejected};
+  \node at (3.5mm,-2.5mm)  {``bell''};
+  \node at (13.5mm,-2.5mm) {``dog barking''};
   \node at (23.5mm,-2.5mm) {``No''};
+  \node at (3.5mm,-5.5mm)  {(chosen)};
+  \node at (13.5mm,-5.5mm) {(rejected)};
+  \node at (23.5mm,-5.5mm) {(bystander)};
   \node at (3.5mm,14mm)  {.50};
   \node at (13.5mm,12.1mm) {.42};
   \node at (23.5mm,3.9mm)  {.08};
@@ -309,24 +314,27 @@ training target.}
     \fill[green!60!black!55] (0mm,0mm)  rectangle (7mm,3.6mm);
     \fill[red!65!black!45]   (10mm,0mm) rectangle (17mm,0.5mm);
     \fill[gray!55]           (20mm,0mm) rectangle (27mm,19.9mm);
-    \node at (3.5mm,-2.5mm)  {chosen};
-    \node at (13.5mm,-2.5mm) {rejected};
+    \node at (3.5mm,-2.5mm)  {``bell''};
+    \node at (13.5mm,-2.5mm) {``dog barking''};
     \node at (23.5mm,-2.5mm) {``No''};
+    \node at (3.5mm,-5.5mm)  {(chosen)};
+    \node at (13.5mm,-5.5mm) {(rejected)};
+    \node at (23.5mm,-5.5mm) {(bystander)};
     \node at (3.5mm,5.6mm)  {.15};
     \node at (13.5mm,2.5mm) {.02};
     \node at (23.5mm,21.9mm) {\textbf{.83}};
     \node at (13.5mm,25mm) {\textbf{after na\"ive DPO}};
   \end{scope}
-\end{tikzpicture}\\[2pt]
-{\scriptsize Cartoon numbers. The margin (chosen $-$ rejected, in log-prob) \emph{grew}, so the
-\textbf{loss is satisfied} --- while both real answers died. Our actual run: PA $0.95\to0.10$,
-every answer ``No''. Known as \emph{likelihood displacement} (Razin et al., 2024).}
+\end{tikzpicture}\\[3pt]
+{\scriptsize \textbf{Duel won}: ``bell'' still beats ``dog barking'' $\Rightarrow$ the loss is
+satisfied. \textbf{Election lost}: ``No'' holds the most votes, so the model answers ``No'' --- to
+everything. Our run: PA $0.95\to0.10$. (\emph{Likelihood displacement}, Razin et al., 2024.)}
 \vfill
 \begin{center}
 \setbeamercolor{block body}{bg=green!8}
 \begin{block}{}
-\centering\small The cure cannot be another metric --- the \textbf{loss itself} must pin the chosen
-answer's own probability. That is exactly rail 1, next slide.
+\centering\small \textbf{Rail 1}, in this language: ``bell'' may never end with fewer votes than it
+had under the frozen base --- the vote-draining shortcut becomes illegal.
 \end{block}
 \end{center}
 \end{frame}
