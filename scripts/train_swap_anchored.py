@@ -182,9 +182,13 @@ def main() -> int:
                          "(identical anchored swap-DPO recipe; no IB rate term).")
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=float, default=32.0)
+    # --- cross-attention fusion arm (audio<->vision before the LLM) ---
+    ap.add_argument("--xattn", action="store_true",
+                    help="train the bidirectional cross-attention fusion arm instead of the VIB "
+                         "(identical anchored swap-DPO recipe).")
     args = ap.parse_args()
-    if args.lora and args.film:
-        ap.error("--lora and --film are mutually exclusive (LoRA is the unconditional control)")
+    if sum((args.lora, args.film, args.xattn)) > 1:
+        ap.error("--lora / --film / --xattn are mutually exclusive arms")
     if args.lora and args.init_from:
         ap.error("--init-from is the FiLM warm-start; LoRA trains from its zero-init")
     args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
@@ -201,6 +205,12 @@ def main() -> int:
         n_train = sum(p.numel() for p in bns.parameters())
         print(f"[lora] r={args.lora_rank} alpha={args.lora_alpha}  wrapped={list(bns.keys())}  "
               f"trainable={n_train / 1e6:.2f}M", flush=True)
+    elif args.xattn:
+        from rlvib.models.xattn import attach_xattn
+        bns, handles = attach_xattn(m)
+        cls_name = "CrossModalAttention"
+        n_train = sum(p.numel() for p in bns.parameters())
+        print(f"[xattn] bidirectional audio<->vision fusion  trainable={n_train / 1e6:.2f}M", flush=True)
     else:
         cls = FiLMVariationalBottleneck if args.film else VariationalBottleneck
         bns, handles = attach_bottlenecks(m, cls=cls, normalize_input=nin)

@@ -314,6 +314,9 @@ def load_attached(model, ckpt_path):
     if ck.get("cls") == "LoRAAdapter":                 # LoRA baseline: its own attach path
         from rlvib.models.lora import load_attached_lora
         return load_attached_lora(model, ck)
+    if ck.get("cls") == "CrossModalAttention":         # cross-attention arm: its own attach path
+        from rlvib.models.xattn import load_attached_xattn
+        return load_attached_xattn(model, ck)
     cls = {"VariationalBottleneck": VariationalBottleneck,
            "ResidualBottleneck": ResidualBottleneck,
            "FiLMVariationalBottleneck": FiLMVariationalBottleneck}.get(
