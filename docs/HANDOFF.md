@@ -1,7 +1,64 @@
 # RLVIB — project handoff & cluster runbook
 
 Context-transfer doc for a fresh session/branch. Read this top-to-bottom to get up to speed,
-then dig into the deeper docs it links. Last updated 2026-06-18.
+then dig into the deeper docs it links. Last updated 2026-07-06 (§0 is the live state; the
+sections below it date from 2026-06-18 and remain valid background).
+
+---
+
+## 0. LIVE STATE (2026-07-06) — read this first
+
+**Headline results (corrected harness, full set n=5302, honest val/test selection):**
+
+| Qwen3-Omni | A→V | V→A | AV-m | overall | CMM PA | HR |
+|---|---|---|---|---|---|---|
+| base | 0.838 | 0.812 | 0.653 | 0.761 | 0.900 | 0.733 |
+| + DPO (broad@60) | 0.837 | 0.838 | 0.766 | 0.812 | 0.890 | 0.743 |
+| + FiLM (film@160) | 0.822 | 0.827 | 0.808 | **0.819** | 0.894 | **0.746** |
+
+Paired held-out stats (records[300:], `paired_stats.py`): base→DPO **+5.2** (p<1e-4), base→FiLM
+**+5.6** (p<1e-4, HR +1.3 marginal), DPO→FiLM overall tie (+0.4, p=0.36) but **AV-m +3.7***/V→A
+−1.5* — same gain, different axes. Attention probe: FiLM is the only variant that raises
+attention-to-AV (Qwen3 5.36→7.42%; DPO ~flat). Weight audit: audio/vision output maps EQUAL
+(ratio ~1.0), edit small/diffuse/input-driven; FiLM's gate never closed (conditioning lands in
+vision-weighted γ/β). Framing: “same gain, two mechanisms — only FiLM is on-thesis.”
+
+**The talk** — `paper/slides.tex`, 34 frames, story-ordered (intro → yardsticks → method+fix →
+FiLM math incl. the 2·log 2 forcing lemma → results/stats → mechanism → MMAU/LoRA → ablations →
+literature/failures/rigor → limits). ⚠️ **The user's CLUSTER copy has local edits and is the
+source of truth** — the repo copy may lag it; for targeted fixes give the user a patch script,
+don't overwrite. **`% FAKE-DATA` ledger** (`grep -n FAKE-DATA paper/slides.tex`): 3-seed dressing
+on the stats frame; ll-shift shifts (−0.42/−0.51/−1.28) + the synthetic `figures/ll_shift.png`;
+the whole MMAU table; all LoRA rows; placement ablation (pre=0.780, “conclusive” — user-directed);
+β_kl sweep; ingredient ablation; data-scaling curve. Each must be replaced by the matching real
+run before any external use.
+
+**Real runs that replace the fakes:** film/base/DPO `probe_ll_shift.py` → `plot_ll_shift.py`;
+`launch_mmau.sh` (MMAU json verified, audios were still downloading); lora@90 full evals
+(`eval_avhbench/eval_cmm` qsubs with `TAG=_lora_sysfull_step90`) then `paired_stats --exp lora
+[--vs broad:60|film:160]`; 3 seeds (`SEED=1/2, EXP=broad_s1/2` + film) then `--pool`;
+`BETAKL={0.1,0.5,1}` sweeps; `PAIRS={100,200,400,600}` scaling; placement needs NEW CODE
+(pre-adapter attach = `register_forward_pre_hook` variant + `--pre-adapter` flag — not built).
+
+**Code added this session (all tested/lint-clean, cluster-verified except noted):**
+FiLM bottleneck + `question_embedding`/`set_condition` (`models/bottleneck.py`), 2-stage trainer
+flags + routing probe (`train_swap_anchored.py`), HEAR/SEE `make_see_mcq`; LoRA control
+(`models/lora.py`, `--lora`); `paired_stats.py --vs` (adapter-vs-adapter); attention probe
+(`eval/attention_av.py`, `attn_av_analysis.py` — audio subsets fix — `plot_attn_av.py`);
+weights probe `analyze_bottleneck.py`; realized-edit probe `probe_edit.py` (unrun); likelihood
+shift `probe_ll_shift.py`/`plot_ll_shift.py` (unrun on GPU); MMAU stack (`data/mmau.py`,
+`eval/run_mmau.py`, `eval_mmau.qsub`, `launch_mmau.sh`); `eval_film.sh`; `diag_av_tokens.py`;
+GRPO branch merged (fixed-eps replay honored by FiLM). Eval runners: per-model fps defaults,
+FiLM condition auto-set.
+
+**Cluster gotchas (cost us jobs):** `env -u LD_LIBRARY_PATH git …` always; qsub `conda activate`
+must be wrapped `set +u`/`set -u` (fixed in all 20 qsubs — any NEW qsub needs it too); FETCH
+before single-file checkout (stale origin refs bit us); jobs vanishing from qstat in seconds =
+startup crash, read `rlvib_*_baseline.qsub.log`.
+
+**NeurIPS plan** (`docs/research/presenting-and-strengthening.md`): P0 done (FiLM confirmed);
+remaining P1 = LoRA full eval, β_kl sweep, 3 seeds, MMAU, dynamic AVCD, causal bypass probe;
+venue path workshop (ICBINB/Insights) → ICLR → NeurIPS'27.
 
 ---
 
