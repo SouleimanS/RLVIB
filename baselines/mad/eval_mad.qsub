@@ -1,0 +1,28 @@
+#!/bin/bash
+#PBS -N rlvib_mad
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=10:00:00
+#PBS -j oe
+#PBS -o rlvib_mad.qsub.log
+
+# MAD (training-free decoding) eval -- see baselines/mad/README.md.
+#   BENCH=avhbench MODEL=qwen3-omni LIMIT=300 qsub -v BENCH,MODEL,LIMIT baselines/mad/eval_mad.qsub
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
+conda activate "${CONDA_ENV:-rlvib}"
+set -u
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+echo "=== Node: $(hostname)  Date: $(date) ==="
+nvidia-smi -L
+exec > >(tee -a "$PBS_O_WORKDIR/runs/mad_${BENCH:-avhbench}_${MODEL:-qwen2.5-omni}_out.txt") 2>&1
+python -u baselines/mad/eval_mad.py --bench "${BENCH:-avhbench}" --model "${MODEL:-qwen2.5-omni}" \
+    --limit "${LIMIT:-300}" --gamma "${GAMMA:-2.5}"
+echo "=== Done $(date) ==="
