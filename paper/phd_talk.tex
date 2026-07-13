@@ -247,8 +247,8 @@ training target.}
 \vspace{-0.3em}
 \begin{align*}
 \mathcal L =\ & \underbrace{-\log\sigma(\beta[(c_p{-}c_r){-}(r_p{-}r_r)])}_{\text{\textbf{engine}: prefer the heard answer}}
- \;+\; \lambda_a\,\underbrace{\big({-}\log\sigma(\beta(c_p{-}c_r){-}\delta)\big)}_{\textcolor{trn}{\textbf{rail 1}: chosen $\ge$ base $\Rightarrow$ PA}} \\[2pt]
- &+\; \lambda_{kl}\,\underbrace{\mathrm{KL}\!\big(p_{\text{base}}\,\|\,p_\theta\big)}_{\textcolor{trn}{\textbf{rail 2}: normal inputs unchanged $\Rightarrow$ HR}}
+ \;+\; \lambda_a\,\underbrace{\big({-}\log\sigma(\beta(c_p{-}c_r){-}\delta)\big)}_{\text{\textcolor{trn}{\textbf{rail 1}: chosen $\ge$ base $\Rightarrow$ PA}}} \\[2pt]
+ &+\; \lambda_{kl}\,\underbrace{\mathrm{KL}\!\big(p_{\text{base}}\,\|\,p_\theta\big)}_{\text{\textcolor{trn}{\textbf{rail 2}: normal inputs unchanged $\Rightarrow$ HR}}}
  \;+\; \beta_{kl}\,\mathrm{KL}_{\text{VIB}}
 \end{align*}
 \vspace{-0.3em}
