@@ -266,8 +266,8 @@ adapter on, $r$ $=$ adapter bypassed $=$ the frozen base --- our reference model
 \begin{itemize}\small
 \item Train with this, the \textbf{standard DPO loss}, on the swap pairs $\Rightarrow$ perception
 accuracy \textbf{0.95 $\to$ 0.1}; the model converges to answering ``no'' to \emph{everything}.
-\item The loss sees \textbf{only the margin} between the two answers --- nothing pins either
-answer's own probability (next slide: why that is fatal).
+\item The loss sees \textbf{only the margin} --- it is satisfied even when \emph{both} answers'
+probabilities fall and the mass drains onto a constant ``no'' (\emph{likelihood displacement}).
 \item And remember the CMM trap: all-``no'' looks \textbf{perfect} on hallucination metrics.
 \end{itemize}
 \vfill
@@ -276,65 +276,6 @@ answer's own probability (next slide: why that is fatal).
 \begin{block}{}
 \centering\small First lesson of this project: \textbf{a hallucination metric alone cannot be your
 training target.}
-\end{block}
-\end{center}
-\end{frame}
-
-% ============ 9b. Likelihood displacement ============
-\begin{frame}{Why it collapses: the loss never watches the winner}
-\begin{itemize}\small
-\item Answering \textbf{is an election}: every candidate answer gets votes ($=$ probability), and the
-model \emph{says} whichever answer has the most.
-\item The DPO loss judges \textbf{one duel only}: does ``bell'' poll above ``dog barking''? It never
-looks at who \textbf{wins the election}.
-\item Cheapest way to win the duel: take votes from \emph{both} --- just take more from ``dog
-barking''. The freed votes flow to a bystander nobody is watching: \textbf{``No''}.
-\end{itemize}
-\vspace{0.3em}
-\centering
-\begin{tikzpicture}[font=\tiny]
-  % before
-  \fill[green!60!black!55] (0mm,0mm)  rectangle (7mm,12mm);
-  \fill[red!65!black!45]   (10mm,0mm) rectangle (17mm,10.1mm);
-  \fill[gray!55]           (20mm,0mm) rectangle (27mm,1.9mm);
-  \node at (3.5mm,-2.5mm)  {``bell''};
-  \node at (13.5mm,-2.5mm) {``dog barking''};
-  \node at (23.5mm,-2.5mm) {``No''};
-  \node at (3.5mm,-5.5mm)  {(chosen)};
-  \node at (13.5mm,-5.5mm) {(rejected)};
-  \node at (23.5mm,-5.5mm) {(bystander)};
-  \node at (3.5mm,14mm)  {.50};
-  \node at (13.5mm,12.1mm) {.42};
-  \node at (23.5mm,3.9mm)  {.08};
-  \node at (13.5mm,25mm) {\textbf{before}};
-  % arrow
-  \draw[->,thick] (30mm,8mm) -- (39mm,8mm);
-  % after
-  \begin{scope}[xshift=42mm]
-    \fill[green!60!black!55] (0mm,0mm)  rectangle (7mm,3.6mm);
-    \fill[red!65!black!45]   (10mm,0mm) rectangle (17mm,0.5mm);
-    \fill[gray!55]           (20mm,0mm) rectangle (27mm,19.9mm);
-    \node at (3.5mm,-2.5mm)  {``bell''};
-    \node at (13.5mm,-2.5mm) {``dog barking''};
-    \node at (23.5mm,-2.5mm) {``No''};
-    \node at (3.5mm,-5.5mm)  {(chosen)};
-    \node at (13.5mm,-5.5mm) {(rejected)};
-    \node at (23.5mm,-5.5mm) {(bystander)};
-    \node at (3.5mm,5.6mm)  {.15};
-    \node at (13.5mm,2.5mm) {.02};
-    \node at (23.5mm,21.9mm) {\textbf{.83}};
-    \node at (13.5mm,25mm) {\textbf{after na\"ive DPO}};
-  \end{scope}
-\end{tikzpicture}\\[3pt]
-{\scriptsize \textbf{Duel won}: ``bell'' still beats ``dog barking'' $\Rightarrow$ the loss is
-satisfied. \textbf{Election lost}: ``No'' holds the most votes, so the model answers ``No'' --- to
-everything. Our run: PA $0.95\to0.10$. (\emph{Likelihood displacement}, Razin et al., 2024.)}
-\vfill
-\begin{center}
-\setbeamercolor{block body}{bg=green!8}
-\begin{block}{}
-\centering\small \textbf{Rail 1}, in this language: ``bell'' may never end with fewer votes than it
-had under the frozen base --- the vote-draining shortcut becomes illegal.
 \end{block}
 \end{center}
 \end{frame}
