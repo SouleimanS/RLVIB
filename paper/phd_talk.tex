@@ -474,7 +474,7 @@ FiLM's hard gate $g(q)$ & never closed (stayed at init) & the model preferred \e
 \begin{frame}{The part that saved us: evaluation hygiene}
 \begin{itemize}\small
 \item \textbf{The harness is a lever.} Changing only the answer-format suffix moved a model's score by
-$+16$ points on one axis (V$\to$A $69.0\to80.3$) --- \emph{same weights}. Pin fps, prompts, suffixes.
+$+11$ points on one axis (V$\to$A $69.0\to80.3$) --- \emph{same weights}. Pin fps, prompts, suffixes.
 \item \textbf{Never select on the test set}: pick checkpoints on a validation half, report on the
 disjoint rest. Our first ``best'' checkpoint didn't survive this.
 \item \textbf{Paired statistics or it didn't happen}: same items, McNemar $+$ bootstrap CI.
