@@ -10,8 +10,8 @@
 # Video-MME (general video understanding, w/o subtitles) -- the capability guard at scale.
 # Download ON A LOGIN NODE first (~75 GB of videos; data/ is gitignored):
 #   mkdir -p data/VideoMME && cd data/VideoMME
-#   env -u LD_LIBRARY_PATH huggingface-cli download lmms-lab/Video-MME --repo-type dataset --local-dir .
-#   mkdir -p videos && for z in $(find . -name "videos*.zip" | sort); do unzip -n "$z" -d _vtmp; done
+#   hf download lmms-lab/Video-MME --repo-type dataset --local-dir .    # resumable if interrupted
+#   mkdir -p videos && for z in $(find . -name "*.zip" | sort); do unzip -n "$z" -d _vtmp; done
 #   find _vtmp -type f \( -name "*.mp4" -o -name "*.mkv" -o -name "*.webm" \) -exec mv {} videos/ \; && rm -rf _vtmp
 # Then:
 #   qsub -v "MODEL=qwen3-omni" scripts/eval_videomme.qsub                       # base, short subset
