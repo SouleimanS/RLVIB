@@ -1,0 +1,55 @@
+#!/bin/bash
+#PBS -N rlvib_videomme
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -o rlvib_videomme.qsub.log
+
+# Video-MME (general video understanding, w/o subtitles) -- the capability guard at scale.
+# Download ON A LOGIN NODE first (~75 GB of videos; data/ is gitignored):
+#   mkdir -p data/VideoMME && cd data/VideoMME
+#   env -u LD_LIBRARY_PATH huggingface-cli download lmms-lab/Video-MME --repo-type dataset --local-dir .
+#   mkdir -p videos && for z in $(find . -name "videos*.zip" | sort); do unzip -n "$z" -d _vtmp; done
+#   find _vtmp -type f \( -name "*.mp4" -o -name "*.mkv" -o -name "*.webm" \) -exec mv {} videos/ \; && rm -rf _vtmp
+# Then:
+#   qsub -v "MODEL=qwen3-omni" scripts/eval_videomme.qsub                       # base, short subset
+#   qsub -v "MODEL=qwen3-omni,BOTTLENECK=runs/anchored_qwen3-omni_film/bottleneck_step160.pt,TAG=_film_step160" \
+#       scripts/eval_videomme.qsub                                              # + FiLM adapter
+# Knobs: DURATIONS=short|medium|long|all (default short), FPS=0.5 (frame-sampling override),
+#        NOAUDIO=1 (vision-only ablation), LIMIT=N.
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
+conda activate "${CONDA_ENV:-rlvib}"
+set -u
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+DATA_DIR="${DATA_DIR:-$PWD/data/VideoMME}"
+DURATIONS="${DURATIONS:-short}"
+EXTRA=()
+[ -n "${BOTTLENECK:-}" ] && EXTRA+=(--bottleneck "$BOTTLENECK")
+[ -n "${FPS:-}" ]        && EXTRA+=(--fps "$FPS")
+[ -n "${NOAUDIO:-}" ]    && EXTRA+=(--no-audio)
+if [ -n "${BOTTLENECK:-}" ]; then TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
+[ "$DURATIONS" != "short" ] && TAG="${TAG}_${DURATIONS//,/-}"
+
+echo "=== Node: $(hostname)  Date: $(date)  model=${MODEL:-qwen3-omni}  durations=$DURATIONS  bottleneck=${BOTTLENECK:-none} ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/videomme_${MODEL:-qwen3-omni}${TAG}_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_videomme --model "${MODEL:-qwen3-omni}" \
+    --data-dir "$DATA_DIR" --durations "$DURATIONS" --limit "${LIMIT:-0}" \
+    ${EXTRA[@]+"${EXTRA[@]}"} \
+    --out "runs/videomme_${MODEL:-qwen3-omni}${TAG}.json"
+
+echo "=== Done $(date) ==="
