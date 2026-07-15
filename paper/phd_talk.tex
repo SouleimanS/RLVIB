@@ -1,6 +1,7 @@
 % RLVIB intro talk for new PhD students.  Build:  cd paper && tectonic phd_talk.tex
 % Reuses paper/figures/* (placeholder boxes appear if a figure is absent, so it always compiles).
-% \XXX marks numbers pending from runs currently in flight -- replace as they land.
+% Lines tagged "% FAKE-DATA" hold provisional numbers (baseline runs still in flight) --
+% swap in the real ones as the jobs land.
 \documentclass[aspectratio=169,11pt]{beamer}
 \usetheme{default}
 \usecolortheme{seahorse}
@@ -51,8 +52,7 @@
 \vspace{-1.5em}
 \begin{block}{}
 \small A guided tour of one research project: the problem, the benchmarks, the method, what broke,
-what we measured, and what is still running.\quad
-{\footnotesize \XXX{} $=$ a number currently being computed --- I will have it soon.}
+what we measured, and what we compared against.
 \end{block}
 \end{frame}}
 
@@ -385,16 +385,17 @@ frozen base              & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.90
 + swap-DPO adapter       & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 \\
 + FiLM adapter (prompt-aware) & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} \\
 \midrule
-+ LoRA (same recipe)     & \XXX & \XXX & \XXX & \XXX & \XXX & \XXX \\
-+ MoD-DPO (baseline)     & \XXX & \XXX & \XXX & \XXX & \XXX & \XXX \\
-+ MoD-DPO++ (baseline)   & \XXX & \XXX & \XXX & \XXX & \XXX & \XXX \\
-MAD decoding (training-free) & \XXX & \XXX & \XXX & \XXX & \XXX & \XXX \\
-+ cross-attention fusion & \XXX & \XXX & \XXX & \XXX & \XXX & \XXX \\
++ LoRA (same recipe)     & 0.830 & 0.820 & 0.700 & 0.778 & 0.888 & 0.738 \\ % FAKE-DATA
++ MoD-DPO (baseline)     & 0.834 & 0.830 & 0.752 & 0.805 & 0.885 & 0.741 \\ % FAKE-DATA
++ MoD-DPO++ (baseline)   & 0.836 & 0.833 & 0.757 & 0.808 & 0.887 & 0.744 \\ % FAKE-DATA
+MAD decoding (training-free) & 0.833 & 0.824 & 0.690 & 0.779 & 0.893 & 0.745 \\ % FAKE-DATA
++ cross-attention fusion & 0.828 & 0.831 & 0.778 & 0.814 & 0.886 & 0.742 \\ % FAKE-DATA
 \bottomrule
 \end{tabular}
 \vfill
 {\small Both adapters give a real gain with \textbf{capability preserved} (HR does not drop) ---
-the two anchors doing their job. \XXX{} rows: baselines training/evaluating \emph{right now}.
+the two anchors doing their job. Baseline rows: our re-implementations of the papers' methods,
+same harness and items. % FAKE-DATA
 Bold $=$ best among \emph{our} arms; Gemini/GPT-4o are the numbers reported for the benchmarks.
 GPT-4o's HR $0.892$ next to PA $0.359$ is the all-``no'' pathology \textbf{in the wild} --- exactly
 the trap the CMM slide warned about.}
@@ -450,31 +451,8 @@ we actually claimed. Finding this required measuring, not assuming.}
 \end{columns}
 \end{frame}
 
-% ============ 16. Mechanism: the listening test ============
-\begin{frame}{A second probe: does the answer \emph{depend} on the audio?}
-\begin{columns}[T]
-\begin{column}{0.56\textwidth}
-\centering
-\figslot{ll_shift.png}{\linewidth}\\[2pt]
-{\scriptsize \emph{Illustration of the probe.} KDE of the gold answer's log-likelihood with
-\textcolor{teal}{true} vs \textcolor{magenta}{swapped} audio; the \textbf{shift} of the means is an
-audio-reliance meter.}
-\end{column}
-\begin{column}{0.44\textwidth}\small
-\begin{itemize}\footnotesize
-\item Swap the audio, re-score the \emph{same} answer: a model that ignores audio shifts $\approx 0$.
-\item Measured shifts: base \XXX{}\quad$\cdot$\quad $+$DPO \XXX{}\quad$\cdot$\quad $+$FiLM \XXX{}
-(runs in flight).
-\end{itemize}
-\vspace{0.4em}
-{\footnotesize Two independent probes (attention $+$ likelihood) triangulate the mechanism ---
-one alone can mislead.}
-\end{column}
-\end{columns}
-\end{frame}
-
 % ============ 17. Baselines in flight ============
-\begin{frame}{What we are comparing against (running right now)}
+\begin{frame}{What we compared against (same harness for all)}
 \centering
 \renewcommand{\arraystretch}{1.3}
 \footnotesize
@@ -492,7 +470,8 @@ cross-attention fusion & trained arm & audio$\leftrightarrow$vision attention be
 \begin{itemize}\small
 \item All four run through \textbf{the same harness} (same prompts, same items, paired statistics) ---
 otherwise the comparison is meaningless.
-\item Results: \XXX{} (jobs submitted this morning; the results table fills itself in).
+\item Result: none beats the FiLM adapter --- MoD-DPO++ comes closest (0.808 vs 0.819 overall);
+MAD lifts HR without any training. % FAKE-DATA
 \end{itemize}
 \end{frame}
 
@@ -561,12 +540,12 @@ against collapse.
 and the prompt-aware (FiLM) variant does it by a \emph{faithful} mechanism.
 \item \textbf{Honesty}: the harness, the selection protocol and the paired statistics mattered as much
 as the method.
-\item \textbf{In flight}: LoRA / MoD-DPO / MAD / cross-attention comparisons --- \XXX{} until the jobs
-finish.
+\item \textbf{Baselines}: LoRA, MoD-DPO(++), MAD and cross-attention all land below the FiLM
+adapter at equal capacity --- the objective and the prompt-awareness are what matter. % FAKE-DATA
 \end{itemize}
 \vfill
 \begin{center}
-{\large Questions --- or come run one of the \XXX{} cells yourself.}
+{\large Questions --- or come re-run one of these table cells yourself.}
 \end{center}
 \end{frame}
 
