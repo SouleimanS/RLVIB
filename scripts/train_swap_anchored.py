@@ -28,6 +28,9 @@ import argparse
 import collections
 import os
 import random
+import warnings
+
+warnings.filterwarnings("ignore")  # librosa/audioread deprecation spam floods the training log
 
 import torch
 
