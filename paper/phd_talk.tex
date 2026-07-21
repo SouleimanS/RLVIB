@@ -514,6 +514,58 @@ we actually claimed. Finding this required measuring, not assuming.}
 
 
 
+% ============ 17b. Weights audit ============
+\begin{frame}{Opening the hood: what did the adapter actually \emph{learn}?}
+{\small Benchmarks say \emph{that} it works; the weights say \emph{how}. Three measurements on the
+trained FiLM adapter (no inference needed --- just the checkpoint):}
+\vspace{0.3em}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{tabular}{l c l}
+\toprule
+probe & value & what it means \\
+\midrule
+$\|W_{\text{out}}\|$ spectral ratio vs $W_e$ & $\approx 1.0$ & the edit \textbf{rotates} features, does not amplify them \\
+FiLM gate $g(q)$ over 500 questions & never $<0.4$ & \textbf{modulation, not routing} --- the gate never ``switches off'' \\
+FiLM modulation, vision vs audio & $\approx 4.5\times$ & the question steers mostly \textbf{through the vision stream} \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item An earlier version of this slide claimed ``59\% of the vision stream is rewritten, audio inert''
+--- the audit \textbf{overturned it}. Measure the weights, not the vibes.
+\item Reading: FiLM grounds audio \emph{by re-weighting what vision is allowed to say} --- consistent
+with the attention probe two slides back.
+\end{itemize}
+\end{frame}
+
+% ============ 17c. Transfer across backbones ============
+\begin{frame}{Same recipe, three backbones: grounding needs something to ground}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l cc c l}
+\toprule
+backbone & base & + adapter & $\Delta$ & attention to AV tokens \\
+\midrule
+Qwen3-Omni (30B)  & 0.761 & \textbf{0.819} & $+5.8$ & $5.4\% \to 7.4\%$ \\
+Qwen2.5-Omni (7B) & 0.729 & 0.730 & $+0.1$ & $7.9\% \to 8.1\%$ \\
+VideoLLaMA2 (7B)  & 0.707 & 0.684 & $\textcolor{red!70!black}{-2.3}$ & audio bolted on post-hoc \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.4em}
+{\scriptsize AVHBench overall, checkpoint selected on a validation half. Same data, loss, anchors,
+selection for all three.}
+\vfill
+\begin{itemize}\small
+\item The gain \textbf{tracks how much audio signal the frozen model already carries}: rich in
+Qwen3, marginal in Qwen2.5, absent in VideoLLaMA2 --- \emph{no signal in, no grounding out}.
+\item The negative result is load-bearing: a tiny adapter \textbf{cannot create} audio
+understanding, only \emph{unlock} it. That is a claim about the method's limits we can defend.
+\end{itemize}
+\end{frame}
+
 % ============ 19b. Next axis: time ============
 \begin{frame}{The next axis: the model cannot tell \emph{when}}
 \begin{itemize}\small
@@ -587,6 +639,32 @@ objective?
 \end{itemize}
 \vfill
 {\footnotesize Everything is reproducible from the repo: one script per table, one command per figure.}
+\end{frame}
+
+% ============ 20b. The iceberg ============
+\begin{frame}{The iceberg: what one results table sits on}
+\centering
+\begin{tikzpicture}[font=\scriptsize]
+  % water
+  \draw[dashed,blue!50!black] (-5.4,0) -- (5.4,0) node[above left,font=\tiny]{waterline};
+  % tip
+  \draw[fill=blue!8,draw=blue!40!black,rounded corners=1pt]
+    (-1.1,0) -- (0,1.5) -- (1.1,0) -- cycle;
+  \node at (0,0.55) {\footnotesize\textbf{1 results table}};
+  % body
+  \draw[fill=blue!16,draw=blue!40!black,rounded corners=2pt]
+    (-1.6,0) -- (-3.4,-1.1) -- (-2.6,-2.6) -- (0,-3.3) -- (2.8,-2.5) -- (3.3,-1.0) -- (1.6,0) -- cycle;
+  \node[align=center] at (0,-0.7)  {\textbf{8 training/decoding arms}\\[-1pt]{\tiny VIB, FiLM, LoRA, MoD-DPO(++), MAD, x-attn, base}};
+  \node[align=center] at (-1.4,-1.6) {\textbf{5 benchmarks}\\[-1pt]{\tiny 11{,}402 questions / sweep}};
+  \node[align=center] at (1.6,-1.6)  {\textbf{3 backbones}\\[-1pt]{\tiny + 2 closed references}};
+  \node[align=center] at (-0.1,-2.5) {\textbf{23 cluster pipelines} $\cdot$ \textbf{73 py files / $\sim$10k LOC} $\cdot$ \textbf{7 test suites}};
+\end{tikzpicture}
+\vfill
+\begin{itemize}\small
+\item Everything below the waterline exists so one number can be \textbf{trusted}: resumable evals,
+pinned prompts, scripted leakage checks, selection on a disjoint half.
+\item This is what a research week actually is --- the table is the last 5\%.
+\end{itemize}
 \end{frame}
 
 % ============ 21. Summary ============
