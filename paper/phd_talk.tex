@@ -511,68 +511,8 @@ we actually claimed. Finding this required measuring, not assuming.}
 \end{columns}
 \end{frame}
 
-% ============ 17. Baselines in flight ============
-\begin{frame}{What we compared against (same harness for all)}
-\centering
-\renewcommand{\arraystretch}{1.3}
-\footnotesize
-\begin{tabular}{l l l}
-\toprule
-method & type & one-line idea \\
-\midrule
-LoRA (same attach points) & trained control & is it just ``any adapter''? \\
-MoD-DPO / ++ {\tiny(arXiv:2603.03192)} & training objective & DPO $+$ invariance/sensitivity to corrupted modalities \\
-MAD {\tiny(arXiv:2601.21181)} & \textbf{training-free decoding} & ask the model which modality matters; contrast 4 input configs \\
-cross-attention fusion & trained arm & audio$\leftrightarrow$vision attention before the LLM \\
-\bottomrule
-\end{tabular}
-\vfill
-\begin{itemize}\small
-\item All four run through \textbf{the same harness} (same prompts, same items, paired statistics) ---
-otherwise the comparison is meaningless.
-\item Result: none beats the FiLM adapter --- MoD-DPO++ comes closest (0.808 vs 0.819 overall);
-MAD lifts HR without any training. % FAKE-DATA
-\end{itemize}
-\end{frame}
 
-% ============ 18. What did not work ============
-\begin{frame}{What did \emph{not} work --- and what each failure taught}
-\centering
-\renewcommand{\arraystretch}{1.3}
-\scriptsize
-\begin{tabular}{l l l}
-\toprule
-tried & failure & lesson \\
-\midrule
-na\"ive swap-DPO & collapse to constant ``no'' (PA $0.95\!\to\!0.1$) & metrics can be gamed $\to$ two anchors \\
-GRPO on easy yes/no & zero advantage on 2/3 of steps: no gradient & unanimous rewards teach nothing $\to$ harder items \\
-FiLM's hard gate $g(q)$ & never closed (stayed at init) & the model preferred \emph{modulation} over routing \\
-``vision rewrites 59\%'' story & overturned by auditing the weights & \textbf{measure, don't assume} \\
-\bottomrule
-\end{tabular}
-\vfill
-{\small Half of these failures became the paper's actual \emph{content}. Negative results are data.}
-\end{frame}
 
-% ============ 19. Methodology ============
-\begin{frame}{The part that saved us: evaluation hygiene}
-\begin{itemize}\small
-\item \textbf{The harness is a lever.} Changing only the answer-format suffix moved a model's score by
-$+11$ points on one axis (V$\to$A $69.0\to80.3$) --- \emph{same weights}. Pin fps, prompts, suffixes.
-\item \textbf{Never select on the test set}: pick checkpoints on a validation half, report on the
-disjoint rest. Our first ``best'' checkpoint didn't survive this.
-\item \textbf{Paired statistics or it didn't happen}: same items, McNemar $+$ bootstrap CI.
-\item \textbf{Watch the trap metric} (yes-rate / PA) --- the failure mode that looks like success.
-\item \textbf{Leakage check}: training clips $\cap$ benchmark clips $=\varnothing$, scripted.
-\end{itemize}
-\vfill
-\begin{center}
-\setbeamercolor{block body}{bg=blue!6}
-\begin{block}{}
-\centering\small If you remember one slide from this talk, make it this one.
-\end{block}
-\end{center}
-\end{frame}
 
 % ============ 19b. Next axis: time ============
 \begin{frame}{The next axis: the model cannot tell \emph{when}}
