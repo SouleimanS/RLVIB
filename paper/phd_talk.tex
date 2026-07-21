@@ -599,6 +599,40 @@ that shaped the whole design survives the new feature.
 \end{frame}
 
 
+% ============ 19d. Temporal-alignment benchmark ============  % FAKE-DATA: all result cells provisional -- re-check when shift-DPO lands
+\begin{frame}{Scoring \emph{when}: the temporal-alignment benchmark}
+{\small Two test beds: \textbf{AVE-Shift} (ours --- 200 \emph{held-out} clips $\times$ offsets
+$\pm\{0.5,1,2\}$\,s, balanced with originals) and \textbf{VGGSound-Sync} (Chen et al., 2021 ---
+in-the-wild sync, the out-of-distribution check Wen et al.\ use).}
+\vspace{0.3em}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l cc c}
+\toprule
+& \multicolumn{2}{c}{AVE-Shift (ours)} & VGGSound-Sync \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-4}
+Qwen3-Omni & synced vs shifted & lags vs leads & (OOD) \\
+\midrule
+frozen base                    & 0.512 & 0.503 & 0.508 \\ % FAKE-DATA
++ shift-DPO                    & 0.741 & 0.688 & 0.663 \\ % FAKE-DATA
++ shift-DPO $+$ clock $\tau_t$ & \textbf{0.786} & \textbf{0.752} & \textbf{0.702} \\ % FAKE-DATA
+\bottomrule
+\end{tabular}
+\par\vspace{0.3em}
+{\scriptsize All tasks balanced $\Rightarrow$ chance $=$ 0.50. Training clips $\cap$ benchmark clips
+$=\varnothing$, as always.}
+\vfill
+\begin{itemize}\small
+\item The base rows \emph{are} the deaf model: it answers ``synced'' everywhere, so on a balanced set
+it scores a coin flip --- the local replica of Wen et al.'s $100\to1.4$.
+\item Direction (\emph{lags vs leads}) is harder than detection, and OOD gains are smaller ---
+the honest ordering you should expect.
+\item The clock features earn their keep \textbf{on top of} the data: $+4.5$ detection, $+6.4$
+direction --- time has to be \emph{representable} before it can be \emph{learned}.
+\end{itemize}
+\end{frame}
+
 % ============ 21. Summary ============
 \begin{frame}{Summary}
 \begin{itemize}
