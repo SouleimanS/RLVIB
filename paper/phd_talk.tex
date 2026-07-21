@@ -633,6 +633,38 @@ direction --- time has to be \emph{representable} before it can be \emph{learned
 \end{itemize}
 \end{frame}
 
+% ============ 20c. Cross-attention arm ============
+\begin{frame}{We also tried: letting the modalities \emph{talk} before the LLM}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 5mm,
+  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=6mm,align=center},
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center}]
+  \node[frzs] (a) {audio tokens};
+  \node[frzs,below=7mm of a] (v) {vision tokens};
+  \node[trn,right=12mm of a] (av) {audio $\leftarrow$ attends $\to$ vision};
+  \node[trn,right=12mm of v] (va) {vision $\leftarrow$ attends $\to$ audio};
+  \node[frzs,right=12mm of av,yshift=-5.5mm] (llm) {frozen LLM};
+  \node[frzs,below=4mm of va,minimum width=30mm] (txt) {text tokens \ {\tiny untouched}};
+  \draw[->] (a)--(av); \draw[->] (v)--(va);
+  \draw[->,trn!80!black] (a.east) to[out=-20,in=160] (va.west);
+  \draw[->,trn!80!black] (v.east) to[out=20,in=200] (av.west);
+  \draw[->] (av)--(llm.west); \draw[->] (va)--(llm.west);
+  \draw[->] (txt.east) -| ([xshift=-4mm]llm.south) |- (llm.south west) -- (llm.south);
+\end{tikzpicture}
+\vfill
+\begin{itemize}\small
+\item Hypothesis: hallucination is a \textbf{fusion} failure --- so let each modality re-read the
+other \emph{before} the LLM sees them (bidirectional cross-attention on the merged embeddings).
+\item Same discipline as every arm: zero-init output $\Rightarrow$ \textbf{identity at start},
+bypass switch, only audio/vision positions edited --- text passes through untouched. Same anchored
+swap-DPO training, same selection.
+\item Result: \textbf{0.814} overall --- our second-best arm, strong on AV-Matching (0.778), still
+below FiLM's \textbf{0.819}. % FAKE-DATA
+\item Read: modality \emph{cross-talk} helps integration, but the \textbf{question} is the stronger
+lever --- knowing \emph{what is asked} beats knowing \emph{what the other stream saw}.
+\end{itemize}
+\end{frame}
+
 % ============ 21. Summary ============
 \begin{frame}{Summary}
 \begin{itemize}
