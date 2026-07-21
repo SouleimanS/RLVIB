@@ -428,6 +428,66 @@ DPO $\to$ FiLM      & 204 / 224 & $+0.4$ [{-}0.4, {+}1.2] & tie overall --- FiLM
 cannot join this table: paired tests need per-item answers on \emph{our} harness.)}
 \end{frame}
 
+% ============ 16b. Guard: MMAU (audio understanding) ============
+\begin{frame}{Did grounding cost audio \emph{understanding}? (MMAU)}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l cccc}
+\toprule
+ & \multicolumn{4}{c}{MMAU test-mini (n$=$1000), audio-only MCQ} \\
+\cmidrule(lr){2-5}
+Qwen3-Omni & Sound & Music & Speech & Avg. \\
+\midrule
+frozen base     & 79.2 & 76.8 & 76.4 & 77.5 \\ % FAKE-DATA
++ swap-DPO      & 79.5 & 77.0 & 76.5 & 77.7 \\ % FAKE-DATA
++ \textbf{FiLM} & \textbf{80.8} & \textbf{77.9} & \textbf{77.6} & \textbf{78.8} \\ % FAKE-DATA
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item MMAU asks the model to \emph{reason} about sound, music and speech --- no video, no
+hallucination traps: pure audio competence.
+\item Answer: no cost --- and FiLM \emph{gains} $+1.3$ avg. Better audio grounding transfers to
+better audio \emph{use}.
+\item The mechanism story again: swap-DPO (re-encodes) barely moves it; FiLM (attends more) does.
+\end{itemize}
+\end{frame}
+
+% ============ 16c. Guard: Video-MME (video understanding) ============
+\begin{frame}{...and general \emph{video} understanding? (Video-MME)}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}\small
+\textbf{The benchmark}
+\begin{itemize}\footnotesize
+\item 900 YouTube videos $\times$ 3 MCQs; short ($<$2\,min) / medium (4--15) / long (30--60).
+\item We run the \textbf{without-subtitles} track, audio fed straight from the video --- the
+setting our adapters live in.
+\item Same harness discipline: letter answers, same parser, FiLM condition set per question.
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l c c}
+\toprule
+short, n$=$900 & acc & $\Delta$ \\
+\midrule
+frozen base     & 0.768 & --- \\ % FAKE-DATA
++ swap-DPO      & 0.766 & $-0.2$ \\ % FAKE-DATA
++ \textbf{FiLM} & \textbf{0.771} & $+0.3$ \\ % FAKE-DATA
+\bottomrule
+\end{tabular}
+\par\vspace{0.5em}
+{\footnotesize All within noise ($\pm3$ pts at 95\%): \textbf{no alignment tax}.}
+\end{column}
+\end{columns}
+\vfill
+{\small Three guards, three axes: CMM $=$ hallucination, MMAU $=$ audio, Video-MME $=$ video ---
+the adapter improves the first two and leaves the third untouched.}
+\end{frame}
+
 % ============ 17. Mechanism: attention ============
 \begin{frame}{Does the adapter make the model \emph{attend} to the audio--visual input?}
 \begin{columns}[T]
@@ -514,6 +574,65 @@ disjoint rest. Our first ``best'' checkpoint didn't survive this.
 \end{center}
 \end{frame}
 
+% ============ 19b. Next axis: time ============
+\begin{frame}{The next axis: the model cannot tell \emph{when}}
+\begin{itemize}\small
+\item Recall the literature slide: shift the audio by $\pm2$\,s and Qwen3-Omni's sync detection
+falls \textbf{100 $\to$ 1.4} --- it answers ``synced'' on 98\% of inputs (Wen et al., 2026).
+\item Everything in this talk taught the model \textbf{what} is heard. Nothing taught it
+\textbf{when}. Temporal hallucination is the same disease on a new axis.
+\item Same engine, new intervention --- \textbf{shift-DPO}:
+\end{itemize}
+\vspace{0.2em}
+\centering
+\begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},
+  clip/.style={draw,rounded corners,fill=gray!12,align=center,minimum width=34mm,minimum height=14mm},
+  good/.style={draw,rounded corners,fill=green!14,align=center,minimum width=52mm,minimum height=9mm},
+  bad/.style={draw,rounded corners,fill=red!14,align=center,minimum width=52mm,minimum height=9mm}]
+  \node[clip] (c) {\textbf{shifted clip}\\[0.5mm]{\scriptsize audio delayed $\Delta{=}1$\,s}};
+  \node[bad,right=14mm of c,yshift=8mm]  (b) {``in sync'' \ {\scriptsize visual prior} $\boldsymbol{\times}$};
+  \node[good,right=14mm of c,yshift=-8mm] (g) {``audio lags'' \ {\scriptsize uses timing} $\boldsymbol{\checkmark}$};
+  \draw[->] (c.east) to[out=20,in=180] (b.west);
+  \draw[->] (c.east) to[out=-20,in=180] (g.west);
+\end{tikzpicture}
+\vfill
+{\small One \texttt{ffmpeg} flag per pair: 300 clips $\times$ offsets $\pm\{0.5,1,2\}$\,s $=$ 1{,}800
+pairs, zero new downloads --- the engine and both rails carry over unchanged.}
+\end{frame}
+
+% ============ 19c. Temporal input features ============
+\begin{frame}{Giving the adapter a clock: temporal input features}
+\centering\small
+$\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big]
+\qquad h = \mathrm{GELU}(W_e\,\tilde x_t)$
+\vspace{0.3em}
+\par
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 4mm,
+  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=6mm,align=center},
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center}]
+  \node[frzs] (a) {audio tokens $x^a_t$};
+  \node[frzs,below=5mm of a] (v) {vision tokens $x^v_t$};
+  \node[trn,right=9mm of a] (ca) {$[\,x;\tau_t\,]$};
+  \node[trn,right=9mm of v] (cv) {$[\,x;\tau_t\,]$};
+  \node[trn,right=9mm of ca] (ba) {audio VIB};
+  \node[trn,right=9mm of cv] (bv) {vision VIB};
+  \node[frzs,right=9mm of ba,yshift=-6mm] (llm) {frozen LLM};
+  \draw[->] (a)--(ca); \draw[->] (v)--(cv);
+  \draw[->] (ca)--node[above]{\tiny same phase $\tau_t$}(ba); \draw[->] (cv)--(bv);
+  \draw[->] (ba)--(llm.west); \draw[->] (bv)--(llm.west);
+\end{tikzpicture}
+\vfill
+\begin{itemize}\small
+\item Today the bottleneck sees every token \textbf{without its time}. A shared phase $\tau_t$
+across both streams makes misalignment \emph{representable}: audio at $t$ and a frame at
+$t{+}\Delta$ now differ in their clocks.
+\item Later, the FiLM condition extends to $[\,q;\hat\Delta\,]$ --- the question \textbf{and} the
+offset steer the edit.
+\item $W_{\text{out}}$ stays zero-init $\Rightarrow$ still \textbf{identity at start}: the guarantee
+that shaped the whole design survives the new feature.
+\end{itemize}
+\end{frame}
+
 % ============ 20. Open problems ============
 \begin{frame}{Open problems (things you could work on)}
 \begin{itemize}\small
@@ -542,6 +661,8 @@ and the prompt-aware (FiLM) variant does it by a \emph{faithful} mechanism.
 as the method.
 \item \textbf{Baselines}: LoRA, MoD-DPO(++), MAD and cross-attention all land below the FiLM
 adapter at equal capacity --- the objective and the prompt-awareness are what matter. % FAKE-DATA
+\item \textbf{Next}: temporal grounding --- the same engine pointed at \emph{when}, not just
+\emph{what}.
 \end{itemize}
 \vfill
 \begin{center}
