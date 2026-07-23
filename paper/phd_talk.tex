@@ -342,9 +342,12 @@ the \textbf{heard} answer on the \emph{same} clip is only possible by \textbf{us
 \vspace{-0.2em}
 \[
 \mathcal L_{\text{DPO}}
-=-\log\sigma\Big(\beta\big[\underbrace{(c_p-c_r)}_{\text{chosen: gain over base}}
+=-\log\sigma^{\textcolor{trn}{*}}\Big(\beta^{\textcolor{trn}{**}}\big[\underbrace{(c_p-c_r)}_{\text{chosen: gain over base}}
 -\underbrace{(r_p-r_r)}_{\text{rejected: gain over base}}\big]\Big)
 \]
+{\tiny \textcolor{trn}{$^{*}$}\,$\sigma=$ logistic sigmoid (\emph{not} the encoder's std-dev $\sigma(x)$).\quad
+\textcolor{trn}{$^{**}$}\,$\beta=$ DPO temperature ($\approx0.1$; \emph{not} the VIB rate $\beta_{kl}$).}
+\vspace{2pt}
 {\scriptsize $c,r$ $=$ log-probs of the chosen (heard) / rejected (seen) answer; subscript $p$ $=$
 adapter on, $r$ $=$ adapter bypassed $=$ the frozen base --- our reference model, for free.}
 \vspace{0.2em}
