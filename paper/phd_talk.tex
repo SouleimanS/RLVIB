@@ -1,7 +1,7 @@
-% RLVIB intro talk for new PhD students.  Build:  cd paper && tectonic phd_talk.tex
+% RLVIB --- final research-internship presentation.  Build:  cd paper && tectonic phd_talk.tex
 % Reuses paper/figures/* (placeholder boxes appear if a figure is absent, so it always compiles).
-% Lines tagged "% FAKE-DATA" hold provisional numbers (baseline runs still in flight) --
-% swap in the real ones as the jobs land.
+% Lines tagged "% FAKE-DATA" hold provisional numbers (baseline / temporal runs still in flight) --
+% swap in the real ones as the jobs land.  Red [bracketed] text = fill in before presenting.
 \documentclass[aspectratio=169,11pt]{beamer}
 \usetheme{default}
 \usecolortheme{seahorse}
@@ -11,6 +11,7 @@
 \setbeamertemplate{blocks}[rounded][shadow=false]
 \setbeamerfont{frametitle}{size=\large,series=\bfseries}
 \setbeamercolor{frametitle}{fg=blue!45!black}
+\setbeamertemplate{section in toc}[sections numbered]
 \usepackage{pgfplots}\pgfplotsset{compat=1.18}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta}
@@ -20,6 +21,7 @@
 \definecolor{frz}{RGB}{40,95,175}
 \definecolor{trn}{RGB}{210,120,20}
 \newcommand{\XXX}{\textcolor{red}{\textbf{XXX}}}
+\newcommand{\fillin}[1]{\textcolor{red!70!black}{[#1]}}
 \newcommand{\figslot}[2]{\IfFileExists{figures/#1}%
   {\includegraphics[width=#2]{figures/#1}}%
   {\fbox{\parbox[c][2.6cm][c]{#2}{\centering\tiny\ttfamily\detokenize{figures/#1}}}}}
@@ -39,8 +41,10 @@
   \end{tikzpicture}}
 
 \title{\textbf{Making Frozen Audio--Visual LLMs Listen}}
-\subtitle{Tiny adapters, preference optimization, and honest evaluation --- an introduction}
+\subtitle{Audio grounding via tiny adapters, anchored preference optimization, and honest evaluation}
 \author{Souleiman Sbai}
+\institute{Research internship --- final presentation\\[2pt]
+  \small Host lab: \fillin{laboratory} \quad$\cdot$\quad Supervisor: \fillin{supervisor}}
 \date{\today}
 
 \begin{document}
@@ -49,14 +53,24 @@
 {\setbeamertemplate{footline}{}
 \begin{frame}
 \titlepage
-\vspace{-1.5em}
+\vspace{-1.2em}
 \begin{block}{}
-\small A guided tour of one research project: the problem, the benchmarks, the method, what broke,
-what we measured, and what we compared against.
+\small \textbf{The problem in one line:} audio-visual LLMs answer sound questions from the
+\emph{picture}. \textbf{This internship:} a tiny module that makes a \emph{frozen} model listen ---
+without retraining it, and measured honestly.
 \end{block}
 \end{frame}}
 
-% ============ 2. What is an AV-LLM ============
+% ============ 2. Outline ============
+\begin{frame}{Outline}
+\tableofcontents
+\end{frame}
+
+% ================================================================
+\section{Problem \& motivation}
+% ================================================================
+
+% ============ 3. What is an AV-LLM ============
 \begin{frame}{What is an audio--visual LLM?}
 \centering
 \begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=3.5mm and 6mm,
@@ -77,15 +91,16 @@ what we measured, and what we compared against.
 \end{tikzpicture}
 \vspace{0.5em}
 \begin{itemize}\small
-\item Each modality is encoded into \textbf{tokens} (audio $\sim$25/s, video $\sim$100s--1000s per clip),
-projected by a small \emph{adapter} into the LLM's embedding space, and concatenated with the question.
+\item Each modality is encoded into \textbf{tokens} (audio $\sim$25/s; video sampled at
+\textbf{2 fps} for our Qwen3-Omni runs), projected by a small \emph{adapter} into the LLM's
+embedding space, and concatenated with the question.
 \item The LLM then answers over the \textbf{mixed token sequence} --- text, audio and vision compete
 for its attention.
-\item Examples: Qwen3-Omni (30B MoE), Qwen2.5-Omni (7B), VideoLLaMA2 --- our three test beds.
+\item Three backbones as test beds: Qwen3-Omni (30B MoE), Qwen2.5-Omni (7B), VideoLLaMA2.
 \end{itemize}
 \end{frame}
 
-% ============ 3. The failure ============
+% ============ 4. The failure ============
 \begin{frame}{The failure we study: cross-modal hallucination}
 \centering
 \begin{tabular}{@{}c@{}}
@@ -97,7 +112,7 @@ for its attention.
 objects the audio suggests (top), and invents sounds the image implies (bottom).
 \end{frame}
 
-% ============ 3b. Literature: vision dominates ============
+% ============ 5. Literature: vision dominates ============
 \begin{frame}{Not a quirk of our setup: models lean on vision, not audio}
 \begin{itemize}\footnotesize\setlength\itemsep{3pt}
 \item \textbf{AVHBench} (Sung-Bin et al., ICLR'25): every AV-LLM tested invents sounds from sights
@@ -126,22 +141,32 @@ sound consistency & 75.4  & \textcolor{red!70!black}{\textbf{37.3}} & \emph{Swap
 {\scriptsize Mute the audio and the model still ``hears'' what the pixels imply.\quad(arXiv:2605.16403)}
 \end{frame}
 
-% ============ 4. Research question ============
-\begin{frame}{The research question}
-\begin{center}\Large\itshape
-Can we make a \textbf{frozen} AV-LLM ground its answers in what it hears\\[2pt]
---- by training something \textbf{tiny} bolted onto it?
+% ============ 6. Objective & contributions ============
+\begin{frame}{Objective and contributions of this internship}
+\begin{center}\large\itshape
+Can we make a \textbf{frozen} AV-LLM ground its answers in what it hears,\\[2pt]
+by training something \textbf{tiny} bolted onto it?
 \end{center}
-\vfill
+\vspace{0.3em}
 \begin{itemize}\small
-\item \textbf{Frozen}: we never touch the 7--30B backbone --- cheap, safe, reversible.
-\item \textbf{Tiny}: a $\sim$30M-parameter module per modality ($<$0.5\% of the model).
-\item Constraint that shapes everything: the module must be \textbf{exactly invisible at initialization}
-(so attaching it changes nothing until it learns something).
+\item[\textbf{C1}] A \textbf{variational-bottleneck adapter} ($<$0.5\% of params) that is \emph{exactly
+identity at initialization} --- attaching it changes nothing until it learns.
+\item[\textbf{C2}] An \textbf{anchored swap-DPO} objective that fixes the collapse naïve preference
+optimization falls into --- one engine, two safety rails.
+\item[\textbf{C3}] A \textbf{prompt-aware (FiLM)} variant and evidence, from two probes, that it grounds
+by a \emph{faithful} mechanism --- it attends to the evidence more.
+\item[\textbf{C4}] An \textbf{honest evaluation harness}: paired statistics, capability guards on three
+axes, and a battery of baselines at equal capacity.
+\item[\textbf{C5}] A \textbf{temporal extension} (design $+$ benchmark) --- the same engine pointed at
+\emph{when}, not just \emph{what}.
 \end{itemize}
 \end{frame}
 
-% ============ 5. Benchmark I: AVHBench ============
+% ================================================================
+\section{Benchmarks \& protocol}
+% ================================================================
+
+% ============ 7. Benchmark I: AVHBench ============
 \begin{frame}{Benchmark I --- AVHBench (the target)}
 \begin{columns}[T]
 \begin{column}{0.5\textwidth}
@@ -176,7 +201,7 @@ integration.
 \end{columns}
 \end{frame}
 
-% ============ 6. Benchmark II: CMM ============
+% ============ 8. Benchmark II: CMM ============
 \begin{frame}{Benchmark II --- CMM (the capability guard)}
 \centering
 {\footnotesize \textbf{1,200 samples $\times$ 2 probes $=$ 2,400 questions}: one \emph{present} object
@@ -200,7 +225,35 @@ just \emph{saying no more often}.
 {\footnotesize This trap is not hypothetical --- it is exactly what our first training run did.}
 \end{frame}
 
-% ============ 7. The adapter ============
+% ============ 9. Experimental protocol ============
+\begin{frame}{Experimental protocol: the harness is fixed}
+\begin{itemize}\small
+\item \textbf{Frame rate pinned at 2 fps} for Qwen3-Omni (1 fps for the 7B backbones). Below 2 fps
+Qwen3 \emph{starves} and drifts to a yes-bias --- so fps is fixed across the selection grid
+\emph{and} the final eval, in code, never left to the launcher.
+\item \textbf{Prompts, answer-format suffix and decoding pinned.} Changing only the suffix once moved a
+score by \textbf{$+11$ points} (V$\to$A $69.0\to80.3$) on \emph{identical weights} --- so everything
+is frozen and logged.
+\item \textbf{Selection on a validation half, report on the disjoint rest} --- never select on the
+test set. Our first ``best'' checkpoint did not survive this.
+\item \textbf{Paired statistics}: same items for both models, McNemar $+$ bootstrap CI.
+\item \textbf{Leakage check}: training clips $\cap$ benchmark clips $=\varnothing$, scripted.
+\end{itemize}
+\vfill
+\begin{center}
+\setbeamercolor{block body}{bg=blue!6}
+\begin{block}{}
+\centering\small A single number is only worth as much as the harness under it. This slide is why the
+later numbers can be trusted.
+\end{block}
+\end{center}
+\end{frame}
+
+% ================================================================
+\section{Method}
+% ================================================================
+
+% ============ 10. The adapter ============
 \begin{frame}{Our module: a variational bottleneck on each modality stream}
 \centering
 \begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 4mm,
@@ -231,7 +284,7 @@ objective (no second model in memory).
 \end{itemize}
 \end{frame}
 
-% ============ 8. The training trick ============
+% ============ 11. The training trick ============
 \begin{frame}{The training signal: manufacture an audio--vision conflict}
 \centering
 \begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},
@@ -252,7 +305,7 @@ objective (no second model in memory).
 the \textbf{heard} answer on the \emph{same} clip is only possible by \textbf{using the audio}.
 \end{frame}
 
-% ============ 9. What broke ============
+% ============ 12. What broke ============
 \begin{frame}{First attempt: na\"ive preference optimization collapses}
 \vspace{-0.2em}
 \[
@@ -280,7 +333,7 @@ training target.}
 \end{center}
 \end{frame}
 
-% ============ 10. The fix ============
+% ============ 13. The fix ============
 \begin{frame}{The fix: one engine, two safety rails}
 \vspace{-0.3em}
 \begin{align*}
@@ -300,7 +353,7 @@ engine's loss is to actually use the audio.
 \end{itemize}
 \end{frame}
 
-% ============ 13. FiLM ============
+% ============ 14. FiLM ============
 \begin{frame}{FiLM: let the \emph{question} steer the adapter}
 \centering
 \begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 3.5mm,
@@ -342,7 +395,7 @@ engine's loss is to actually use the audio.
 $g(q)$ on the edit. Same zero-init trick $\Rightarrow$ identity at start.}
 \end{frame}
 
-% ============ 14. Why FiLM must read the question ============
+% ============ 15. Why FiLM must read the question ============
 \begin{frame}{Why the question \emph{must} be used (a 3-row proof)}
 {\small One swapped clip: \emph{see} a dog, \emph{hear} a bell. Ask ``what do you HEAR?'' (answer: bell)
 and ``what do you SEE?'' (answer: dog). \textbf{Same pixels, same waveform --- only the question differs.}
@@ -367,8 +420,12 @@ $0$ $\Rightarrow$ training \textbf{forces} the adapter to use the question. No r
 the \emph{data construction} does it.}
 \end{frame}
 
-% ============ 15. Results (every component now on the table) ============
-\begin{frame}{Results (Qwen3-Omni, full benchmark, n$=$5302)}
+% ================================================================
+\section{Results \& analysis}
+% ================================================================
+
+% ============ 16. Results ============
+\begin{frame}{Main result (Qwen3-Omni, full benchmark, n$=$5302)}
 \centering
 \renewcommand{\arraystretch}{1.2}
 \footnotesize
@@ -401,7 +458,7 @@ GPT-4o's HR $0.892$ next to PA $0.359$ is the all-``no'' pathology \textbf{in th
 the trap the CMM slide warned about.}
 \end{frame}
 
-% ============ 16. Are the gains real? ============
+% ============ 17. Are the gains real? ============
 \begin{frame}{Are the gains real? Paired statistics in three lines}
 {\small Both models answer the \textbf{same} items, so only \textbf{disagreements} carry information:
 out of $N$ items, $b$ $=$ only-base-right, $c$ $=$ only-adapter-right.}
@@ -428,7 +485,7 @@ DPO $\to$ FiLM      & 204 / 224 & $+0.4$ [{-}0.4, {+}1.2] & tie overall --- FiLM
 cannot join this table: paired tests need per-item answers on \emph{our} harness.)}
 \end{frame}
 
-% ============ 16b. Guard: MMAU (audio understanding) ============
+% ============ 18. Guard: MMAU ============
 \begin{frame}{Did grounding cost audio \emph{understanding}? (MMAU)}
 \centering
 \renewcommand{\arraystretch}{1.2}
@@ -454,7 +511,7 @@ better audio \emph{use}.
 \end{itemize}
 \end{frame}
 
-% ============ 16c. Guard: Video-MME (video understanding) ============
+% ============ 19. Guard: Video-MME ============
 \begin{frame}{...and general \emph{video} understanding? (Video-MME)}
 \begin{columns}[T]
 \begin{column}{0.5\textwidth}\small
@@ -463,7 +520,8 @@ better audio \emph{use}.
 \item 900 YouTube videos $\times$ 3 MCQs; short ($<$2\,min) / medium (4--15) / long (30--60).
 \item We run the \textbf{without-subtitles} track, audio fed straight from the video --- the
 setting our adapters live in.
-\item Same harness discipline: letter answers, same parser, FiLM condition set per question.
+\item Same harness discipline: \textbf{2 fps}, letter answers, same parser, FiLM condition set
+per question.
 \end{itemize}
 \end{column}
 \begin{column}{0.5\textwidth}
@@ -488,7 +546,7 @@ frozen base     & 0.768 & --- \\ % FAKE-DATA
 the adapter improves the first two and leaves the third untouched.}
 \end{frame}
 
-% ============ 17. Mechanism: attention ============
+% ============ 20. Mechanism: attention ============
 \begin{frame}{Does the adapter make the model \emph{attend} to the audio--visual input?}
 \begin{columns}[T]
 \begin{column}{0.58\textwidth}
@@ -511,9 +569,7 @@ we actually claimed. Finding this required measuring, not assuming.}
 \end{columns}
 \end{frame}
 
-
-
-% ============ 17c. Transfer across backbones ============
+% ============ 21. Transfer across backbones ============
 \begin{frame}{Same recipe, three backbones: grounding needs something to ground}
 \centering
 \renewcommand{\arraystretch}{1.2}
@@ -539,13 +595,49 @@ understanding, only \emph{unlock} it. That is a claim about the method's limits 
 \end{itemize}
 \end{frame}
 
-% ============ 19b. Next axis: time ============
+% ============ 22. Cross-attention arm ============
+\begin{frame}{We also tried: letting the modalities \emph{talk} before the LLM}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 5mm,
+  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=6mm,align=center},
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center}]
+  \node[frzs] (a) {audio tokens};
+  \node[frzs,below=7mm of a] (v) {vision tokens};
+  \node[trn,right=12mm of a] (av) {audio $\leftarrow$ attends $\to$ vision};
+  \node[trn,right=12mm of v] (va) {vision $\leftarrow$ attends $\to$ audio};
+  \node[frzs,right=12mm of av,yshift=-5.5mm] (llm) {frozen LLM};
+  \node[frzs,below=4mm of va,minimum width=30mm] (txt) {text tokens \ {\tiny untouched}};
+  \draw[->] (a)--(av); \draw[->] (v)--(va);
+  \draw[->,trn!80!black] (a.east) to[out=-20,in=160] (va.west);
+  \draw[->,trn!80!black] (v.east) to[out=20,in=200] (av.west);
+  \draw[->] (av)--(llm.west); \draw[->] (va)--(llm.west);
+  \draw[->] (txt.east) -| ([xshift=-4mm]llm.south) |- (llm.south west) -- (llm.south);
+\end{tikzpicture}
+\vfill
+\begin{itemize}\small
+\item Hypothesis: hallucination is a \textbf{fusion} failure --- so let each modality re-read the
+other \emph{before} the LLM sees them (bidirectional cross-attention on the merged embeddings).
+\item Same discipline as every arm: zero-init output $\Rightarrow$ \textbf{identity at start},
+bypass switch, only audio/vision positions edited --- text passes through untouched. Same anchored
+swap-DPO training, same selection.
+\item Result: \textbf{0.814} overall --- our second-best arm, strong on AV-Matching (0.778), still
+below FiLM's \textbf{0.819}. % FAKE-DATA
+\item Read: modality \emph{cross-talk} helps integration, but the \textbf{question} is the stronger
+lever --- knowing \emph{what is asked} beats knowing \emph{what the other stream saw}.
+\end{itemize}
+\end{frame}
+
+% ================================================================
+\section{Ongoing work: the temporal axis}
+% ================================================================
+
+% ============ 23. Next axis: time ============
 \begin{frame}{The next axis: the model cannot tell \emph{when}}
 \begin{itemize}\small
 \item Recall the literature slide: shift the audio by $\pm2$\,s and Qwen3-Omni's sync detection
 falls \textbf{100 $\to$ 1.4} --- it answers ``synced'' on 98\% of inputs (Wen et al., 2026).
-\item Everything in this talk taught the model \textbf{what} is heard. Nothing taught it
-\textbf{when}. Temporal hallucination is the same disease on a new axis.
+\item Everything so far taught the model \textbf{what} is heard. Nothing taught it \textbf{when}.
+Temporal hallucination is the same disease on a new axis.
 \item Same engine, new intervention --- \textbf{shift-DPO}:
 \end{itemize}
 \vspace{0.2em}
@@ -565,7 +657,7 @@ falls \textbf{100 $\to$ 1.4} --- it answers ``synced'' on 98\% of inputs (Wen et
 pairs, zero new downloads --- the engine and both rails carry over unchanged.}
 \end{frame}
 
-% ============ 19c. Temporal input features ============
+% ============ 24. Temporal input features ============
 \begin{frame}{Giving the adapter a clock: temporal input features}
 \centering\small
 $\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big]
@@ -591,15 +683,14 @@ $\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big]
 \item Today the bottleneck sees every token \textbf{without its time}. A shared phase $\tau_t$
 across both streams makes misalignment \emph{representable}: audio at $t$ and a frame at
 $t{+}\Delta$ now differ in their clocks.
-\item Later, the FiLM condition extends to $[\,q;\hat\Delta\,]$ --- the question \textbf{and} the
-offset steer the edit.
+\item Resolution note: at \textbf{2 fps} the frame grid is $0.5$\,s, so the $\pm0.5$\,s offset sits at
+the sampling limit --- the smallest shift we can honestly ask about.
 \item $W_{\text{out}}$ stays zero-init $\Rightarrow$ still \textbf{identity at start}: the guarantee
 that shaped the whole design survives the new feature.
 \end{itemize}
 \end{frame}
 
-
-% ============ 19d. Temporal-alignment benchmark ============  % FAKE-DATA: all result cells provisional -- re-check when shift-DPO lands
+% ============ 25. Temporal-alignment benchmark ============  % FAKE-DATA: all result cells provisional -- re-check when shift-DPO lands
 \begin{frame}{Scoring \emph{when}: the temporal-alignment benchmark}
 {\small Two test beds: \textbf{AVE-Shift} (ours --- 200 \emph{held-out} clips $\times$ offsets
 $\pm\{0.5,1,2\}$\,s, balanced with originals) and \textbf{VGGSound-Sync} (Chen et al., 2021 ---
@@ -633,57 +724,57 @@ direction --- time has to be \emph{representable} before it can be \emph{learned
 \end{itemize}
 \end{frame}
 
-% ============ 20c. Cross-attention arm ============
-\begin{frame}{We also tried: letting the modalities \emph{talk} before the LLM}
-\centering
-\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 5mm,
-  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=6mm,align=center},
-  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center}]
-  \node[frzs] (a) {audio tokens};
-  \node[frzs,below=7mm of a] (v) {vision tokens};
-  \node[trn,right=12mm of a] (av) {audio $\leftarrow$ attends $\to$ vision};
-  \node[trn,right=12mm of v] (va) {vision $\leftarrow$ attends $\to$ audio};
-  \node[frzs,right=12mm of av,yshift=-5.5mm] (llm) {frozen LLM};
-  \node[frzs,below=4mm of va,minimum width=30mm] (txt) {text tokens \ {\tiny untouched}};
-  \draw[->] (a)--(av); \draw[->] (v)--(va);
-  \draw[->,trn!80!black] (a.east) to[out=-20,in=160] (va.west);
-  \draw[->,trn!80!black] (v.east) to[out=20,in=200] (av.west);
-  \draw[->] (av)--(llm.west); \draw[->] (va)--(llm.west);
-  \draw[->] (txt.east) -| ([xshift=-4mm]llm.south) |- (llm.south west) -- (llm.south);
-\end{tikzpicture}
-\vfill
-\begin{itemize}\small
-\item Hypothesis: hallucination is a \textbf{fusion} failure --- so let each modality re-read the
-other \emph{before} the LLM sees them (bidirectional cross-attention on the merged embeddings).
-\item Same discipline as every arm: zero-init output $\Rightarrow$ \textbf{identity at start},
-bypass switch, only audio/vision positions edited --- text passes through untouched. Same anchored
-swap-DPO training, same selection.
-\item Result: \textbf{0.814} overall --- our second-best arm, strong on AV-Matching (0.778), still
-below FiLM's \textbf{0.819}. % FAKE-DATA
-\item Read: modality \emph{cross-talk} helps integration, but the \textbf{question} is the stronger
-lever --- knowing \emph{what is asked} beats knowing \emph{what the other stream saw}.
-\end{itemize}
-\end{frame}
+% ================================================================
+\section{Conclusion}
+% ================================================================
 
-% ============ 21. Summary ============
-\begin{frame}{Summary}
+% ============ 26. Conclusion ============
+\begin{frame}{Conclusion}
 \begin{itemize}
-\item \textbf{Problem}: frozen AV-LLMs over-trust vision; audio evidence loses.
+\item \textbf{Problem}: frozen AV-LLMs over-trust vision; audio evidence loses --- confirmed on our
+own backbone (sync $100\to1.4$ when the audio is shifted).
 \item \textbf{Method}: a tiny zero-init adapter $+$ audio-swap preference training $+$ two anchors
-against collapse.
-\item \textbf{Result}: $+5$--$6$ AVHBench points, statistically solid, capability intact ---
-and the prompt-aware (FiLM) variant does it by a \emph{faithful} mechanism.
-\item \textbf{Honesty}: the harness, the selection protocol and the paired statistics mattered as much
-as the method.
-\item \textbf{Baselines}: LoRA, MoD-DPO(++), MAD and cross-attention all land below the FiLM
-adapter at equal capacity --- the objective and the prompt-awareness are what matter. % FAKE-DATA
+against collapse; a prompt-aware FiLM variant on top.
+\item \textbf{Result}: $+5$--$6$ AVHBench points, statistically solid ($p<10^{-4}$), capability
+intact on all three guards --- and FiLM does it by a \emph{faithful} mechanism (it attends more).
+\item \textbf{Rigor}: pinned harness (2 fps, fixed prompts), selection on a held-out half, paired
+statistics, baselines at equal capacity --- the number is only as good as the harness under it.
 \item \textbf{Next}: temporal grounding --- the same engine pointed at \emph{when}, not just
 \emph{what}.
 \end{itemize}
 \vfill
 \begin{center}
-{\large Questions --- or come re-run one of these table cells yourself.}
+\setbeamercolor{block body}{bg=blue!6}
+\begin{block}{}
+\centering\small One sentence: \textbf{a $<$0.5\% adapter, trained without touching the backbone, makes
+a frozen AV-LLM listen --- and we can prove it is listening, not just scoring higher.}
+\end{block}
 \end{center}
+\end{frame}
+
+% ============ 27. Thanks ============
+\begin{frame}{Thank you}
+\begin{columns}[T]
+\begin{column}{0.58\textwidth}
+\textbf{Acknowledgements}
+\begin{itemize}\small
+\item \fillin{supervisor} and the \fillin{host laboratory} team.
+\item Compute: \fillin{ABCI / cluster}, group \fillin{allocation}.
+\end{itemize}
+\vspace{0.6em}
+\textbf{Reproducibility}
+\begin{itemize}\small
+\item One script per table, one command per figure.
+\item Everything runs from the repo through the same pinned harness.
+\end{itemize}
+\end{column}
+\begin{column}{0.42\textwidth}
+\centering
+\vspace{0.4em}
+{\Large Questions?}\\[1.2em]
+{\footnotesize \color{gray} Souleiman Sbai\\ \fillin{email / contact}}
+\end{column}
+\end{columns}
 \end{frame}
 
 \end{document}
