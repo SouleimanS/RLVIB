@@ -423,14 +423,33 @@ engine's loss is to actually use the audio.
   \draw[->,trn!85!black,very thick] (wf.north)--node[right]{\tiny $[\gamma;\beta]$}(film.south);
   \draw[->,trn!85!black,very thick] (wg.north)--node[right]{\tiny $g(q)$}(mult.south);
 \end{tikzpicture}
-\vspace{0.4em}
+\vspace{0.5em}
 \par
-{\small The question becomes a vector $q$; it picks a per-feature \textbf{scale} $\gamma$ and
-\textbf{shift} $\beta^{\textcolor{trn}{*}}$ on the bottleneck (that is all ``FiLM'' is), plus one
-\textbf{volume knob} $g(q)$ on the edit. Same zero-init trick $\Rightarrow$ identity at start.}
-\par\vspace{2pt}
-{\tiny \textcolor{trn}{$^{*}$}\,$\gamma,\beta$ here $=$ FiLM \emph{scale} \& \emph{shift} (Perez et al.,
-2018) --- \emph{not} the loss's $\beta$ (DPO temperature) or $\beta_{kl}$ (VIB rate).}
+{\small Every orange box is a \textbf{trained weight}; together they are the whole adapter
+($<$0.5\% of params). The question becomes a vector $q$ that turns two knobs on the bottleneck.}
+\vspace{2pt}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+{\scriptsize \textcolor{trn}{\textbf{Main path}} {\normalfont(the plain VIB)}}
+\begin{itemize}\scriptsize\setlength\itemsep{1pt}
+\item $W_e$: encoder --- lifts token $x$ into hidden $h$
+\item $\mu,\sigma$: latent heads --- $z=\mu+\sigma\odot\epsilon$
+\item $W_{\text{out}}$: output, \textbf{zero-init} --- writes the edit back, $y=x+\cdots$
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+{\scriptsize \textcolor{trn}{\textbf{Question path}} {\normalfont(new in FiLM)}}
+\begin{itemize}\scriptsize\setlength\itemsep{1pt}
+\item $W_q$: pools frozen embeddings $E$ into the condition $q$
+\item $W_{\!f}$: $q\mapsto[\gamma;\beta]$ --- per-feature \textbf{scale} \& \textbf{shift}
+\item $w_g$: $q\mapsto g(q)\!\in\!(0,1)$ --- the \textbf{volume knob} on the edit
+\end{itemize}
+\end{column}
+\end{columns}
+\vspace{2pt}
+{\scriptsize \textcolor{frz}{\textbf{Blue} $=$ frozen} ($E$, LLM; never updated). Same zero-init trick
+$\Rightarrow$ \textbf{identity at start}. \textcolor{trn}{$\gamma,\beta$} are FiLM's scale/shift
+(Perez et al., 2018), \emph{not} the loss's $\beta$ (DPO temp.) or $\beta_{kl}$ (VIB rate).}
 \end{frame}
 
 % ============ 15. Why FiLM must read the question ============
