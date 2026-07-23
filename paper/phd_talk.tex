@@ -426,8 +426,11 @@ engine's loss is to actually use the audio.
 \vspace{0.4em}
 \par
 {\small The question becomes a vector $q$; it picks a per-feature \textbf{scale} $\gamma$ and
-\textbf{shift} $\beta$ on the bottleneck (that is all ``FiLM'' is), plus one \textbf{volume knob}
-$g(q)$ on the edit. Same zero-init trick $\Rightarrow$ identity at start.}
+\textbf{shift} $\beta^{\textcolor{trn}{*}}$ on the bottleneck (that is all ``FiLM'' is), plus one
+\textbf{volume knob} $g(q)$ on the edit. Same zero-init trick $\Rightarrow$ identity at start.}
+\par\vspace{2pt}
+{\tiny \textcolor{trn}{$^{*}$}\,$\gamma,\beta$ here $=$ FiLM \emph{scale} \& \emph{shift} (Perez et al.,
+2018) --- \emph{not} the loss's $\beta$ (DPO temperature) or $\beta_{kl}$ (VIB rate).}
 \end{frame}
 
 % ============ 15. Why FiLM must read the question ============
