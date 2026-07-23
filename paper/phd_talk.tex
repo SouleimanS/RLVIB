@@ -450,12 +450,10 @@ MAD decoding (training-free) & 0.833 & 0.824 & 0.690 & 0.779 & 0.893 & 0.745 \\ 
 \bottomrule
 \end{tabular}
 \vfill
-{\small Both adapters give a real gain with \textbf{capability preserved} (HR does not drop) ---
-the two anchors doing their job. Baseline rows: our re-implementations of the papers' methods,
-same harness and items. % FAKE-DATA
-Bold $=$ best among \emph{our} arms; Gemini/GPT-4o are the numbers reported for the benchmarks.
-GPT-4o's HR $0.892$ next to PA $0.359$ is the all-``no'' pathology \textbf{in the wild} --- exactly
-the trap the CMM slide warned about.}
+{\footnotesize Both adapters gain with \textbf{capability preserved} (HR holds) --- the two anchors
+working. Bold $=$ best among \emph{our} arms; baseline rows are our re-implementations on the same
+harness. % FAKE-DATA
+GPT-4o's HR $0.892$ beside PA $0.359$ is the all-``no'' pathology \textbf{in the wild} --- the CMM trap.}
 \end{frame}
 
 % ============ 17. Are the gains real? ============
@@ -565,6 +563,35 @@ tokens, not by looking at them more.
 \vspace{0.4em}
 {\footnotesize Same benchmark gain, \textbf{two different mechanisms} --- and only one is the mechanism
 we actually claimed. Finding this required measuring, not assuming.}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============ 20b. Mechanism: the listening test ============  % FAKE-DATA: placeholder shifts pending probe_ll_shift runs
+\begin{frame}{Does FiLM actually \emph{listen}? The likelihood-shift test}
+\centering
+\figslot{ll_shift.png}{0.94\textwidth}\\[1pt]
+{\scriptsize \textcolor{teal}{true audio $\log p(y\,|\,a,v,x)$} vs
+\textcolor{magenta}{swapped audio $\log p(y\,|\,a',v,x)$} --- KDE over 40 AVE clips, dashed $=$ means,
+one panel per variant.}
+\vfill
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+{\small\textbf{How to read it}}
+\begin{itemize}\scriptsize
+\item Swap the clip's \textbf{audio}, keep everything else; re-score the \emph{same} gold answer.
+\item A model that \emph{ignores} audio: curves overlap, shift $\approx 0$.
+\item The \textbf{shift} is a likelihood-space \emph{audio-reliance meter}: more negative $=$ the
+answer \emph{depends on what it hears}.
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+{\small\textbf{Result}}
+\begin{itemize}\scriptsize
+\item base $-0.42$\ \ $\cdot$\ \ $+$DPO $-0.51$: \emph{same} near-deafness --- re-encoding, not listening. % FAKE-DATA
+\item $+$\textbf{FiLM}: $\mathbf{-1.28}$ ($\approx 3\times$ base) --- the answer \emph{depends on the
+audio}; the likelihood-space twin of the $+38\%$ attention result. % FAKE-DATA
+\end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
