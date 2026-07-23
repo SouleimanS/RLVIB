@@ -253,6 +253,38 @@ later numbers can be trusted.
 \section{Method}
 % ================================================================
 
+% ============ 9b. Background: what is a VIB ============
+\begin{frame}{Background: the Variational Information Bottleneck (VIB)}
+{\small \textbf{Idea} (Tishby et al., 2000): learn a compressed code $Z$ of the input $X$ that keeps
+\emph{only} what predicts the target $Y$ --- and forgets the rest.}
+\vspace{-0.2em}
+\[
+\max_{q(z|x)}\ \underbrace{I(Z;Y)}_{\text{keep what predicts }Y}\ -\ \beta\,\underbrace{I(Z;X)}_{\text{forget the rest of }X}
+\]
+\vspace{-0.5em}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=7mm,
+  b/.style={draw,rounded corners,fill=trn!18,draw=trn!70!black,minimum height=8mm,align=center},
+  io/.style={align=center}]
+  \node[io] (x) {$X$\\{\tiny input tokens}};
+  \node[b,right=of x] (enc) {encoder $q(z|x)$\\$\mu(x),\ \sigma(x)$};
+  \node[io,right=of enc] (z) {$Z$};
+  \node[b,right=of z] (dec) {predict $Y$};
+  \draw[->] (x)--(enc); \draw[->] (enc)--node[above]{\tiny sample}(z); \draw[->] (z)--(dec);
+  \node[below=0.5mm of z,font=\tiny,text=trn!70!black] {$\mathrm{KL}(q\,\|\,\mathcal N(0,I))$};
+\end{tikzpicture}
+\vspace{0.1em}
+\begin{itemize}\small
+\item Both mutual-informations are intractable $\Rightarrow$ \textbf{variational bounds} (Alemi et al.,
+ICLR'17): compression $I(Z;X)\le \mathbb E_x\,\mathrm{KL}\!\big(q(z|x)\,\|\,\mathcal N(0,I)\big)$ ---
+the ``\textbf{rate}''; relevance $=$ the ordinary prediction loss.
+\item \textbf{Stochastic encoder} (reparameterization): $z=\mu(x)+\sigma(x)\odot\epsilon$,
+$\epsilon\sim\mathcal N(0,I)$ --- gradients flow, and the injected noise gives \emph{free exploration}.
+\item $\beta$ trades compression against accuracy --- it is exactly our loss's $\beta_{kl}$. Next: we
+bolt this onto \emph{each modality stream}.
+\end{itemize}
+\end{frame}
+
 % ============ 10. The adapter ============
 \begin{frame}{Our module: a variational bottleneck on each modality stream}
 \centering
