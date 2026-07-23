@@ -515,29 +515,30 @@ GPT-4o's HR $0.892$ beside PA $0.359$ is the all-``no'' pathology \textbf{in the
 
 % ============ 17. Are the gains real? ============
 \begin{frame}{Are the gains real? Paired statistics in three lines}
-{\small Both models answer the \textbf{same} items, so only \textbf{disagreements} carry information:
-out of $N$ items, $b$ $=$ only-base-right, $c$ $=$ only-adapter-right.}
+{\footnotesize Both models answer the \textbf{same} items, so only \textbf{disagreements} count:
+out of $N$ items, $b=$ only-base-right, $c=$ only-adapter-right.}
+{\footnotesize
 \[
-\Delta=\frac{c-b}{N}\qquad\quad
-\text{95\% CI: }\Delta\pm 1.96\cdot\frac{\sqrt{(b+c)-(c-b)^2/N}}{N}
-\qquad\quad
-\text{McNemar: is } b/c \text{ a fair coin?}
-\]
-\vspace{0.2em}
+\Delta=\tfrac{c-b}{N}\qquad
+\text{95\% CI: }\Delta\pm 1.96\,\tfrac{\sqrt{(b+c)-(c-b)^2/N}}{N}\qquad
+\text{McNemar: is }b/c\text{ a fair coin?}
+\]}
 \centering
-\footnotesize
+\scriptsize
+\renewcommand{\arraystretch}{1.1}
 \begin{tabular}{l c c c}
 \toprule
 comparison & $b$ / $c$ & $\Delta$ [95\% CI] & verdict \\
 \midrule
 base $\to$ swap-DPO & 152 / 411 & $+5.2$ [{+}4.3, {+}6.1] & real ($p<10^{-4}$) \\
 base $\to$ FiLM     & 253 / 532 & $+5.6$ [{+}4.5, {+}6.7] & real ($p<10^{-4}$) \\
-DPO $\to$ FiLM      & 204 / 224 & $+0.4$ [{-}0.4, {+}1.2] & tie overall --- FiLM wins AV-Matching ($+3.7$, $p<10^{-4}$) \\
+DPO $\to$ FiLM      & 204 / 224 & $+0.4$ [{-}0.4, {+}1.2] & tie; FiLM wins AV-m ($+3.7$, $p<10^{-4}$) \\
 \bottomrule
 \end{tabular}
-\vfill
-{\small 411 fixed vs 152 broken cannot be a coin flip --- that is the entire test. (Gemini/GPT-4o
-cannot join this table: paired tests need per-item answers on \emph{our} harness.)}
+\vspace{0.4em}
+\par
+{\footnotesize 411 fixed vs 152 broken cannot be a coin flip --- that is the entire test.
+(Gemini/GPT-4o can't join: paired tests need per-item answers on \emph{our} harness.)}
 \end{frame}
 
 % ============ 18. Guard: MMAU ============
