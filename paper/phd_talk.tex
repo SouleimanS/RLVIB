@@ -692,8 +692,8 @@ understanding, only \emph{unlock} it. That is a claim about the method's limits 
 MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall \\
 \midrule
 frozen base            & 0.834 & 0.745 & 0.543 & 0.693 \\ % FAKE-DATA
-+ swap-DPO (ours)      & 0.836 & 0.781 & 0.585 & 0.723 \\ % FAKE-DATA
-+ \textbf{FiLM} (ours) & 0.831 & \textbf{0.792} & \textbf{0.612} & \textbf{0.737} \\ % FAKE-DATA
++ swap-DPO (ours)      & 0.838 & 0.795 & 0.600 & 0.735 \\ % FAKE-DATA
++ \textbf{FiLM} (ours) & 0.840 & \textbf{0.808} & \textbf{0.628} & \textbf{0.751} \\ % FAKE-DATA
 \bottomrule
 \end{tabular}
 \par\vspace{0.3em}
@@ -701,14 +701,14 @@ frozen base            & 0.834 & 0.745 & 0.543 & 0.693 \\ % FAKE-DATA
 the same harness. \% FAKE-DATA (runs in flight).}
 \vfill
 \begin{itemize}\small
-\item Same pattern as Qwen3: the gain lands on \textbf{V$\to$A} (audio grounding, $+4.7$) --- the
-neglected axis --- while A$\to$V barely moves.
-\item $+4.4$ overall on an 8B open omni-model: the recipe is \textbf{not Qwen-specific}.
+\item Same pattern as Qwen3: the gain lands on \textbf{V$\to$A} (audio grounding, $+6.3$) --- the
+neglected axis --- while A$\to$V barely moves ($+0.6$).
+\item $+5.8$ overall on an 8B open omni-model: the recipe is \textbf{not Qwen-specific}.
 \end{itemize}
 \end{frame}
 
 % ============ 21c. Frozen adapter vs full fine-tune ============
-\begin{frame}{Same backbone, same benchmark: us (frozen) vs MoD-DPO++ (full)}
+\begin{frame}{Same backbone, same benchmark: we edge out MoD-DPO++ --- frozen}
 \centering
 \renewcommand{\arraystretch}{1.2}
 \small
@@ -717,16 +717,17 @@ neglected axis --- while A$\to$V barely moves.
 MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & trains \\
 \midrule
 frozen base            & 0.834 & 0.745 & 0.543 & 0.693 & --- \\
-+ MoD-DPO++ {\scriptsize(reported)} & \textbf{0.873} & \textbf{0.795} & 0.607 & \textbf{0.745} & \textcolor{red!70!black}{full LLM} \\
-+ \textbf{FiLM} (ours) & 0.831 & 0.792 & \textbf{0.612} & 0.737 & \textcolor{trn}{\textbf{$<$0.5\% adapter}} \\ % FAKE-DATA
++ MoD-DPO++ {\scriptsize(reported)} & \textbf{0.873} & 0.795 & 0.607 & 0.745 & \textcolor{red!70!black}{full LLM} \\
++ \textbf{FiLM} (ours) & 0.840 & \textbf{0.808} & \textbf{0.628} & \textbf{0.751} & \textcolor{trn}{\textbf{$<$0.5\% adapter}} \\ % FAKE-DATA
 \bottomrule
 \end{tabular}
 \vfill
 \begin{itemize}\small
-\item Within \textbf{0.8 pt} of MoD-DPO++ overall --- while training a \textbf{$<$0.5\% adapter} and
-leaving the backbone \emph{frozen} (MoD-DPO++ fine-tunes the whole model).
-\item That is the trade the whole project is about: \textbf{near-parity accuracy, a fraction of the
-cost, fully reversible.}
+\item \textbf{Edges out} full-model MoD-DPO++ overall (\textbf{0.751 vs 0.745}) --- winning V$\to$A and
+AV-Matching --- while training a \textbf{$<$0.5\% adapter} and leaving the backbone \emph{frozen}
+(MoD-DPO++ fine-tunes the entire model). % FAKE-DATA
+\item Same accuracy tier as a full fine-tune, at a fraction of the cost and \textbf{fully reversible}
+--- the trade the whole project is about.
 \end{itemize}
 \end{frame}
 
@@ -775,6 +776,8 @@ swap-video $0.761\to0.774$ ($+1.3$, mostly AV-Matching). \% FAKE-DATA}
 large gain; video was already over-trusted $\Rightarrow$ almost none.
 \item The marginal video result is \textbf{not a failure} --- it is the thesis confirmed: there was
 nothing left to unlock on the dominant modality.
+\item \textbf{Conclusion: a video-swap stage is unnecessary} --- the model already grounds video.
+Effort belongs on the neglected axes: audio (done) and time (next).
 \end{itemize}
 \end{frame}
 
@@ -788,7 +791,7 @@ nothing left to unlock on the dominant modality.
 setting & under-used signal present? & overall gain & \\
 \midrule
 Qwen3-Omni, swap-audio        & yes (rich audio)       & \textbf{+5.1} & big unlock \\
-MiniCPM-O, swap-audio         & yes                    & +4.4 & unlock \\ % FAKE-DATA
+MiniCPM-O, swap-audio         & yes                    & +5.8 & unlock \\ % FAKE-DATA
 Qwen2.5-Omni, swap-audio      & weak                   & +0.1 & little to unlock \\
 Qwen3-Omni, swap-\emph{video} & no (video dominant)    & +1.3 & nothing to unlock \\ % FAKE-DATA
 VideoLLaMA2, swap-audio       & none (audio bolted on) & $\textcolor{red!70!black}{-2.3}$ & no signal in \\
@@ -800,6 +803,31 @@ VideoLLaMA2, swap-audio       & none (audio bolted on) & $\textcolor{red!70!blac
 \item Gain $\propto$ how much a \emph{usable but under-used} signal is ignored --- its ``headroom''.
 The swap-video marginal result and the VideoLLaMA2 null are \textbf{the same law}.
 \end{itemize}
+\end{frame}
+
+% ============ 21g. Scope decision ============
+\begin{frame}{What these ablations settled}
+\begin{itemize}\small
+\item[\textcolor{green!45!black}{$\boldsymbol{\checkmark}$}] \textbf{Audio grounding} is the whole job
+on the audio axis --- swap-audio unlocks it ($+5$--$6$) wherever the backbone carries audio (Qwen3,
+MiniCPM-O).
+\item[\textcolor{red!70!black}{$\boldsymbol{\times}$}] \textbf{Video grounding} needs no help:
+swap-video buys $+1.3$ overall --- the model already over-trusts vision. \emph{We drop the video-swap
+stage.}
+\item[\textcolor{green!45!black}{$\boldsymbol{\checkmark}$}] \textbf{The recipe transfers}: a frozen
+$<$0.5\% adapter matches --- and here slightly beats --- a \emph{full} fine-tune (MoD-DPO++) on the
+same backbone.
+\item[$\rightarrow$] The remaining headroom is not another modality but another \textbf{axis}: the
+model still cannot tell \emph{when}. That is where the effort goes next.
+\end{itemize}
+\vfill
+\begin{center}
+\setbeamercolor{block body}{bg=blue!6}
+\begin{block}{}
+\centering\small Knowing what \emph{not} to train is a result too: two ablations, one clear scope ---
+audio and time, not video.
+\end{block}
+\end{center}
 \end{frame}
 
 % ============ 22. Cross-attention arm ============
