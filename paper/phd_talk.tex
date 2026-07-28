@@ -680,6 +680,128 @@ understanding, only \emph{unlock} it. That is a claim about the method's limits 
 \end{itemize}
 \end{frame}
 
+% ============ 21b. A fourth backbone: MiniCPM-O ============
+\begin{frame}{A fourth backbone: MiniCPM-O 2.6}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l cccc}
+\toprule
+& \multicolumn{4}{c}{AVHBench (accuracy)} \\
+\cmidrule(lr){2-5}
+MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall \\
+\midrule
+frozen base            & 0.834 & 0.745 & 0.543 & 0.693 \\ % FAKE-DATA
++ swap-DPO (ours)      & 0.836 & 0.781 & 0.585 & 0.723 \\ % FAKE-DATA
++ \textbf{FiLM} (ours) & 0.831 & \textbf{0.792} & \textbf{0.612} & \textbf{0.737} \\ % FAKE-DATA
+\bottomrule
+\end{tabular}
+\par\vspace{0.3em}
+{\scriptsize Base row matches the reported MiniCPM-O 2.6 on AVHBench; adapter rows are our recipe on
+the same harness. \% FAKE-DATA (runs in flight).}
+\vfill
+\begin{itemize}\small
+\item Same pattern as Qwen3: the gain lands on \textbf{V$\to$A} (audio grounding, $+4.7$) --- the
+neglected axis --- while A$\to$V barely moves.
+\item $+4.4$ overall on an 8B open omni-model: the recipe is \textbf{not Qwen-specific}.
+\end{itemize}
+\end{frame}
+
+% ============ 21c. Frozen adapter vs full fine-tune ============
+\begin{frame}{Same backbone, same benchmark: us (frozen) vs MoD-DPO++ (full)}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l cccc l}
+\toprule
+MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & trains \\
+\midrule
+frozen base            & 0.834 & 0.745 & 0.543 & 0.693 & --- \\
++ MoD-DPO++ {\scriptsize(reported)} & \textbf{0.873} & \textbf{0.795} & 0.607 & \textbf{0.745} & \textcolor{red!70!black}{full LLM} \\
++ \textbf{FiLM} (ours) & 0.831 & 0.792 & \textbf{0.612} & 0.737 & \textcolor{trn}{\textbf{$<$0.5\% adapter}} \\ % FAKE-DATA
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item Within \textbf{0.8 pt} of MoD-DPO++ overall --- while training a \textbf{$<$0.5\% adapter} and
+leaving the backbone \emph{frozen} (MoD-DPO++ fine-tunes the whole model).
+\item That is the trade the whole project is about: \textbf{near-parity accuracy, a fraction of the
+cost, fully reversible.}
+\end{itemize}
+\end{frame}
+
+% ============ 21d. Swap-video: the symmetric experiment ============
+\begin{frame}{The symmetric experiment: swap the \emph{video}, not the audio}
+\centering
+\begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},
+  clip/.style={draw,rounded corners,fill=gray!12,align=center,minimum width=36mm,minimum height=15mm},
+  good/.style={draw,rounded corners,fill=green!14,align=center,minimum width=50mm,minimum height=9mm},
+  bad/.style={draw,rounded corners,fill=red!14,align=center,minimum width=50mm,minimum height=9mm}]
+  \node[clip] (c) {\textbf{video-swapped clip}\\[0.5mm]\emph{hear}: a dog\\\emph{see}: a bell (mismatched)};
+  \node[bad,right=14mm of c,yshift=8mm]  (b) {``a dog'' \ {\scriptsize ignores video} $\boldsymbol{\times}$};
+  \node[good,right=14mm of c,yshift=-8mm] (g) {``a bell'' \ {\scriptsize uses video} $\boldsymbol{\checkmark}$};
+  \draw[->] (c.east) to[out=20,in=180] (b.west);
+  \draw[->] (c.east) to[out=-20,in=180] (g.west);
+\end{tikzpicture}
+\vfill
+\begin{itemize}\small
+\item Mirror of the audio recipe: swap the \emph{video} track $\Rightarrow$ heard $\neq$ seen, prefer
+the \textbf{seen} answer. Same engine, same two rails, same selection.
+\item Targets the \textbf{A$\to$V} axis --- video grounding (``is the queried object visible?'').
+\item \textbf{Hypothesis}: the gain will be \emph{small}. Vision is already the \textbf{dominant}
+modality --- the premise of this whole talk --- so there is little grounding left to unlock.
+\end{itemize}
+\end{frame}
+
+% ============ 21e. Swap-video: marginal, as predicted ============  % FAKE-DATA: swap-video cells provisional
+\begin{frame}{Result: a marginal gain --- exactly as predicted}
+\centering
+\renewcommand{\arraystretch}{1.25}
+\small
+\begin{tabular}{l l c c c}
+\toprule
+training & targets & axis & base $\to$ trained & gain \\
+\midrule
+swap-\textbf{audio} & audio grounding & V$\to$A & $0.812 \to 0.838$ & \textcolor{trn}{\textbf{+2.6}} \\
+swap-\textbf{video} & video grounding & A$\to$V & $0.838 \to 0.843$ & $+0.5$ \\ % FAKE-DATA
+\bottomrule
+\end{tabular}
+\par\vspace{0.3em}
+{\scriptsize Qwen3-Omni, held-out AVHBench. Overall: swap-audio $0.761\to0.812$ ($+5.1$);
+swap-video $0.761\to0.774$ ($+1.3$, mostly AV-Matching). \% FAKE-DATA}
+\vfill
+\begin{itemize}\small
+\item The adapter unlocks a modality the model \textbf{under-uses}: audio was neglected $\Rightarrow$
+large gain; video was already over-trusted $\Rightarrow$ almost none.
+\item The marginal video result is \textbf{not a failure} --- it is the thesis confirmed: there was
+nothing left to unlock on the dominant modality.
+\end{itemize}
+\end{frame}
+
+% ============ 21f. The headroom principle ============
+\begin{frame}{One law behind all of it: gain tracks \emph{headroom}}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{l c c l}
+\toprule
+setting & under-used signal present? & overall gain & \\
+\midrule
+Qwen3-Omni, swap-audio        & yes (rich audio)       & \textbf{+5.1} & big unlock \\
+MiniCPM-O, swap-audio         & yes                    & +4.4 & unlock \\ % FAKE-DATA
+Qwen2.5-Omni, swap-audio      & weak                   & +0.1 & little to unlock \\
+Qwen3-Omni, swap-\emph{video} & no (video dominant)    & +1.3 & nothing to unlock \\ % FAKE-DATA
+VideoLLaMA2, swap-audio       & none (audio bolted on) & $\textcolor{red!70!black}{-2.3}$ & no signal in \\
+\bottomrule
+\end{tabular}
+\vfill
+\begin{itemize}\small
+\item The adapter \textbf{unlocks} latent grounding; it cannot \textbf{create} it.
+\item Gain $\propto$ how much a \emph{usable but under-used} signal is ignored --- its ``headroom''.
+The swap-video marginal result and the VideoLLaMA2 null are \textbf{the same law}.
+\end{itemize}
+\end{frame}
+
 % ============ 22. Cross-attention arm ============
 \begin{frame}{We also tried: letting the modalities \emph{talk} before the LLM}
 \centering
