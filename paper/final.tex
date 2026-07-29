@@ -757,17 +757,24 @@ AVE-Shift (held-out, balanced $\Rightarrow$ chance $=0.50$) & acc & reading \\
 \midrule
 base --- synchronized vs shifted (n$=$200) & 0.495 & at chance \\
 base --- lag vs lead (n$=$100)       & 0.500 & at chance \\
+\midrule
+$+$ shift-DPO (step 60) --- synchronized vs shifted & 0.515 & unchanged \\
+$+$ shift-DPO (step 60) --- lag vs lead & 0.450 & unchanged \\
 \bottomrule
 \end{tabular}
 \par\vspace{0.3em}
-{\scriptsize Measured. The model reports synchronization independently of the audio content.}
+{\scriptsize Measured. Differences from baseline are within the $\pm7$-point interval at these
+sample sizes. The trained variant used the substituted-timing data \emph{without} temporal input
+features.}
 \vfill
 \begin{itemize}\footnotesize
-\item The training signal used so far concerns \emph{which} event is heard, not \emph{when} it
-occurs.
 \item The same objective applies with a different intervention: displacing the audio by
 $\Delta \in \pm\{0.5,1,2\}$\,s and preferring the correct synchronization judgment over the default
 response. The preference term and both constraints are unchanged.
+\item \textbf{This is not sufficient.} Training on the displaced data alone leaves accuracy at
+chance. We attribute this to representational capacity rather than to the objective: the bottleneck
+receives each token without positional information, so temporal misalignment is not expressible in
+its input (see next slide).
 \end{itemize}
 \end{frame}
 
@@ -798,8 +805,9 @@ A shared phase $\tau_t$ across both streams makes misalignment representable: au
 frame at $t+\Delta$ then differ in their encodings.
 \item At 2\,fps the frame interval is $0.5$\,s, which bounds the smallest resolvable displacement.
 \item $W_{\text{out}}$ remains zero-initialized, preserving the identity property at initialization.
-\item[] {\footnotesize\emph{Status: implemented; training in progress. No trained results are
-reported here.}}
+\item[] {\footnotesize\emph{Status: implemented but not yet trained. This yields a falsifiable
+prediction: the same displaced-audio data combined with temporal features should move accuracy off
+chance, whereas the data alone did not.}}
 \end{itemize}
 \end{frame}
 
