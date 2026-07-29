@@ -42,6 +42,15 @@ def _shim_transformers() -> None:
             PreTrainedModel.all_tied_weights_keys = {}
     except Exception:  # noqa: BLE001
         pass
+    try:
+        # MiniCPM-o's forward reads cache.seen_tokens; newer transformers renamed it to
+        # get_seq_length(). Re-add it as a property so the generation loop runs.
+        from transformers.cache_utils import DynamicCache
+        if not hasattr(DynamicCache, "seen_tokens"):
+            DynamicCache.seen_tokens = property(
+                lambda self: self.get_seq_length() if hasattr(self, "get_seq_length") else 0)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class MiniCPMO:
