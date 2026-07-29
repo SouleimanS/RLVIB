@@ -58,7 +58,7 @@
 \titlepage
 \vspace{-1.2em}
 \begin{block}{}
-\small Audio-visual LLMs frequently answer questions about sound using visual evidence. This work
+\footnotesize Audio-visual LLMs frequently answer questions about sound using visual evidence. This work
 introduces a parameter-efficient adapter that improves audio grounding in a \emph{frozen} backbone,
 together with an evaluation protocol designed to test the claim rigorously.
 \end{block}
@@ -86,7 +86,7 @@ together with an evaluation protocol designed to test the claim rigorously.
   \draw[->] (llm.east)--(ans);
 \end{tikzpicture}
 \vspace{0.5em}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Each modality is encoded into \textbf{tokens} (audio $\sim$25/s; video sampled at
 \textbf{2\,fps} in all our Qwen3-Omni runs), projected by a small \emph{adapter} into the LLM's
 embedding space, and concatenated with the question.
@@ -103,7 +103,7 @@ for its attention.
 \exrow{avh_v2a}{\textbf{video $\to$ audio} {\scriptsize(the image makes it ``hear'')}}{see: a parrot on a shoulder; the clip is silent. ``Is the bird making sound?''}{``Yes''}{``No''}
 \end{tabular}
 \vfill
-\small The model over-weights visual evidence relative to auditory evidence: it reports objects
+\footnotesize The model over-weights visual evidence relative to auditory evidence: it reports objects
 implied by the audio (top) and sounds implied by the image (bottom).
 \end{frame}
 
@@ -141,7 +141,7 @@ Can audio grounding in a frozen audio-visual LLM be improved\\[2pt]
 by training a parameter-efficient adapter alone?
 \end{center}
 \vspace{0.3em}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item[\textbf{C1}] A variational-bottleneck adapter ($<$0.5\% of parameters) that is exactly the
 identity map at initialization.
 \item[\textbf{C2}] An anchored preference objective that avoids the degenerate solution reached by
@@ -216,7 +216,7 @@ training run (reported below).}
 \end{frame}
 
 \begin{frame}{Experimental protocol}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item \textbf{Frame rate} is fixed in code at 2\,fps for Qwen3-Omni (1\,fps for the 7B backbones),
 identically for checkpoint selection and final evaluation. Below 2\,fps, Qwen3-Omni exhibits a
 systematic bias toward affirmative answers.
@@ -243,14 +243,14 @@ verified by script.
 % ================================================================
 
 \begin{frame}{Background: the Variational Information Bottleneck}
-{\small The information bottleneck (Tishby et al., 2000) seeks a compressed representation $Z$ of
+{\footnotesize The information bottleneck (Tishby et al., 2000) seeks a compressed representation $Z$ of
 the input $X$ that retains only the information predictive of the target $Y$.}
 \vspace{-0.2em}
 \[
 \max_{q(z|x)}\ \underbrace{I(Z;Y)}_{\text{keep what predicts }Y}\ -\ \beta\,\underbrace{I(Z;X)}_{\text{forget the rest of }X}
 \]
 \vspace{-0.5em}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Both mutual-information terms are intractable and are replaced by variational bounds (Alemi
 et al., ICLR'17): the compression term is upper-bounded by
 $\mathbb E_x\,\mathrm{KL}\!\big(q(z|x)\,\|\,\mathcal N(0,I)\big)$, referred to as the rate; the
@@ -284,7 +284,7 @@ objective.
 \end{tikzpicture}
 \vspace{0.4em}
 \[ z=\mu(x)+\sigma(x)\odot\epsilon \qquad y = x + W_{\text{out}}\,z \qquad W_{\text{out}}\stackrel{\text{init}}{=}0 \]
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Zero-initialization of $W_{\text{out}}$ gives $y=x$ at initialization: attaching the module
 leaves the model's behaviour unchanged until training begins.
 \item A bypass flag recovers the frozen backbone exactly, providing the DPO reference distribution
@@ -309,7 +309,7 @@ without instantiating a second model.
 \par
 \exrow{as_flute}{\emph{see} flute, \textbf{hear (overlaid) train horn}}{``Which event do you hear?''}{``flute''}{``train horn''}
 \vfill
-\small Substituting a clip's audio track produces an instance in which the visible and audible
+\footnotesize Substituting a clip's audio track produces an instance in which the visible and audible
 events disagree. Preferring the audio-consistent answer on such an instance requires use of the
 audio stream.
 \end{frame}
@@ -327,7 +327,7 @@ audio stream.
 {\scriptsize $c,r$ $=$ log-probs of the chosen (heard) / rejected (seen) answer; subscript $p$ $=$
 adapter on, $r$ $=$ adapter bypassed $=$ the frozen base --- our reference model, for free.}
 \vspace{0.2em}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Training with the standard DPO objective on these pairs reduces perception accuracy from
 $0.95$ to $0.10$: the model converges to answering ``no'' for all inputs.
 \item The objective constrains only the \emph{margin} between the two candidates. It is minimized
@@ -354,7 +354,7 @@ capability metric must be monitored jointly.
  \;+\; \beta_{kl}\,\mathrm{KL}_{\text{VIB}}
 \end{align*}
 \vspace{-0.3em}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item The first constraint (an mDPO-style anchor) prevents the degenerate solution by requiring the
 chosen response to retain at least its probability under the frozen backbone.
 \item The second constraint penalizes divergence from the backbone on ordinary (non-substituted)
@@ -423,7 +423,7 @@ et al., 2018), \emph{not} the loss's $\beta$ or $\beta_{kl}$. Zero-init $\Righta
 \end{frame}
 
 \begin{frame}{Why query conditioning is required: a loss-floor argument}
-{\small Consider one substituted clip (visible: dog; audible: bell) and two questions over
+{\footnotesize Consider one substituted clip (visible: dog; audible: bell) and two questions over
 identical inputs: ``what do you hear?'' (target: bell) and ``what do you see?'' (target: dog). The
 per-question loss is $-\log\sigma(m)$, giving $0.13$, $0.69$ and $2.13$ for margins
 $m = +2$, $0$ and $-2$ respectively.}
@@ -442,7 +442,7 @@ can't read $q$, hedges 50/50        & --- & $0.69$ & $0.69$ & $\mathbf{1.39}$ (f
 \end{tabular}
 \vspace{0.5em}
 \par
-{\small A query-independent adapter has a loss floor of $2\log 2 \approx 1.39$ per pair, whereas a
+{\footnotesize A query-independent adapter has a loss floor of $2\log 2 \approx 1.39$ per pair, whereas a
 query-conditioned one attains zero. The data construction therefore makes query conditioning
 necessary at the optimum. This is a property of the objective, not an empirical result.}
 \end{frame}
@@ -523,7 +523,7 @@ $+$ FiLM       & 79.6 & 73.1 & 66.4 & 73.0 \\
 \par\vspace{0.3em}
 {\scriptsize Measured, parse rate $0.94$ on all three rows.}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Both adapters incur a small cost ($-1.2$ for swap-DPO, $-1.7$ for FiLM). Both lie within the
 $\pm2.8$-point interval at n$=$1000, but the sign is negative and is reported as such.
 \item MMAU is out of distribution for this method: audio-only reasoning, without video or
@@ -559,7 +559,7 @@ $+$ FiLM     & 0.837 & $-0.6$ \\
 \end{column}
 \end{columns}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item The 95\% interval is $\pm2.4$ points; both differences fall inside it, indicating no
 significant loss of general video-QA capability.
 \item The ordering matches MMAU: FiLM preserves capability better than swap-DPO ($-0.6$ versus
@@ -635,7 +635,7 @@ raises both.
 \end{frame}
 
 \begin{frame}{Mechanism III: analysis of the learned parameters}
-{\small Three measurements computed directly from the trained FiLM checkpoint, without inference:}
+{\footnotesize Three measurements computed directly from the trained FiLM checkpoint, without inference:}
 \vspace{0.3em}
 \centering
 \renewcommand{\arraystretch}{1.3}
@@ -650,7 +650,7 @@ FiLM modulation, vision vs audio & $\approx 4.5\times$ & the question steers mos
 \bottomrule
 \end{tabular}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item An earlier version of this analysis reported that 59\% of the vision stream was rewritten with
 the audio module inactive. Direct inspection of the parameters did not support that claim and it was
 withdrawn.
@@ -677,7 +677,7 @@ MiniCPM-O 2.6 (8B) & 0.744 & \emph{training} & --- & --- \\
 {\scriptsize AVHBench overall accuracy, n$=$5302; identical data, objective, constraints and
 selection procedure for every row.}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item The improvement scales with the audio information already available in the frozen backbone:
 substantial for Qwen3-Omni, negligible for Qwen2.5-Omni, and negative for VideoLLaMA2, whose audio
 pathway was added post hoc.
@@ -701,7 +701,7 @@ base --- \emph{reported} {\scriptsize(arXiv:2603.03192)} & 0.834 & 0.745 & 0.543
 \par\vspace{0.3em}
 {\scriptsize Ours: n$=$5302, parse $1.00$. CMM (ours): PA $0.897$ / HR $\mathbf{0.578}$.}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Identical weights and benchmark differ by $5.1$ points between our measurement and the
 published one, attributable to prompt, answer-format and frame-rate choices --- the protocol
 sensitivity quantified earlier.
@@ -731,7 +731,7 @@ Qwen3-Omni    & \textbf{FiLM (ours)} & $0.761 \to 0.819$ & \textbf{+5.8} & \text
 {\scriptsize Reported rows: arXiv:2603.03192 (Tab.~1) and arXiv:2601.21181 (Tab.~1), each on
 \emph{their} backbone and harness --- hence deltas only.}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item The proposed method ($+5.8$) falls between full fine-tuning ($+8.8$) and training-free
 decoding ($+4.7$), while updating $<$0.5\% of parameters and remaining reversible.
 \item On A--V Matching the improvement is $+15.5$ points, comparable to the $+15.0$ reported for
@@ -743,7 +743,7 @@ MoD-DPO.
 % ================================================================
 
 \begin{frame}{Temporal alignment: a remaining failure mode}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Wen et al.\ report that Qwen3-Omni's temporal-synchronization accuracy falls from $100$ to
 $1.4$ when the audio is displaced by $\pm2$\,s. We reproduce the effect under our own protocol:
 \end{itemize}
@@ -762,7 +762,7 @@ base --- lag vs lead (n$=$100)       & 0.500 & at chance \\
 \par\vspace{0.3em}
 {\scriptsize Measured. The model reports synchronization independently of the audio content.}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item The training signal used so far concerns \emph{which} event is heard, not \emph{when} it
 occurs.
 \item The same objective applies with a different intervention: displacing the audio by
@@ -792,7 +792,7 @@ $\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big]
   \draw[->] (ba)--(llm.west); \draw[->] (bv)--(llm.west);
 \end{tikzpicture}
 \vfill
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item In the current formulation the bottleneck receives each token without positional information.
 A shared phase $\tau_t$ across both streams makes misalignment representable: audio at time $t$ and a
 frame at $t+\Delta$ then differ in their encodings.
@@ -820,7 +820,7 @@ reported here.}}
   \draw[->] (enc)--(pre); \draw[->] (pre)--(ad); \draw[->] (ad)--(post); \draw[->] (post)--(llm);
 \end{tikzpicture}
 \vspace{0.6em}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item The bottleneck is applied to the adapter's \emph{output} (the LLM embedding space). The
 alternative is to apply it to the adapter's \emph{input} (raw encoder features).
 \item The two placements produce comparable AVHBench accuracy; the choice is not decisive for
@@ -850,7 +850,7 @@ LoRA at identical attach points & $+2.8$ versus $+5.1$; HR below base & the resi
 \bottomrule
 \end{tabular}
 \vfill
-{\small Several of these results informed the final design and are reported for completeness.}
+{\footnotesize Several of these results informed the final design and are reported for completeness.}
 \end{frame}
 
 \begin{frame}{Reproducibility}
@@ -912,13 +912,13 @@ LLM, and the improvement is supported by mechanistic evidence in addition to ben
 \begin{columns}[T]
 \begin{column}{0.58\textwidth}
 \textbf{Acknowledgements}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item Qiu Yue and the AIST CVRT team.
 \item Computation carried out on the ABCI cluster (group \texttt{gae50891}).
 \end{itemize}
 \vspace{0.6em}
 \textbf{Experiments in progress}
-\begin{itemize}\small
+\begin{itemize}\footnotesize
 \item video-substitution and temporal-displacement training variants
 \item MiniCPM-O adapter training and evaluation
 \end{itemize}
