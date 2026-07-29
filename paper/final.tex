@@ -759,6 +759,34 @@ about.
 \section{Method notes and conclusion}
 % ================================================================
 
+\begin{frame}{Ablation: does it matter \emph{where} the bottleneck sits?}
+\centering
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 5mm,
+  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=6mm,align=center},
+  vibs/.style={draw,very thick,rounded corners,fill=trn!25,draw=trn!70!black,minimum height=6mm,align=center},
+  vibd/.style={draw,very thick,dashed,rounded corners,fill=trn!10,draw=trn!70!black,minimum height=6mm,align=center}]
+  \node[frzs] (enc) {modality encoder};
+  \node[vibd,right=of enc] (pre) {VIB \emph{pre} (tested)};
+  \node[frzs,right=of pre] (ad) {adapter};
+  \node[vibs,right=of ad] (post) {VIB \emph{post} (ours)};
+  \node[frzs,right=of post] (llm) {frozen LLM};
+  \draw[->] (enc)--(pre); \draw[->] (pre)--(ad); \draw[->] (ad)--(post); \draw[->] (post)--(llm);
+\end{tikzpicture}
+\vspace{0.6em}
+\begin{itemize}\small
+\item Supervisor's question: the VIB currently edits the adapter's \textbf{output} (LLM embedding
+space). What if it edits the adapter's \textbf{input} (raw encoder features) instead?
+\item \textbf{Finding: it does not materially change the outcome.} Both placements land in the same
+range on AVHBench.
+\item \textbf{Decision: keep post-adapter} --- one attach dimension ($=$ the LLM width) on every
+backbone, so the same code runs on Qwen3 / Qwen2.5 / VideoLLaMA2 / MiniCPM-O. Pre-adapter needs a
+different width per modality \emph{and} per backbone.
+\item[] {\footnotesize\emph{Status: the pre-adapter attach is implemented in this repo
+(\texttt{--pre-adapter}); the exact numbers from the earlier run are not in the current results
+directory, so no table is shown here.}}
+\end{itemize}
+\end{frame}
+
 \begin{frame}{What did \emph{not} work --- and what each failure taught}
 \centering
 \renewcommand{\arraystretch}{1.3}

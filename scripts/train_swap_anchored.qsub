@@ -51,6 +51,7 @@ EXTRA=()
 [ -n "${LORAALPHA:-}" ]   && EXTRA+=(--lora-alpha "$LORAALPHA")
 [ -n "${XATTN:-}" ]       && EXTRA+=(--xattn)
 [ -n "${TEMPORAL:-}" ]    && EXTRA+=(--temporal)
+[ -n "${PREADAPTER:-}" ]  && EXTRA+=(--pre-adapter)
 [ -n "${SWAP:-}" ]        && EXTRA+=(--swap "$SWAP")
 
 python -u scripts/train_swap_anchored.py --model "${MODEL:-qwen3-omni}" \

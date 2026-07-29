@@ -189,6 +189,9 @@ def main() -> int:
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=float, default=32.0)
     # --- cross-attention fusion arm (audio<->vision before the LLM) ---
+    ap.add_argument("--pre-adapter", action="store_true",
+                    help="PLACEMENT ABLATION: attach the VIB on the adapter INPUT (raw encoder "
+                         "features) instead of its output. Same objective/rails/selection.")
     ap.add_argument("--temporal", action="store_true",
                     help="clock-feature bottleneck (TemporalVariationalBottleneck); pair with "
                          "--swap shift for shift-DPO.")
@@ -204,6 +207,8 @@ def main() -> int:
         ap.error("--film is the audio-swap (HEAR/SEE) experiment; use --swap audio")
     # non-audio swaps get their own save-dir so checkpoints never collide with the audio run
     _suffix = "" if args.swap == "audio" else f"_{args.swap}"
+    if args.pre_adapter:
+        _suffix += "_pre"
     args.save_dir = args.save_dir or f"runs/anchored_{args.model}{_suffix}"
     torch.manual_seed(args.seed)
     # massive-activation backbones (VideoLLaMA2) need the scale-invariant VIB input;
@@ -230,7 +235,8 @@ def main() -> int:
         cls_name = "TemporalVariationalBottleneck"
     else:
         cls = FiLMVariationalBottleneck if args.film else VariationalBottleneck
-        bns, handles = attach_bottlenecks(m, cls=cls, normalize_input=nin)
+        bns, handles = attach_bottlenecks(m, cls=cls, normalize_input=nin,
+                                          pre_adapter=args.pre_adapter)
         cls_name = cls.__name__
     if args.init_from:                                 # warm-start the core (Stage 1 -> Stage 2)
         ck = torch.load(args.init_from, map_location="cpu", weights_only=False)

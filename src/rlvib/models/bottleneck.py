@@ -229,10 +229,16 @@ def set_condition(bottlenecks, q_emb) -> None:
 
 
 def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
-                       normalize_input: bool = False, cond_dim: int | None = None):
+                       normalize_input: bool = False, cond_dim: int | None = None,
+                       pre_adapter: bool = False, pre_dim: int | None = None):
     """Freeze the model; attach trainable bottlenecks (`cls`) on the audio + vision
     adapters via forward hooks. `dim` defaults to `model.hidden_dim`. `normalize_input`
     LayerNorms the VIB encoder input (for massive-activation backbones, e.g. VideoLLaMA2).
+
+    `pre_adapter=True` is the PLACEMENT ABLATION: edit the adapter's *input* (raw encoder
+    features) with a forward-PRE hook instead of its output. The encoder width differs from
+    the LLM width on most backbones, so pass `pre_dim` (defaults to probing the adapter's
+    in_features); everything else -- objective, rails, selection -- is unchanged.
 
     Returns (ModuleDict, handles). Detach with: for h in handles: h.remove().
     """
@@ -255,7 +261,19 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
         embed_dim = lm.get_input_embeddings().weight.shape[1]
         cond_dim = cond_dim or embed_dim
         kw["cond_dim"] = cond_dim
-    bottlenecks = nn.ModuleDict({"audio": cls(dim, **kw), "vision": cls(dim, **kw)})
+    if pre_adapter:
+        # the adapter INPUT width is the encoder width -- per modality, and generally != hidden_dim
+        dims = {}
+        for _n, _mod in model.adapter_modules().items():
+            _w = pre_dim or getattr(_mod, "in_features", None)
+            if _w is None:                      # non-Linear (e.g. a patch merger): probe a weight
+                _p = next((p for p in _mod.parameters() if p.dim() >= 2), None)
+                _w = _p.shape[-1] if _p is not None else dim
+            dims[_n] = int(_w)
+        print(f"[vib] pre-adapter placement: input dims {dims}", flush=True)
+        bottlenecks = nn.ModuleDict({n: cls(d, **kw) for n, d in dims.items()})
+    else:
+        bottlenecks = nn.ModuleDict({"audio": cls(dim, **kw), "vision": cls(dim, **kw)})
     if is_film:                                                     # shared q-projection (q is the
         bottlenecks["q_proj"] = nn.Linear(embed_dim, cond_dim)     # same for both modalities)
     bottlenecks = bottlenecks.to(model.device, vib_dtype)
@@ -263,6 +281,15 @@ def attach_bottlenecks(model, dim: int | None = None, cls=ResidualBottleneck,
     handles = []
     for name, adapter in model.adapter_modules().items():
         bn = bottlenecks[name]
+
+        if pre_adapter:                       # PLACEMENT ABLATION: edit the adapter's INPUT
+            def pre_hook(_module, inputs, bn=bn):
+                if not inputs:
+                    return inputs
+                return (bn(inputs[0]),) + tuple(inputs[1:])
+
+            handles.append(adapter.register_forward_pre_hook(pre_hook))
+            continue
 
         def hook(_module, _inputs, output, bn=bn):
             if isinstance(output, tuple):
