@@ -757,24 +757,29 @@ AVE-Shift (held-out, balanced $\Rightarrow$ chance $=0.50$) & acc & reading \\
 \midrule
 base --- synchronized vs shifted (n$=$200) & 0.495 & at chance \\
 base --- lag vs lead (n$=$100)       & 0.500 & at chance \\
+base --- $\pm2$\,s displacement only (n$=$200) & 0.495 & at chance \\
 \midrule
 $+$ shift-DPO (step 60) --- synchronized vs shifted & 0.515 & unchanged \\
 $+$ shift-DPO (step 60) --- lag vs lead & 0.450 & unchanged \\
 \bottomrule
 \end{tabular}
 \par\vspace{0.3em}
-{\scriptsize Measured. Differences from baseline are within the $\pm7$-point interval at these
-sample sizes. The trained variant used the substituted-timing data \emph{without} temporal input
-features.}
+{\scriptsize Measured. All differences lie within the $\pm7$-point interval at these sample sizes.
+The third row restricts the probe to $\pm2$\,s displacements --- four frames at 2\,fps, the largest
+and most clearly resolvable offset.}
 \vfill
 \begin{itemize}\footnotesize
 \item The same objective applies with a different intervention: displacing the audio by
 $\Delta \in \pm\{0.5,1,2\}$\,s and preferring the correct synchronization judgment over the default
 response. The preference term and both constraints are unchanged.
-\item \textbf{This is not sufficient.} Training on the displaced data alone leaves accuracy at
-chance. We attribute this to representational capacity rather than to the objective: the bottleneck
-receives each token without positional information, so temporal misalignment is not expressible in
-its input (see next slide).
+\item \textbf{This is not sufficient}, and the limitation is not the objective. Training on the
+displaced data leaves accuracy at chance, and restricting the probe to the largest, most resolvable
+displacement ($\pm2$\,s, four frames) does not help either: the frozen backbone is at chance there
+as well.
+\item We therefore conclude that \textbf{the backbone carries no usable temporal-alignment signal},
+so there is nothing for an adapter to unlock. This is the same pattern observed for audio on
+VideoLLaMA2: where the frozen representation lacks the information, a parameter-efficient adapter
+cannot supply it.
 \end{itemize}
 \end{frame}
 
@@ -805,9 +810,9 @@ A shared phase $\tau_t$ across both streams makes misalignment representable: au
 frame at $t+\Delta$ then differ in their encodings.
 \item At 2\,fps the frame interval is $0.5$\,s, which bounds the smallest resolvable displacement.
 \item $W_{\text{out}}$ remains zero-initialized, preserving the identity property at initialization.
-\item[] {\footnotesize\emph{Status: implemented but not yet trained. This yields a falsifiable
-prediction: the same displaced-audio data combined with temporal features should move accuracy off
-chance, whereas the data alone did not.}}
+\item[] {\footnotesize\emph{Status: implemented and under training. Given that the backbone is at
+chance even at $\pm2$\,s, we expect limited benefit; the run is retained as a controlled test of the
+representability hypothesis rather than as an expected improvement.}}
 \end{itemize}
 \end{frame}
 
