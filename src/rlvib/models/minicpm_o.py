@@ -34,6 +34,14 @@ def _shim_transformers() -> None:
             }
     except Exception:  # noqa: BLE001  -- best-effort; a real import error surfaces at load
         pass
+    try:
+        # newer transformers reads model.all_tied_weights_keys during load finalization;
+        # MiniCPM-o's class predates it -> provide an empty default (it has no tied weights we use).
+        from transformers.modeling_utils import PreTrainedModel
+        if "all_tied_weights_keys" not in vars(PreTrainedModel):
+            PreTrainedModel.all_tied_weights_keys = {}
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class MiniCPMO:
