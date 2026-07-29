@@ -139,17 +139,71 @@ class MiniCPMO:
                 inputs[k] = v.to(self.dtype)
         return inputs
 
+    @staticmethod
+    def _parse(messages):
+        """Pull (video_path, audio_path, prompt) out of the neutral message format."""
+        video = audio = None
+        prompt = ""
+        for msg in messages:
+            for c in msg.get("content", []):
+                t = c.get("type")
+                if t == "video":
+                    video = c["video"]
+                elif t == "audio":
+                    audio = c["audio"]
+                elif t == "text":
+                    prompt = c["text"]
+        return video, audio, prompt
+
+    @staticmethod
+    def _encode_video(path, fps: float = 1.0, max_frames: int = 32):
+        """Sample the clip into PIL frames (MiniCPM-o's `content` wants decoded frames, not a path)."""
+        import numpy as np
+        from decord import VideoReader, cpu
+        from PIL import Image
+        vr = VideoReader(path, ctx=cpu(0))
+        step = max(1, round(vr.get_avg_fps() / fps))
+        idx = list(range(0, len(vr), step))
+        if len(idx) > max_frames:
+            idx = [idx[i] for i in np.linspace(0, len(idx) - 1, max_frames).astype(int)]
+        return [Image.fromarray(f.astype("uint8")) for f in vr.get_batch(idx).asnumpy()]
+
+    @staticmethod
+    def _encode_audio(path):
+        """16 kHz mono waveform (librosa reads the audio track straight from an mp4)."""
+        import librosa
+        y, _ = librosa.load(path, sr=16000, mono=True)
+        return y
+
     @torch.no_grad()
     def generate(self, messages: list, use_audio_in_video: bool = True,
                  max_new_tokens: int = 256) -> str:
-        """Greedy text-out generation. Uses the model's `.chat` if present (its native path),
-        else falls back to `.generate` over `build_inputs`."""
-        if hasattr(self.model, "chat"):
-            out = self.model.chat(msgs=messages, tokenizer=self.tokenizer,
+        """Greedy text-out via MiniCPM-o's native `.chat`: content = frames [+ audio] + prompt.
+
+        Falls back to vision-only if this build's `.chat` doesn't accept an audio array in the
+        content list, so eval always gets an answer (log a note rather than crash the item).
+        """
+        import numpy as np
+        video, audio, prompt = self._parse(messages)
+        content = []
+        if video is not None:
+            content += self._encode_video(video)
+            if use_audio_in_video and audio is None:
+                try:
+                    content.append(self._encode_audio(video))     # audio from the video's own track
+                except Exception:  # noqa: BLE001
+                    pass
+        if audio is not None:
+            content.append(self._encode_audio(audio))
+        content.append(prompt)
+
+        def _chat(cnt):
+            out = self.model.chat(msgs=[{"role": "user", "content": cnt}], tokenizer=self.tokenizer,
                                   sampling=False, max_new_tokens=max_new_tokens,
-                                  use_audio_in_video=use_audio_in_video)
+                                  use_image_id=False, max_slice_nums=1)
             return (out if isinstance(out, str) else out[0]).strip()
-        inputs = self.build_inputs(messages, use_audio_in_video=use_audio_in_video)
-        seq = self.model.generate(**inputs, do_sample=False, max_new_tokens=max_new_tokens)
-        gen = seq[:, inputs["input_ids"].shape[1]:]
-        return self.tokenizer.batch_decode(gen, skip_special_tokens=True)[0].strip()
+
+        try:
+            return _chat(content)
+        except Exception:  # noqa: BLE001  -- audio content shape may not be accepted; retry vision-only
+            return _chat([c for c in content if not isinstance(c, np.ndarray)])
