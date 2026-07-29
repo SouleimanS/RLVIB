@@ -38,7 +38,7 @@ nvidia-smi -L
 exec > >(tee -a "$PBS_O_WORKDIR/runs/sync_${BENCH}_${MODEL:-qwen3-omni}${TAG}_out.txt") 2>&1
 
 python -u -m rlvib.eval.run_sync --bench "$BENCH" --model "${MODEL:-qwen3-omni}" \
-    --limit "${LIMIT:-0}" $BN_ARG \
+    --limit "${LIMIT:-0}" --offsets "${OFFSETS:-0.5,1,2}" $BN_ARG \
     --out "runs/sync_${BENCH}_${MODEL:-qwen3-omni}${TAG}.json"
 
 echo "=== Done $(date) ==="

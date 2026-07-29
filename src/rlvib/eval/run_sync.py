@@ -45,6 +45,8 @@ def main() -> int:
     ap.add_argument("--model", default="qwen3-omni")
     ap.add_argument("--bottleneck", default=None)
     ap.add_argument("--limit", type=int, default=0, help="0 = all")
+    ap.add_argument("--offsets", default="0.5,1,2",
+                    help="AVE-Shift displacement magnitudes in seconds. Use e.g. '2' to test\n                         only clearly-resolvable shifts (at 2 fps, 0.5 s is a single frame).")
     ap.add_argument("--fps", type=float, default=None)
     ap.add_argument("--max-new-tokens", type=int, default=8)
     ap.add_argument("--gen-timeout", type=int, default=180)
@@ -63,7 +65,9 @@ def main() -> int:
         print(f"attached bottleneck <- {args.bottleneck}" + ("  (prompt-aware)" if cond else ""),
               flush=True)
 
-    ds = build_avshift(n=args.limit or 200) if args.bench == "avshift" else load_vggsound_sync()
+    offs = tuple(float(x) for x in args.offsets.split(",") if x.strip())
+    ds = (build_avshift(n=args.limit or 200, offsets=offs) if args.bench == "avshift"
+          else load_vggsound_sync())
     n = len(ds) if args.limit in (0, None) else min(args.limit, len(ds))
     print(f"sync[{args.bench}]: {n}/{len(ds)} items", flush=True)
 
@@ -87,6 +91,13 @@ def main() -> int:
         det = [(r["det_correct"], True) for r in records]
         dirp = [(r["dir_correct"], True) for r in records if r.get("dir_correct") is not None]
         res = {"detection": _acc(det), "direction": _acc(dirp)}
+        # per-|offset| detection: does accuracy scale with displacement? (chance if no signal)
+        by_off = {}
+        for r in records:
+            d = r.get("delta")
+            if d:
+                by_off.setdefault(f"{abs(float(d)):.1f}s", []).append((r["det_correct"], True))
+        res["detection_by_offset"] = {k: _acc(v) for k, v in sorted(by_off.items())}
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
         json.dump({"results": res, "records": records}, open(args.out, "w"), indent=2)
         return res
@@ -114,6 +125,8 @@ def main() -> int:
     print(f"\n=== sync[{args.bench}] ===")
     print(f"  detection acc={res['detection']['acc']:.4f} (n={res['detection']['n']})")
     print(f"  direction acc={res['direction']['acc']:.4f} (n={res['direction']['n']})")
+    for k, v in res.get("detection_by_offset", {}).items():
+        print(f"    |offset|={k}: detection={v['acc']:.4f} (n={v['n']})")
     print(f"wrote {args.out}", flush=True)
     return 0
 
