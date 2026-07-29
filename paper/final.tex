@@ -591,12 +591,50 @@ variant that increases attention to the audio-visual evidence.
 \end{itemize}
 \vspace{0.4em}
 {\footnotesize Comparable benchmark improvements are therefore obtained through two distinct
-mechanisms, only one of which corresponds to the hypothesized account.}
+mechanisms. The likelihood analysis (next slide) shows both variants increase audio dependence;
+they differ in whether attention to the evidence also increases.}
 \end{column}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Mechanism II: analysis of the learned parameters}
+\begin{frame}{Mechanism II: dependence of the answer on the audio}
+\begin{columns}[T]
+\begin{column}{0.54\textwidth}
+\centering
+\figslot{ll_shift.png}{\linewidth}\\[2pt]
+{\scriptsize Log-likelihood of the gold answer under the true audio (teal) and under substituted
+audio (magenta); KDE over 40 AVE clips, dashed lines are means.}
+\end{column}
+\begin{column}{0.46\textwidth}\small
+{\footnotesize Substituting the audio and re-scoring the \emph{same} answer measures how much the
+response depends on the audio stream. A model that ignores audio yields a shift near zero.}
+\vspace{0.4em}
+\centering
+\scriptsize
+\begin{tabular}{l c}
+\toprule
+Qwen3-Omni & shift \\
+\midrule
+frozen base    & $-0.515$ \\
+$+$ swap-DPO   & $-1.698$ \\
+$+$ FiLM       & $\mathbf{-1.848}$ \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.3em}
+{\scriptsize Measured, n$=$40 pairs.}
+\end{column}
+\end{columns}
+\vfill
+\begin{itemize}\footnotesize
+\item Both adapters increase audio dependence by a factor of roughly $3.3$--$3.6$ relative to the
+frozen backbone; the difference between them is small.
+\item Taken with the attention analysis, the two variants are separable: swap-DPO raises audio
+dependence \emph{without} increasing attention to audio-visual tokens (re-encoding), whereas FiLM
+raises both.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Mechanism III: analysis of the learned parameters}
 {\small Three measurements computed directly from the trained FiLM checkpoint, without inference:}
 \vspace{0.3em}
 \centering

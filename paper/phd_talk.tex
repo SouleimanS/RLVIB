@@ -646,9 +646,9 @@ answer \emph{depends on what it hears}.
 \begin{column}{0.5\textwidth}
 {\small\textbf{Result}}
 \begin{itemize}\scriptsize
-\item base $-0.42$\ \ $\cdot$\ \ $+$DPO $-0.51$: \emph{same} near-deafness --- re-encoding, not listening. % FAKE-DATA
-\item $+$\textbf{FiLM}: $\mathbf{-1.28}$ ($\approx 3\times$ base) --- the answer \emph{depends on the
-audio}; the likelihood-space twin of the $+38\%$ attention result. % FAKE-DATA
+\item base $-0.515$\ \ $\cdot$\ \ $+$DPO $\mathbf{-1.698}$: DPO \emph{does} increase audio dependence. % REAL
+\item $+$\textbf{FiLM}: $\mathbf{-1.848}$ ($\approx 3.6\times$ base) --- marginally above DPO; the two arms
+separate on \emph{attention}, not on likelihood dependence. % REAL
 \end{itemize}
 \end{column}
 \end{columns}
