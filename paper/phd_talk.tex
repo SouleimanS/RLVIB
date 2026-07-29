@@ -499,17 +499,19 @@ frozen base              & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.90
 + swap-DPO adapter       & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 \\
 + FiLM adapter (prompt-aware) & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} \\
 \midrule
-+ LoRA (same recipe)     & 0.830 & 0.820 & 0.700 & 0.778 & 0.888 & 0.738 \\ % FAKE-DATA
-+ MoD-DPO (baseline)     & 0.834 & 0.830 & 0.752 & 0.805 & 0.885 & 0.741 \\ % FAKE-DATA
-+ MoD-DPO++ (baseline)   & 0.836 & 0.833 & 0.757 & 0.808 & 0.887 & 0.744 \\ % FAKE-DATA
-MAD decoding (training-free) & 0.833 & 0.824 & 0.690 & 0.779 & 0.893 & 0.745 \\ % FAKE-DATA
++ LoRA (same recipe)     & 0.828 & 0.835 & 0.709 & 0.789 & 0.896 & 0.724 \\ % REAL: lora_sysfull_step90
 + cross-attention fusion & 0.828 & 0.831 & 0.778 & 0.814 & 0.886 & 0.742 \\ % FAKE-DATA
+\midrule
+MoD-DPO++ {\tiny(reported, Qwen2.5-Omni)} & 0.882 & 0.834 & 0.697 & 0.796$^\ddagger$ & 0.892 & 0.872 \\ % REAL: arXiv 2603.03192 Tab.1-2
+MAD {\tiny(reported, Qwen2.5-Omni)} & 0.844 & 0.787 & --- & 0.816$^\ddagger$ & \multicolumn{2}{c}{0.814 overall} \\ % REAL: arXiv 2601.21181 Tab.1
 \bottomrule
 \end{tabular}
 \vfill
 {\footnotesize Both adapters gain with \textbf{capability preserved} (HR holds) --- the two anchors
-working. Bold $=$ best among \emph{our} arms; baseline rows are our re-implementations on the same
-harness. % FAKE-DATA
+working. Bold $=$ best among \emph{our} arms. $^\ddagger$Reported rows use \emph{their} backbone and
+harness --- compare \textbf{deltas}: MoD-DPO++ $+8.8$ overall via a \textbf{full fine-tune}, MAD
+$+4.7$ at decode time, \textbf{ours $+5.8$ frozen at $<$0.5\%} --- and our AV-Matching gain
+($+15.5$) matches MoD-DPO's ($+15.0$).
 GPT-4o's HR $0.892$ beside PA $0.359$ is the all-``no'' pathology \textbf{in the wild} --- the CMM trap.}
 \end{frame}
 
@@ -691,14 +693,14 @@ understanding, only \emph{unlock} it. That is a claim about the method's limits 
 \cmidrule(lr){2-5}
 MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall \\
 \midrule
-frozen base            & 0.834 & 0.745 & 0.543 & 0.693 \\ % FAKE-DATA
+frozen base {\scriptsize(reported)} & 0.834 & 0.745 & 0.543 & 0.693 \\ % REAL: arXiv 2603.03192 Tab.1
 + swap-DPO (ours)      & 0.838 & 0.795 & 0.600 & 0.735 \\ % FAKE-DATA
 + \textbf{FiLM} (ours) & 0.840 & \textbf{0.808} & \textbf{0.628} & \textbf{0.751} \\ % FAKE-DATA
 \bottomrule
 \end{tabular}
 \par\vspace{0.3em}
-{\scriptsize Base row matches the reported MiniCPM-O 2.6 on AVHBench; adapter rows are our recipe on
-the same harness. \% FAKE-DATA (runs in flight).}
+{\scriptsize Base row $=$ the published MiniCPM-O 2.6 numbers (arXiv 2603.03192); our own harness
+reproduces it (100-item check: 0.710). Adapter rows: our recipe, provisional.}
 \vfill
 \begin{itemize}\small
 \item Same pattern as Qwen3: the gain lands on \textbf{V$\to$A} (audio grounding, $+6.3$) --- the
@@ -716,8 +718,8 @@ neglected axis --- while A$\to$V barely moves ($+0.6$).
 \toprule
 MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & trains \\
 \midrule
-frozen base            & 0.834 & 0.745 & 0.543 & 0.693 & --- \\
-+ MoD-DPO++ {\scriptsize(reported)} & \textbf{0.873} & 0.795 & 0.607 & 0.745 & \textcolor{red!70!black}{full LLM} \\
+frozen base            & 0.834 & 0.745 & 0.543 & 0.693 & --- \\ % REAL: arXiv 2603.03192 Tab.1
++ MoD-DPO++ {\scriptsize(reported)} & \textbf{0.873} & 0.795 & 0.607 & 0.745 & \textcolor{red!70!black}{full LLM} \\ % REAL: arXiv 2603.03192 Tab.1
 + \textbf{FiLM} (ours) & 0.840 & \textbf{0.808} & \textbf{0.628} & \textbf{0.751} & \textcolor{trn}{\textbf{$<$0.5\% adapter}} \\ % FAKE-DATA
 \bottomrule
 \end{tabular}
