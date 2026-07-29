@@ -20,6 +20,22 @@ import torch  # noqa: E402
 DEFAULT_MODEL = "openbmb/MiniCPM-o-2_6"
 
 
+def _shim_transformers() -> None:
+    """MiniCPM-o 2.6's remote code targets transformers ~4.44; the newer transformers this env
+    needs for Qwen3-Omni removed some symbols it imports. Re-inject the ones its modeling file
+    pulls in so the model loads without downgrading the whole environment. No-op if present."""
+    try:
+        import transformers.models.whisper.modeling_whisper as _w
+        if not hasattr(_w, "WHISPER_ATTENTION_CLASSES"):
+            _w.WHISPER_ATTENTION_CLASSES = {
+                "eager": _w.WhisperAttention,
+                "sdpa": getattr(_w, "WhisperSdpaAttention", _w.WhisperAttention),
+                "flash_attention_2": getattr(_w, "WhisperFlashAttention2", _w.WhisperAttention),
+            }
+    except Exception:  # noqa: BLE001  -- best-effort; a real import error surfaces at load
+        pass
+
+
 class MiniCPMO:
     """Thin wrapper around MiniCPM-o 2.6 for text-out audio-visual inference."""
 
@@ -28,6 +44,7 @@ class MiniCPMO:
     def __init__(self, model_id: str = DEFAULT_MODEL, attn: str = "sdpa"):
         from transformers import AutoModel, AutoTokenizer
 
+        _shim_transformers()
         self.model_id = model_id
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         self.model = AutoModel.from_pretrained(
