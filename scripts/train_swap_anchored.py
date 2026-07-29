@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore")  # librosa/audioread deprecation spam floods t
 import torch
 
 from rlvib.data import ave
-from rlvib.data.pairs import make_swap_examples
+from rlvib.data.pairs import make_shift_examples, make_swap_examples, make_video_swap_examples
 from rlvib.models import get_model
 from rlvib.models.bottleneck import (
     FiLMVariationalBottleneck,
@@ -155,6 +155,9 @@ def main() -> int:
     ap.add_argument("--delta", type=float, default=0.0)
     ap.add_argument("--lam-kl", type=float, default=1.0)
     ap.add_argument("--eval-every", type=int, default=10)
+    ap.add_argument("--swap", choices=("audio", "video", "shift"), default="audio",
+                    help="which counterfactual to train on: audio-swap (V->A grounding, default), "
+                         "video-swap (A->V grounding), or shift (temporal / shift-DPO).")
     ap.add_argument("--swap-dir", default="data/AVE/swapped")
     ap.add_argument("--save-dir", default=None, help="default: runs/anchored_<model>")
     ap.add_argument("--seed", type=int, default=0, help="training seed (data order + init) for repeats")
@@ -186,15 +189,22 @@ def main() -> int:
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=float, default=32.0)
     # --- cross-attention fusion arm (audio<->vision before the LLM) ---
+    ap.add_argument("--temporal", action="store_true",
+                    help="clock-feature bottleneck (TemporalVariationalBottleneck); pair with "
+                         "--swap shift for shift-DPO.")
     ap.add_argument("--xattn", action="store_true",
                     help="train the bidirectional cross-attention fusion arm instead of the VIB "
                          "(identical anchored swap-DPO recipe).")
     args = ap.parse_args()
-    if sum((args.lora, args.film, args.xattn)) > 1:
-        ap.error("--lora / --film / --xattn are mutually exclusive arms")
+    if sum((args.lora, args.film, args.xattn, args.temporal)) > 1:
+        ap.error("--lora / --film / --xattn / --temporal are mutually exclusive arms")
     if args.lora and args.init_from:
         ap.error("--init-from is the FiLM warm-start; LoRA trains from its zero-init")
-    args.save_dir = args.save_dir or f"runs/anchored_{args.model}"
+    if args.film and args.swap != "audio":
+        ap.error("--film is the audio-swap (HEAR/SEE) experiment; use --swap audio")
+    # non-audio swaps get their own save-dir so checkpoints never collide with the audio run
+    _suffix = "" if args.swap == "audio" else f"_{args.swap}"
+    args.save_dir = args.save_dir or f"runs/anchored_{args.model}{_suffix}"
     torch.manual_seed(args.seed)
     # massive-activation backbones (VideoLLaMA2) need the scale-invariant VIB input;
     # Qwen-Omni (normal scale) stays off so its results are unchanged.
@@ -214,6 +224,10 @@ def main() -> int:
         cls_name = "CrossModalAttention"
         n_train = sum(p.numel() for p in bns.parameters())
         print(f"[xattn] bidirectional audio<->vision fusion  trainable={n_train / 1e6:.2f}M", flush=True)
+    elif args.temporal:
+        from rlvib.models.temporal import TemporalVariationalBottleneck
+        bns, handles = attach_bottlenecks(m, cls=TemporalVariationalBottleneck, normalize_input=nin)
+        cls_name = "TemporalVariationalBottleneck"
     else:
         cls = FiLMVariationalBottleneck if args.film else VariationalBottleneck
         bns, handles = attach_bottlenecks(m, cls=cls, normalize_input=nin)
@@ -234,7 +248,12 @@ def main() -> int:
     items = ave.load_ave("train")
     rng = random.Random(args.seed)
     rng.shuffle(items)
-    swap = make_swap_examples(items, args.pairs, args.swap_dir, cats, rng=rng)
+    if args.swap == "video":
+        swap = make_video_swap_examples(items, args.pairs, args.swap_dir, cats, rng=rng)
+    elif args.swap == "shift":
+        swap = make_shift_examples(items, args.pairs, args.swap_dir, rng=rng)
+    else:
+        swap = make_swap_examples(items, args.pairs, args.swap_dir, cats, rng=rng)
     anchor_items = items[:400]
     probe = _yesno_probe(m, items[400:440], cats, random.Random(1))
     routing_records = list(swap[: min(8, len(swap))]) if args.film else []   # fixed FiLM diagnostic set
@@ -266,7 +285,8 @@ def main() -> int:
                 sb.append({"messages": m.message(video=r["video_path"],
                                                  prompt=ave.format_mcq(r["question"], r["options"])),
                            "prompt": r["question"], "qtype": "hear",
-                           "chosen_letter": r["audio_letter"], "rejected_letter": r["visual_letter"]})
+                           "chosen_letter": r.get("chosen_letter", r.get("audio_letter")),
+                           "rejected_letter": r.get("rejected_letter", r.get("visual_letter"))})
                 if args.film and (args.see_frac >= 1.0 or rng.random() < args.see_frac):
                     see = ave.make_see_mcq(r["audio_event"], r["visual_event"], cats, rng=rng)
                     sb.append({"messages": m.message(video=r["video_path"],

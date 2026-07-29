@@ -1,0 +1,44 @@
+#!/bin/bash
+#PBS -N rlvib_sync
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o rlvib_sync.qsub.log
+
+# Temporal-alignment (sync) eval: synced-vs-shifted detection + lags-vs-leads direction.
+#   BENCH=avshift qsub -v BENCH,MODEL scripts/eval_sync.qsub                 # AVE-Shift (ours), base
+#   BENCH=avshift MODEL=qwen3-omni BOTTLENECK=runs/anchored_qwen3-omni_shift/bottleneck_step60.pt \
+#       TAG=_shift_step60 qsub -v BENCH,MODEL,BOTTLENECK,TAG scripts/eval_sync.qsub
+#   BENCH=vggsync qsub -v BENCH,MODEL scripts/eval_sync.qsub                 # VGGSound-Sync (OOD)
+# AVE-Shift materializes shifted clips on demand (ffmpeg, cached in data/AVE/shifted).
+# VGGSound-Sync needs data/VGGSoundSync/ populated (see src/rlvib/data/avshift.py docstring).
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u
+conda activate "${CONDA_ENV:-rlvib}"
+set -u
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+BENCH="${BENCH:-avshift}"
+BN_ARG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
+
+echo "=== Node: $(hostname)  Date: $(date)  bench=$BENCH  model=${MODEL:-qwen3-omni}  bottleneck=${BOTTLENECK:-none} ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/sync_${BENCH}_${MODEL:-qwen3-omni}${TAG}_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_sync --bench "$BENCH" --model "${MODEL:-qwen3-omni}" \
+    --limit "${LIMIT:-0}" $BN_ARG \
+    --out "runs/sync_${BENCH}_${MODEL:-qwen3-omni}${TAG}.json"
+
+echo "=== Done $(date) ==="
