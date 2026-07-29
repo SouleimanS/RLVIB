@@ -2,7 +2,7 @@
 name = "rlvib"
 version = "0.0.1"
 description = "Grounding audio to video in multimodal LLMs via an information bottleneck trained with RL."
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 # Runtime deps are managed by environment.yml (conda + pip). This file just makes
 # `rlvib` importable:  pip install -e .   (or run with PYTHONPATH=src)
 
