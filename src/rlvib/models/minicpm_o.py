@@ -200,6 +200,13 @@ class MiniCPMO:
         for k, v in list(inputs.items()):
             if torch.is_tensor(v) and torch.is_floating_point(v):
                 inputs[k] = v.to(self.dtype)
+        # MiniCPM-o's forward(data) reads data["position_ids"], which its TRAINING collator adds
+        # (the processor does not). Supply plain 0..L-1 positions per sequence.
+        if "position_ids" not in inputs and "input_ids" in inputs:
+            ids = inputs["input_ids"]
+            b, ln = (ids.shape[0], ids.shape[1]) if ids.dim() == 2 else (1, ids.shape[-1])
+            inputs["position_ids"] = (torch.arange(ln, device=ids.device, dtype=torch.long)
+                                      .unsqueeze(0).expand(b, ln))
         return inputs
 
     def answer_logits(self, messages: list, use_audio_in_video: bool = True):
