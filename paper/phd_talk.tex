@@ -942,7 +942,7 @@ in-the-wild sync, the out-of-distribution check Wen et al.\ use).}
 \cmidrule(lr){2-3}\cmidrule(lr){4-4}
 Qwen3-Omni & synced vs shifted & lags vs leads & (OOD) \\
 \midrule
-frozen base                    & 0.512 & 0.503 & 0.508 \\ % FAKE-DATA
+frozen base                    & 0.495 & 0.500 & --- \\ % REAL: runs/sync_avshift_qwen3-omni.json (n=200 det / 100 dir)
 + shift-DPO                    & 0.741 & 0.688 & 0.663 \\ % FAKE-DATA
 + shift-DPO $+$ clock $\tau_t$ & \textbf{0.786} & \textbf{0.752} & \textbf{0.702} \\ % FAKE-DATA
 \bottomrule
@@ -952,8 +952,8 @@ frozen base                    & 0.512 & 0.503 & 0.508 \\ % FAKE-DATA
 $=\varnothing$, as always.}
 \vfill
 \begin{itemize}\small
-\item The base rows \emph{are} the deaf model: it answers ``synced'' everywhere, so on a balanced set
-it scores a coin flip --- the local replica of Wen et al.'s $100\to1.4$.
+\item The base row is \textbf{measured}: detection $0.495$, direction $0.500$ --- an exact coin
+flip. The deaf model, replicated on our own harness (Wen et al.'s $100\to1.4$, locally confirmed).
 \item Direction (\emph{lags vs leads}) is harder than detection, and OOD gains are smaller ---
 the honest ordering you should expect.
 \item The clock features earn their keep \textbf{on top of} the data: $+4.5$ detection, $+6.4$
