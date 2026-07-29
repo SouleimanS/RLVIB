@@ -34,7 +34,7 @@ export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 echo "=== Node: $(hostname)  Date: $(date) ==="
 nvidia-smi -L
 
-exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_${MODEL:-qwen3-omni}${EXP:+_$EXP}_out.txt") 2>&1
+exec > >(tee -a "$PBS_O_WORKDIR/runs/train_anchored_${MODEL:-qwen3-omni}${EXP:+_$EXP}${SWAP:+_$SWAP}_out.txt") 2>&1
 
 # optional prompt-aware FiLM (Stage 2) flags -- empty by default => unchanged Stage-1 behavior
 EXTRA=()
