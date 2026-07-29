@@ -595,19 +595,21 @@ per question.
 \toprule
 short, n$=$900 & acc & $\Delta$ \\
 \midrule
-frozen base     & 0.768 & --- \\ % FAKE-DATA
-+ swap-DPO      & 0.766 & $-0.2$ \\ % FAKE-DATA
-+ \textbf{FiLM} & \textbf{0.771} & $+0.3$ \\ % FAKE-DATA
+frozen base     & \textbf{0.842} & --- \\ % REAL: runs/videomme_qwen3-omni.json n=900
++ swap-DPO      & 0.828 & $-1.4$ \\ % REAL: runs/videomme_qwen3-omni_broad_step60.json
++ FiLM          & 0.837 & $-0.6$ \\ % REAL: runs/videomme_qwen3-omni_film_step160.json
 \bottomrule
 \end{tabular}
 \par\vspace{0.5em}
-{\footnotesize All within noise ($\pm3$ pts at 95\%): \textbf{no alignment tax}.}
+{\footnotesize n$=$900 $\Rightarrow$ $\pm2.4$ pts at 95\%. Both deltas are \textbf{inside} that
+band; \textbf{FiLM preserves video QA better than DPO} ($-0.6$ vs $-1.4$).}
 \end{column}
 \end{columns}
 \vfill
-{\small Three guards, three axes: CMM $=$ hallucination (improves), MMAU $=$ audio reasoning
-($-1$ to $-2$, a small tax), Video-MME $=$ video (untouched). The gain is \textbf{where we trained
-it}; the guards say honestly what it costs elsewhere.}
+{\small Three guards, three axes: CMM $=$ hallucination (\textbf{improves}), MMAU $=$ audio
+reasoning ($-1.2$/$-1.7$), Video-MME $=$ video QA ($-1.4$/$-0.6$). All off-distribution deltas are
+\textbf{within noise}, and \textbf{FiLM is the gentler of the two} on both. The gain is where we
+trained it; the guards price what it costs elsewhere.}
 \end{frame}
 
 % ============ 20. Mechanism: attention ============
