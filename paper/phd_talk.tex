@@ -699,43 +699,49 @@ understanding, only \emph{unlock} it. That is a claim about the method's limits 
 \cmidrule(lr){2-5}
 MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall \\
 \midrule
-frozen base {\scriptsize(reported)} & 0.834 & 0.745 & 0.543 & 0.693 \\ % REAL: arXiv 2603.03192 Tab.1
-+ swap-DPO (ours)      & 0.838 & 0.795 & 0.600 & 0.735 \\ % FAKE-DATA
-+ \textbf{FiLM} (ours) & 0.840 & \textbf{0.808} & \textbf{0.628} & \textbf{0.751} \\ % FAKE-DATA
+base, \emph{our} harness   & 0.751 & 0.796 & 0.678 & 0.744 \\ % REAL: runs/avhbench_minicpm-o.json n=5302 parse 1.00
+base, \emph{reported} {\scriptsize(2603.03192)} & 0.834 & 0.745 & 0.543 & 0.693 \\ % REAL: arXiv 2603.03192 Tab.1
+\midrule
++ swap-DPO (ours)      & \XXX & \XXX & \XXX & \XXX \\
++ FiLM (ours)          & \XXX & \XXX & \XXX & \XXX \\
 \bottomrule
 \end{tabular}
 \par\vspace{0.3em}
-{\scriptsize Base row $=$ the published MiniCPM-O 2.6 numbers (arXiv 2603.03192); our own harness
-reproduces it (100-item check: 0.710). Adapter rows: our recipe, provisional.}
+{\scriptsize Both base rows are real, n$=$5302, parse $1.00$. CMM (ours): PA $0.897$ / HR $0.578$.}
 \vfill
 \begin{itemize}\small
-\item Same pattern as Qwen3: the gain lands on \textbf{V$\to$A} (audio grounding, $+6.3$) --- the
-neglected axis --- while A$\to$V barely moves ($+0.6$).
-\item $+5.8$ overall on an 8B open omni-model: the recipe is \textbf{not Qwen-specific}.
+\item \textbf{Harnesses disagree by $+5$ points} (0.744 vs 0.693) --- same weights, same benchmark,
+different prompt/suffix/fps. Exactly the lever from the protocol slide, in the wild.
+\item So we compare \textbf{deltas within a harness}, never absolute numbers across papers.
+\item MiniCPM's CMM \textbf{HR $0.578$} (vs Qwen3's $0.733$) --- it hallucinates far more on the
+audio axis: more headroom, and the adapter rows are training now.
 \end{itemize}
 \end{frame}
 
 % ============ 21c. Frozen adapter vs full fine-tune ============
-\begin{frame}{Same backbone, same benchmark: we edge out MoD-DPO++ --- frozen}
+\begin{frame}{The fair comparison: \emph{deltas}, not absolute numbers}
 \centering
-\renewcommand{\arraystretch}{1.2}
+\renewcommand{\arraystretch}{1.25}
 \small
-\begin{tabular}{l cccc l}
+\begin{tabular}{l l c c l}
 \toprule
-MiniCPM-O 2.6 & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & trains \\
+backbone & method & base $\to$ trained & $\Delta$ & trains \\
 \midrule
-frozen base            & 0.834 & 0.745 & 0.543 & 0.693 & --- \\ % REAL: arXiv 2603.03192 Tab.1
-+ MoD-DPO++ {\scriptsize(reported)} & \textbf{0.873} & 0.795 & 0.607 & 0.745 & \textcolor{red!70!black}{full LLM} \\ % REAL: arXiv 2603.03192 Tab.1
-+ \textbf{FiLM} (ours) & 0.840 & \textbf{0.808} & \textbf{0.628} & \textbf{0.751} & \textcolor{trn}{\textbf{$<$0.5\% adapter}} \\ % FAKE-DATA
+MiniCPM-O 2.6 & MoD-DPO++ {\scriptsize(reported)} & $0.693 \to 0.745$ & $+5.2$ & \textcolor{red!70!black}{full LLM} \\ % REAL: arXiv 2603.03192
+Qwen2.5-Omni  & MoD-DPO++ {\scriptsize(reported)} & $0.708 \to 0.796$ & $+8.8$ & \textcolor{red!70!black}{full LLM} \\ % REAL: arXiv 2603.03192
+Qwen2.5-Omni  & MAD {\scriptsize(reported)}       & $0.769 \to 0.816$ & $+4.7$ & \textcolor{frz}{decode-time} \\ % REAL: arXiv 2601.21181
+\midrule
+Qwen3-Omni    & \textbf{FiLM (ours)}   & $0.761 \to 0.819$ & \textbf{+5.8} & \textcolor{trn}{\textbf{$<$0.5\% adapter, frozen}} \\ % REAL
+MiniCPM-O 2.6 & FiLM (ours)            & $0.744 \to$ \XXX  & \XXX & \textcolor{trn}{\textbf{$<$0.5\% adapter, frozen}} \\
 \bottomrule
 \end{tabular}
 \vfill
 \begin{itemize}\small
-\item \textbf{Edges out} full-model MoD-DPO++ overall (\textbf{0.751 vs 0.745}) --- winning V$\to$A and
-AV-Matching --- while training a \textbf{$<$0.5\% adapter} and leaving the backbone \emph{frozen}
-(MoD-DPO++ fine-tunes the entire model). % FAKE-DATA
-\item Same accuracy tier as a full fine-tune, at a fraction of the cost and \textbf{fully reversible}
---- the trade the whole project is about.
+\item Absolute numbers are \textbf{not comparable across papers} --- our MiniCPM base reads $0.744$,
+theirs $0.693$, same weights. Only the \textbf{delta within one harness} means anything.
+\item On that footing: we sit \textbf{between} a full fine-tune ($+8.8$) and training-free decoding
+($+4.7$) at $+5.8$ --- while training \textbf{$<$0.5\%} of the model and staying reversible.
+\item AV-Matching is where the method bites: \textbf{$+15.5$} (ours) vs $+15.0$ (MoD-DPO, reported).
 \end{itemize}
 \end{frame}
 
