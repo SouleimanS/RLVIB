@@ -203,7 +203,16 @@ class MiniCPMO:
                                   use_image_id=False, max_slice_nums=1)
             return (out if isinstance(out, str) else out[0]).strip()
 
+        import sys
+        import traceback
         try:
             return _chat(content)
-        except Exception:  # noqa: BLE001  -- audio content shape may not be accepted; retry vision-only
-            return _chat([c for c in content if not isinstance(c, np.ndarray)])
+        except Exception:  # noqa: BLE001  -- surface the REAL stack, then retry vision-only
+            print("[minicpm.generate] full content attempt failed:", file=sys.stderr)
+            traceback.print_exc()
+            try:
+                return _chat([c for c in content if not isinstance(c, np.ndarray)])
+            except Exception:  # noqa: BLE001
+                print("[minicpm.generate] vision-only retry ALSO failed:", file=sys.stderr)
+                traceback.print_exc()
+                raise
