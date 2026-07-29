@@ -12,6 +12,9 @@
 #   conda env create -f environment-minicpm.yml
 #   conda activate rlvib_minicpm
 #   pip install -e .                                  # editable rlvib into this env
+#   pip install flash-attn --no-build-isolation       # MiniCPM's modeling file hard-imports it
+#                                                     # (fast if a wheel matches torch2.3/cu121/py310;
+#                                                     #  else a ~20-40min CUDA build. Fallback: ==2.6.3)
 #   # weights already cached at openbmb/MiniCPM-o-2_6
 #
 # Run ANY MiniCPM job by pointing the qsub at this env (the qsubs honor CONDA_ENV):
