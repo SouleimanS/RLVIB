@@ -1,7 +1,8 @@
 % RLVIB progress talk.  Build:  cd paper && tectonic slides.tex   (or: pdflatex slides.tex x2)
 % Reuses paper/figures/*.jpg (the extracted frames); \frm shows a placeholder box if a frame is absent,
 % so it compiles regardless. Figures not yet generated (ll_shift.png) fall back to labelled boxes.
-% [TBD] marks placeholder numbers -- replace with measured values before presenting.
+% Lines tagged '% REAL:' carry MEASURED numbers (file named in the comment).
+% Blocks tagged '% !! FABRICATED' are invented placeholders -- never present them as measured.
 \documentclass[aspectratio=169,11pt]{beamer}
 \usetheme{default}
 \usecolortheme{seahorse}
@@ -654,7 +655,7 @@ VideoLLaMA2           & \textbf{0.801} & 0.775 & \textbf{0.568} & \textbf{0.707}
 \end{frame}
 
 % --- 24. Paired significance ---
-% FAKE-DATA: single-seed deltas re-dressed as 3-seed mean+-std -- re-check after the seed runs
+% !! FABRICATED: single-seed deltas dressed as 3-seed mean+-std. NO seed runs exist. DO NOT PRESENT AS MEASURED.
 \begin{frame}{Are the gains real? 3 seeds, paired statistics (held-out, n$=$5002)}
 \centering\footnotesize
 \begin{tabular}{l r@{\;}l c c c}
@@ -817,7 +818,7 @@ answer \emph{depends on what it hears}.
 \end{itemize}
 \end{column}
 \begin{column}{0.5\textwidth}
-{\small\textbf{Result}}  % FAKE-DATA: placeholder shifts pending probe_ll_shift runs -- re-check before presenting
+{\small\textbf{Result}}  % !! FABRICATED: ll-shift values invented; probe_ll_shift.py has NOT been run. DO NOT PRESENT AS MEASURED.
 \begin{itemize}\scriptsize
 \item base $-0.42$\ \ $\cdot$\ \ $+$DPO $-0.51$: \emph{same} near-deafness --- re-encoding, not listening.
 \item $+$\textbf{FiLM}: $\mathbf{-1.28}$ ($\approx 3\times$ base) --- the answer \emph{depends on the
@@ -827,7 +828,7 @@ audio}; the likelihood-space twin of the $+38\%$ attention result.
 \end{columns}
 \end{frame}
 
-% --- MMAU (audio understanding) ---  % FAKE-DATA: entire results table pending launch_mmau runs -- re-check
+% --- MMAU (audio understanding) --- MEASURED (n=1000, parse 0.94)
 \begin{frame}{Beyond hallucination: MMAU (audio understanding)}
 \centering\small
 \renewcommand{\arraystretch}{1.2}
@@ -835,28 +836,27 @@ audio}; the likelihood-space twin of the $+38\%$ attention result.
 \toprule
  & \multicolumn{4}{c}{MMAU (test-mini, n$=$1000)} \\
 \cmidrule(lr){2-5}
-Model & Sound & Music & Speech & Avg. \\
+Qwen3-Omni & Sound & Music & Speech & Avg. \\
 \midrule
-Qwen2.5-Omni {\scriptsize(reported)} & 66.2 & 68.3 & 59.3 & 64.6 \\
-\quad + DPO {\scriptsize(ours)}      & 67.0 & 69.2 & 59.1 & 65.1 \\
-\midrule
-Qwen3-Omni {\scriptsize(base)}       & 79.2 & 76.8 & 76.4 & 77.5 \\
-\quad + DPO                          & 79.5 & 77.0 & 76.5 & 77.7 \\
-\quad + \textbf{FiLM}                & \textbf{80.8} & \textbf{77.9} & \textbf{77.6} & \textbf{78.8} \\
+base                   & \textbf{80.2} & \textbf{75.4} & \textbf{68.5} & \textbf{74.7} \\ % REAL
+\quad + DPO            & 78.4 & 75.1 & 67.0 & 73.5 \\ % REAL: runs/mmau_qwen3-omni_broad_step60.json
+\quad + \textbf{FiLM}  & 79.6 & 73.1 & 66.4 & 73.0 \\ % REAL: runs/mmau_qwen3-omni_film_step160.json
 \bottomrule
 \end{tabular}
+\par\vspace{0.3em}
+{\scriptsize Measured on our harness, parse rate $0.94$ for all three rows.}
 \vfill
 \begin{itemize}\small
-\item The adapter helps \textbf{audio reasoning}, not just AV-hallucination --- and \textbf{FiLM most}
-($+1.3$ avg; largest on \textbf{Sound}, the axis its gate conditions on).
-\item Magnitudes are in line with published adapter-scale gains on this benchmark
-(MoD-DPO$++$ on Qwen2.5-Omni: $+0.6$ to $+1.7$ avg).
-\item DPO barely moves it --- consistent with the mechanism story: re-encoding does not add
-\emph{understanding}; attending does.
+\item \textbf{Honest result: a small tax}, not a gain --- $-1.2$ (DPO), $-1.7$ (FiLM) on average.
+Both sit inside the $\pm2.8$ noise band at n$=$1000, but the sign is negative and we report it.
+\item MMAU is \textbf{off-distribution}: audio-only reasoning, no video, no hallucination traps ---
+nothing like the AV-grounding data we train on.
+\item Reading: learning \emph{which} modality to trust does \textbf{not} transfer to audio
+\emph{understanding}. The gain is real where we trained it, and the guard prices it elsewhere.
 \end{itemize}
 \end{frame}
 
-% --- LoRA control ---  % FAKE-DATA: ALL LoRA rows synthetic pending the lora full evals -- re-check
+% --- LoRA control --- MEASURED (lora_sysfull_step90, n=5302)
 \begin{frame}{The control reviewers will ask for: LoRA, same recipe}
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
@@ -867,25 +867,27 @@ Qwen3-Omni {\scriptsize(base)}       & 79.2 & 76.8 & 76.4 & 77.5 \\
 \cmidrule(lr){2-5}\cmidrule(lr){6-7}
 adapter (Qwen3-Omni) & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall & PA & HR \\
 \midrule
-none (frozen base)        & 0.838 & 0.812 & 0.653 & 0.761 & 0.900 & 0.733 \\
-LoRA $r{=}16$             & 0.836 & 0.820 & 0.686 & 0.778 & 0.885 & 0.735 \\
-LoRA $r{=}64$ ($4\times$ params) & 0.838 & 0.823 & 0.699 & 0.784 & 0.883 & 0.734 \\
-VIB (DPO)                 & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 \\
-VIB (\textbf{FiLM})       & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} \\
+none (frozen base)        & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.900} & 0.733 \\
+LoRA $r{=}16$ (step 90)   & 0.828 & 0.835 & 0.709 & 0.789 & 0.896 & 0.724 \\ % REAL
+VIB (DPO, step 60)        & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 \\
+VIB (\textbf{FiLM}, step 160) & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} \\
 \bottomrule
 \end{tabular}
+\par\vspace{0.3em}
+{\scriptsize All rows: full AVHBench (n$=$5302) $+$ CMM (n$=$2400), checkpoint selected on a
+validation half.}
 \vfill
 \begin{itemize}\small
 \item Identical data, objective, anchors, selection --- \textbf{only the adapter form changes}.
-\item LoRA helps ($+1.7$ over base) but recovers only $\sim\!\tfrac13$ of the VIB gain ($+5.1$) ---
-and \textbf{rank is not the problem}: $4\times$ the parameters buys $+0.6$.
+\item LoRA helps (\textbf{$+2.8$} over base) but recovers roughly \textbf{half} the VIB gain
+($+5.1$) --- and it is the \textbf{only} arm whose CMM-HR drops below base ($0.724$ vs $0.733$).
 \item The lever is the \textbf{stochastic zero-init residual} (reparam noise $+$ identity-at-init
 $+$ exact bypass reference) --- not ``any adapter would do''.
 \end{itemize}
 \end{frame}
 
 
-% --- Supervisor ablation: VIB BEFORE the adapter ---  % FAKE-DATA: placement-ablation numbers pending the pre-adapter run -- re-check
+% --- Supervisor ablation: VIB BEFORE the adapter ---  % !! FABRICATED: pre-adapter placement was never implemented or run. DO NOT PRESENT AS MEASURED.
 \begin{frame}{Ablation: does it matter \emph{where} the bottleneck sits?}
 \centering
 \begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 5mm,
@@ -920,7 +922,7 @@ placement (Qwen3-Omni, DPO recipe) & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall 
 \end{itemize}
 \end{frame}
 
-% --- beta_kl sweep ---  % FAKE-DATA: sweep numbers pending the beta_kl runs -- re-check
+% --- beta_kl sweep ---  % !! FABRICATED: no beta_kl sweep was run. DO NOT PRESENT AS MEASURED.
 \begin{frame}{Does the ``information bottleneck'' earn its name? The $\beta_{kl}$ sweep}
 \begin{columns}[T]
 \begin{column}{0.58\textwidth}
@@ -944,7 +946,7 @@ placement (Qwen3-Omni, DPO recipe) & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall 
 \end{columns}
 \end{frame}
 
-% --- VIB ingredient ablation ---  % FAKE-DATA: ingredient-ablation numbers pending runs -- re-check
+% --- VIB ingredient ablation ---  % !! FABRICATED: no ingredient ablation was run. DO NOT PRESENT AS MEASURED.
 \begin{frame}{Which ingredient of the VIB does the work?}
 \centering
 \renewcommand{\arraystretch}{1.25}
@@ -964,7 +966,7 @@ frozen base                        &                              & 0.761 & 0.73
 
 \end{frame}
 
-% --- Data scaling ---  % FAKE-DATA: scaling-curve numbers pending runs -- re-check
+% --- Data scaling ---  % !! FABRICATED: no data-scaling sweep was run. DO NOT PRESENT AS MEASURED.
 \begin{frame}{How much swap data does it take?}
 \begin{columns}[T]
 \begin{column}{0.58\textwidth}
@@ -1103,12 +1105,16 @@ $\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big]
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{l c l}
 \toprule
-probe (AVE val, 2-way sync judgment, n$=$200) & acc & read \\
+probe (AVE-Shift, held-out, balanced) & acc & read \\
 \midrule
-Qwen3-Omni base, $\Delta{=}\pm1$\,s & 0.512 & chance --- confirms Wen et al.\ locally \\ % FAKE-DATA
-after shift-DPO & --- & target of the week \\
+base --- synced vs shifted (n$=$200) & 0.495 & \textbf{exact coin flip} \\ % REAL: runs/sync_avshift_qwen3-omni.json
+base --- lags vs leads (n$=$100)     & 0.500 & \textbf{exact coin flip} \\ % REAL
+after shift-DPO & --- & training now \\
 \bottomrule
 \end{tabular}
+\par\vspace{0.2em}
+{\scriptsize Measured. Balanced tasks $\Rightarrow$ chance $=$ 0.50: the model answers ``in sync''
+regardless of the audio --- Wen et al.'s $100\to1.4$, reproduced on our own harness.}
 \vfill
 \begin{itemize}\footnotesize
 \item probe $=$ swap-probe code with shifted clips --- \textbf{already runnable}
@@ -1141,24 +1147,26 @@ after shift-DPO & --- & target of the week \\
 {\footnotesize \texttt{CKPTS="film:160" bash scripts/launch\_videomme.sh qwen3-omni} --- base $+$ FiLM on short (n$=$900).}
 \end{frame}
 
-% --- V2. Video-MME: results ---  % FAKE-DATA: parity cells provisional pending the two submitted jobs -- re-check
-\begin{frame}{Video-MME (short, n$=$900): no alignment tax}
+% --- V2. Video-MME: results --- MEASURED (n=900, short subset, w/o subs)
+\begin{frame}{Video-MME (short, n$=$900): the video-QA guard}
 \centering\small
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{l c c}
 \toprule
 Qwen3-Omni & acc (w/o subs) & $\Delta$ vs base \\
 \midrule
-base            & 0.768          & ---    \\ % FAKE-DATA
-+ DPO adapter   & 0.766          & $-0.2$ \\ % FAKE-DATA
-+ \textbf{FiLM} & \textbf{0.771} & $+0.3$ \\ % FAKE-DATA
+base            & \textbf{0.842} & ---    \\ % REAL: runs/videomme_qwen3-omni.json
++ DPO adapter   & 0.828          & $-1.4$ \\ % REAL: runs/videomme_qwen3-omni_broad_step60.json
++ FiLM          & 0.837          & $-0.6$ \\ % REAL: runs/videomme_qwen3-omni_film_step160.json
 \bottomrule
 \end{tabular}
 \vfill
 \begin{itemize}\footnotesize
-\item all within noise (n$=$900 $\Rightarrow$ $\pm3$ pts at 95\%) $\Rightarrow$ \textbf{no capability cost}
-\item consistent with CMM-HR and MMAU: the anchors keep the base intact off-distribution
-\item medium/long $+$ vision-only ablation queued (audio-reliance at benchmark scale)
+\item measured; n$=$900 $\Rightarrow$ $\pm2.4$ pts at 95\% --- \textbf{both deltas sit inside the
+noise band}, so no significant capability cost
+\item but the sign is negative on both, and \textbf{FiLM is the gentler adapter} ($-0.6$ vs $-1.4$)
+--- the same ordering MMAU shows
+\item medium/long $+$ vision-only ablation still queued (audio-reliance at benchmark scale)
 \end{itemize}
 \end{frame}
 
