@@ -75,11 +75,17 @@ class MiniCPMO:
     hidden_dim = 3584  # Qwen2.5-7B LLM width -- the adapter output dim feeding the LLM
 
     def __init__(self, model_id: str = DEFAULT_MODEL, attn: str = "sdpa"):
-        from transformers import AutoModel, AutoTokenizer
+        from transformers import AutoModel, AutoProcessor, AutoTokenizer
 
         _shim_transformers()
         self.model_id = model_id
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        # the multimodal processor (image slicing + audio features) used by the training-path
+        # forward; .chat() carries its own, so generation works even if this is unavailable.
+        try:
+            self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+        except Exception:  # noqa: BLE001
+            self.processor = None
         # No device_map="auto": MiniCPM-o's remote model class predates newer transformers'
         # accelerate device-map path (it reads all_tied_weights_keys, which the class lacks).
         # The model is ~16GB -> load it on one GPU directly, exactly as the model card does.
@@ -182,7 +188,10 @@ class MiniCPMO:
         msgs = [{"role": "user", "content": "\n".join(parts)}]
         prompt = self.tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
 
-        proc = self.processor
+        proc = self.processor or getattr(self.model, "processor", None)
+        if proc is None:
+            raise RuntimeError("MiniCPMO.build_inputs: no processor available (AutoProcessor "
+                               "failed to load) -- required for the training/scoring forward.")
         kw = {"return_tensors": "pt", "max_slice_nums": 1, "use_image_id": False}
         if audios:
             kw["audios"] = [audios]
