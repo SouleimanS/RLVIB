@@ -29,6 +29,11 @@ from rlvib.models.bottleneck import (
 def answer_logp_vec(model, messages, use_audio_in_video: bool = True):
     """First-token log-prob vector over the vocab (keeps grad). One forward; index as
     many candidate answers as needed (e.g. chosen & rejected) from the same result."""
+    # Wrappers whose LM is not callable as lm(**inputs) (MiniCPM-o: forward takes a `data` dict
+    # and builds the multimodal embedding itself) expose `answer_logits` instead.
+    if hasattr(model, "answer_logits"):
+        return torch.log_softmax(
+            model.answer_logits(messages, use_audio_in_video=use_audio_in_video).float(), dim=-1)[0]
     inputs = model.build_inputs(messages, use_audio_in_video=use_audio_in_video)
     lm = getattr(model.model, "thinker", model.model)  # Qwen3 -> .thinker; Qwen2.5 -> itself
     if getattr(model, "dtype", None) == torch.float16:

@@ -141,19 +141,72 @@ class MiniCPMO:
         content.append({"type": "text", "text": prompt})
         return [{"role": "user", "content": content}]
 
-    def build_inputs(self, messages: list, use_audio_in_video: bool = True):
-        """Tokenize + preprocess to model-ready tensors for a forward pass (grad-friendly).
+    def _content_list(self, messages: list, use_audio_in_video: bool = True):
+        """Neutral messages -> MiniCPM-o content list: PIL frames [+ audio ndarray] + prompt."""
+        video, audio, prompt = self._parse(messages)
+        content = []
+        if video is not None:
+            content += self._encode_video(video)
+            if use_audio_in_video and audio is None:
+                try:
+                    content.append(self._encode_audio(video))
+                except Exception:  # noqa: BLE001
+                    pass
+        if audio is not None:
+            content.append(self._encode_audio(audio))
+        content.append(prompt)
+        return content
 
-        MiniCPM-o preprocessing lives in the remote code; we route through the processor the
-        remote code exposes. FLOAT tensors are cast to the model dtype; int ids are left alone.
+    def build_inputs(self, messages: list, use_audio_in_video: bool = True):
+        """Preprocess to model-ready tensors for a GRAD-CAPABLE forward (training path).
+
+        Mirrors MiniCPM-o's own `chat()` preprocessing: media in the content list become
+        `(<image>./</image>)` / `(<audio>./</audio>)` placeholders in the chat-templated prompt,
+        and the images/audios go to the processor alongside. Returns the `data` dict its
+        `forward(data)` consumes.
         """
-        proc = getattr(self.model, "processor", None) or self.tokenizer
-        inputs = proc(messages, use_audio_in_video=use_audio_in_video, return_tensors="pt")
+        import numpy as np
+        from PIL import Image
+
+        content = self._content_list(messages, use_audio_in_video=use_audio_in_video)
+        images, audios, parts = [], [], []
+        for c in content:
+            if isinstance(c, Image.Image):
+                images.append(c)
+                parts.append("(<image>./</image>)")
+            elif isinstance(c, np.ndarray):
+                audios.append(c)
+                parts.append("(<audio>./</audio>)")
+            else:
+                parts.append(str(c))
+        msgs = [{"role": "user", "content": "\n".join(parts)}]
+        prompt = self.tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+
+        proc = self.processor
+        kw = {"return_tensors": "pt", "max_slice_nums": 1, "use_image_id": False}
+        if audios:
+            kw["audios"] = [audios]
+        inputs = proc([prompt], [images], **kw)
         inputs = inputs.to(self.device)
         for k, v in list(inputs.items()):
             if torch.is_tensor(v) and torch.is_floating_point(v):
                 inputs[k] = v.to(self.dtype)
         return inputs
+
+    def answer_logits(self, messages: list, use_audio_in_video: bool = True):
+        """Next-token logits at the answer position, WITH grad (the DPO/training hook).
+
+        MiniCPM-o's `.chat()` is generation-only and no-grad, so scoring goes through the
+        model's own `forward(data)` (which builds the multimodal embedding and runs the LLM).
+        `rlvib.train.dpo.answer_logp_vec` calls this when a wrapper provides it.
+        """
+        inputs = self.build_inputs(messages, use_audio_in_video=use_audio_in_video)
+        try:
+            out = self.model(data=inputs, use_cache=False)
+        except TypeError:                       # older/newer remote signature: positional dict
+            out = self.model(inputs, use_cache=False)
+        logits = out.logits if hasattr(out, "logits") else out[0]
+        return logits[:, -1, :]
 
     @staticmethod
     def _parse(messages):
