@@ -490,7 +490,7 @@ frozen base              & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.90
 + FiLM adapter (prompt-aware) & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} \\
 \midrule
 + LoRA (same recipe)     & 0.828 & 0.835 & 0.709 & 0.789 & 0.896 & 0.724 \\ % REAL: lora_sysfull_step90
-+ cross-attention fusion & 0.828 & 0.831 & 0.778 & 0.814 & 0.886 & 0.742 \\ % FAKE-DATA
++ cross-attention fusion & \textbf{0.850} & 0.805 & 0.696 & 0.776 & \multicolumn{2}{c}{\emph{running}} \\ % REAL: avhbench_qwen3-omni_xattn_sysfull_step60.json
 \midrule
 MoD-DPO++ {\tiny(reported, Qwen2.5-Omni)} & 0.882 & 0.834 & 0.697 & 0.796$^\ddagger$ & 0.892 & 0.872 \\ % REAL: arXiv 2603.03192 Tab.1-2
 MAD {\tiny(reported, Qwen2.5-Omni)} & 0.844 & 0.787 & --- & 0.816$^\ddagger$ & \multicolumn{2}{c}{0.814 overall} \\ % REAL: arXiv 2601.21181 Tab.1
@@ -861,10 +861,13 @@ other \emph{before} the LLM sees them (bidirectional cross-attention on the merg
 \item Same discipline as every arm: zero-init output $\Rightarrow$ \textbf{identity at start},
 bypass switch, only audio/vision positions edited --- text passes through untouched. Same anchored
 swap-DPO training, same selection.
-\item Result: \textbf{0.814} overall --- our second-best arm, strong on AV-Matching (0.778), still
-below FiLM's \textbf{0.819}. % FAKE-DATA
-\item Read: modality \emph{cross-talk} helps integration, but the \textbf{question} is the stronger
-lever --- knowing \emph{what is asked} beats knowing \emph{what the other stream saw}.
+\item Result: \textbf{0.776} overall (n$=$5302) --- $+1.5$ over base, the \textbf{weakest} of our
+trained arms: below LoRA ($0.789$), swap-DPO ($0.812$) and FiLM ($0.819$). % REAL
+\item But it posts the \textbf{best A$\to$V of any arm} ($0.850$ vs base $0.838$) --- cross-talk does
+help the vision-side judgment; it just does not deliver the audio-grounding gain.
+\item Read: fusion \emph{before} the LLM is not where the problem lives. Editing what each stream
+\emph{says} (VIB) beats letting the streams read each other --- and the \textbf{question} is the
+stronger lever still.
 \end{itemize}
 \end{frame}
 
