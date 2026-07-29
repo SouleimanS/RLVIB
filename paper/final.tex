@@ -17,7 +17,6 @@
 \setbeamertemplate{blocks}[rounded][shadow=false]
 \setbeamerfont{frametitle}{size=\large,series=\bfseries}
 \setbeamercolor{frametitle}{fg=blue!45!black}
-\setbeamertemplate{section in toc}[sections numbered]
 \usepackage{pgfplots}\pgfplotsset{compat=1.18}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta}
@@ -66,12 +65,7 @@ without retraining it, and measured honestly.
 \end{block}
 \end{frame}}
 
-\begin{frame}{Outline}
-\tableofcontents
-\end{frame}
-
 % ================================================================
-\section{Problem and motivation}
 % ================================================================
 
 \begin{frame}{What is an audio--visual LLM?}
@@ -163,7 +157,6 @@ with the baseline measured.
 \end{frame}
 
 % ================================================================
-\section{Benchmarks and protocol}
 % ================================================================
 
 \begin{frame}{Benchmark I --- AVHBench (the target)}
@@ -245,7 +238,6 @@ test set. Our first ``best'' checkpoint did not survive this.
 \end{frame}
 
 % ================================================================
-\section{Method}
 % ================================================================
 
 \begin{frame}{Background: the Variational Information Bottleneck}
@@ -448,7 +440,6 @@ an argument about the objective, not a measurement.}
 \end{frame}
 
 % ================================================================
-\section{Results}
 % ================================================================
 
 \begin{frame}{Main result (Qwen3-Omni, full benchmarks)}
@@ -565,7 +556,6 @@ within-noise hits. The gain is \textbf{where we trained it}, and the guards pric
 \end{frame}
 
 % ================================================================
-\section{Mechanism}
 % ================================================================
 
 \begin{frame}{Does the adapter make the model \emph{attend} to the evidence?}
@@ -692,7 +682,6 @@ $+5.8$ --- while training $<$0.5\% of the model and staying \textbf{reversible}.
 \end{frame}
 
 % ================================================================
-\section{The next axis: time}
 % ================================================================
 
 \begin{frame}{The model cannot tell \emph{when}}
@@ -756,7 +745,6 @@ about.
 \end{frame}
 
 % ================================================================
-\section{Method notes and conclusion}
 % ================================================================
 
 \begin{frame}{Ablation: does it matter \emph{where} the bottleneck sits?}
