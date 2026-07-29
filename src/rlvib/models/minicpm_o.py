@@ -51,6 +51,22 @@ def _shim_transformers() -> None:
                 lambda self: self.get_seq_length() if hasattr(self, "get_seq_length") else 0)
     except Exception:  # noqa: BLE001
         pass
+    try:
+        # MiniCPM-o's modeling file imports flash_attn; transformers' static import check then
+        # demands it installed even though we run sdpa. flash_attn needs nvcc to build (absent on
+        # the login/compute nodes), so drop it from the required-imports list -- the runtime code
+        # guards the flash_attn path behind is_flash_attn_2_available() and falls back to sdpa.
+        import transformers.dynamic_module_utils as _dmu
+        if not getattr(_dmu.get_imports, "_rlvib_noflash", False):
+            _orig = _dmu.get_imports
+
+            def _get_imports(filename):
+                return [i for i in _orig(filename) if i != "flash_attn"]
+
+            _get_imports._rlvib_noflash = True
+            _dmu.get_imports = _get_imports
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class MiniCPMO:
