@@ -47,12 +47,16 @@ class MiniCPMO:
         _shim_transformers()
         self.model_id = model_id
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        # No device_map="auto": MiniCPM-o's remote model class predates newer transformers'
+        # accelerate device-map path (it reads all_tied_weights_keys, which the class lacks).
+        # The model is ~16GB -> load it on one GPU directly, exactly as the model card does.
         self.model = AutoModel.from_pretrained(
-            model_id, trust_remote_code=True, dtype="auto", device_map="auto",
+            model_id, trust_remote_code=True, torch_dtype=torch.bfloat16,
             attn_implementation=attn,
             init_vision=True, init_audio=True, init_tts=False,      # thinker-only, no speech out
-        )
-        self.model.eval()
+        ).eval()
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
 
     @property
     def device(self):
