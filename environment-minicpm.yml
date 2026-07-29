@@ -1,0 +1,56 @@
+# RLVIB — MiniCPM-o 2.6 (fourth backbone) environment.
+#
+# SEPARATE from environment.yml on purpose: MiniCPM-o 2.6's remote modeling code targets
+# transformers ~=4.44. Its generation loop is INCOMPATIBLE with the newer transformers that
+# Qwen3-Omni / Qwen2.5-Omni need — confirmed on the shared env: the audio path crashes in the
+# Whisper encoder (WhisperAttention now returns a 2-tuple; MiniCPM unpacks 3) and the vision path
+# crashes in `prepare_inputs_for_generation` (new `_beam_search`/`_prefill` contract). Neither is
+# shimmable without rewriting the model's own remote code. So MiniCPM runs in its own env, exactly
+# like VideoLLaMA2 (rlvib_vl2).
+#
+# Setup (ABCI login node — the only nodes with network):
+#   conda env create -f environment-minicpm.yml
+#   conda activate rlvib_minicpm
+#   pip install -e .                                  # editable rlvib into this env
+#   # weights already cached at openbmb/MiniCPM-o-2_6
+#
+# Run ANY MiniCPM job by pointing the qsub at this env (the qsubs honor CONDA_ENV):
+#   CONDA_ENV=rlvib_minicpm MODEL=minicpm-o qsub -v CONDA_ENV,MODEL scripts/eval_avhbench.qsub
+#   CONDA_ENV=rlvib_minicpm MODEL=minicpm-o qsub -v CONDA_ENV,MODEL scripts/train_swap_anchored.qsub
+#
+# Quick sanity (interactive GPU node, after `conda activate rlvib_minicpm`):
+#   PYTHONPATH=src python -c "from rlvib.models import get_model; \
+#     m=get_model('minicpm-o'); \
+#     print(m.generate(m.message(video='data/AVHBench/videos/<any>.mp4', \
+#       prompt='Is a dog visible? Answer yes or no.'), max_new_tokens=8))"
+#
+# The minicpm_o.py wrapper's compat shims (WHISPER_ATTENTION_CLASSES, all_tied_weights_keys,
+# DynamicCache.seen_tokens) are guarded no-ops on transformers 4.44.2 — harmless here, and they
+# keep the wrapper importable on the main env too.
+
+name: rlvib_minicpm
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+  - git
+  - ffmpeg              # librosa/decord read audio+video from the mp4
+  - pip:
+      - torch==2.3.1          # cu121 wheel; runs on the ABCI cu13 driver (backward-compatible)
+      - torchaudio==2.3.1
+      - torchvision==0.18.1
+      - transformers==4.44.2  # the version MiniCPM-o 2.6's remote code targets
+      - accelerate
+      - vector_quantize_pytorch==1.18.5   # MiniCPM-o TTS/dvae dep pulled by its remote code
+      - vocos==0.1.0
+      - librosa
+      - soundfile
+      - decord
+      - Pillow
+      - numpy
+      - tqdm
+      - sentencepiece
+      - "setuptools<81"
