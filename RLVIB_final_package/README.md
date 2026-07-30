@@ -1,4 +1,4 @@
-<h1 align="center">RLVIB</h1>
+<h1 align="center">FiLMVIB</h1>
 <p align="center"><b>Audio Grounding for Frozen Audio-Visual LLMs</b></p>
 <p align="center">
   A &lt;0.5% adapter that makes a <i>frozen</i> audio-visual LLM listen —
