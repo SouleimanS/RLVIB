@@ -1,13 +1,12 @@
-% RLVIB --- FINAL deck.  Build:  cd paper && tectonic final.tex
+% FiLMVIB --- final internship presentation.  Build:  cd paper && pdflatex final.tex  (x2)
 %
-% Merge of paper/slides.tex (weekly, math-heavy) and paper/phd_talk.tex (intro, schema-heavy),
-% restricted to numbers that are GROUNDED:
-%   (a) measured by us   -> the source runs/*.json is named in a "% src:" comment, or
-%   (b) reported by a cited paper -> the arXiv id is named in the row/comment.
-% Nothing invented appears in this file. Content dropped for lack of evidence:
-%   3-seed statistics, likelihood-shift values, VIB-placement ablation, beta_kl sweep,
-%   VIB-ingredient ablation, data-scaling curve, swap-video / shift-DPO / MiniCPM-trained /
-%   cross-attention results (those runs are in flight; add rows when their JSONs land).
+% Every value in this file is either (a) measured under our own evaluation protocol, with the
+% source runs/*.json named in an adjacent comment, or (b) reported by a cited publication, with
+% the arXiv identifier given in the row. Nothing here is estimated or extrapolated.
+%
+% Deliberately omitted for want of evidence: multi-seed statistics, the beta_kl sweep, the
+% VIB-ingredient ablation, the data-scaling curve, and the video-substitution / MiniCPM-adapter
+% results (trained but not yet evaluated at the time of writing; see the closing slide).
 \documentclass[aspectratio=169,11pt]{beamer}
 \usetheme{default}
 \usecolortheme{seahorse}
@@ -24,7 +23,6 @@
 \graphicspath{{figures/}}
 \definecolor{frz}{RGB}{40,95,175}     % frozen
 \definecolor{trn}{RGB}{210,120,20}    % trained
-\newcommand{\fillin}[1]{\textcolor{red!70!black}{[#1]}}
 \newcommand{\figslot}[2]{\IfFileExists{figures/#1}%
   {\includegraphics[width=#2]{figures/#1}}%
   {\fbox{\parbox[c][2.6cm][c]{#2}{\centering\tiny\ttfamily\detokenize{figures/#1}}}}}
@@ -47,7 +45,7 @@
 \subtitle{Audio grounding via tiny adapters, anchored preference optimization, and honest evaluation}
 \author{Souleiman Sbai}
 \institute{Research internship --- final presentation\\[2pt]
-  \small Host lab: AIST CVRT \quad$\cdot$\quad Supervisor: Qiu Yue}
+  \footnotesize Host lab: AIST CVRT \quad$\cdot$\quad Supervisor: Qiu Yue}
 \date{\today}
 
 \begin{document}
@@ -205,7 +203,7 @@ integration.
 \begin{center}
 \setbeamercolor{block body}{bg=red!6}
 \begin{block}{Both metrics must be reported jointly}
-\centering\small A model that answers ``no'' to every question attains HR $=$ 1.0 and PA $=$ 0.
+\centering\footnotesize A model that answers ``no'' to every question attains HR $=$ 1.0 and PA $=$ 0.
 Improvements in hallucination resistance must therefore be verified against a corresponding
 degradation in perception accuracy.
 \end{block}
@@ -234,7 +232,7 @@ verified by script.
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{}
-\centering\small Reported accuracies are meaningful only relative to a fixed evaluation protocol.
+\centering\footnotesize Reported accuracies are meaningful only relative to a fixed evaluation protocol.
 \end{block}
 \end{center}
 \end{frame}
@@ -295,7 +293,7 @@ without instantiating a second model.
 
 \begin{frame}{Training data: constructed audio-visual conflicts}
 \centering
-\begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},
+\begin{tikzpicture}[font=\footnotesize,>={Latex[length=1.8mm]},
   clip/.style={draw,rounded corners,fill=gray!12,align=center,minimum width=34mm,minimum height=17mm},
   good/.style={draw,rounded corners,fill=green!14,align=center,minimum width=46mm,minimum height=10mm},
   bad/.style={draw,rounded corners,fill=red!14,align=center,minimum width=46mm,minimum height=10mm}]
@@ -340,7 +338,7 @@ capability metric must be monitored jointly.
 \begin{center}
 \setbeamercolor{block body}{bg=red!8}
 \begin{block}{}
-\centering\small A hallucination metric alone is not a sufficient training signal.
+\centering\footnotesize A hallucination metric alone is not a sufficient training signal.
 \end{block}
 \end{center}
 \end{frame}
@@ -510,7 +508,7 @@ variation across seeds.}
 \begin{frame}{Capability control I: audio understanding (MMAU, n$=$1000)}
 \centering
 \renewcommand{\arraystretch}{1.2}
-\small
+\footnotesize
 \begin{tabular}{l cccc}
 \toprule
 Qwen3-Omni & Sound & Music & Speech & Avg. \\
@@ -535,7 +533,7 @@ understanding in general.
 
 \begin{frame}{Capability control II: video understanding (Video-MME, n$=$900)}
 \begin{columns}[T]
-\begin{column}{0.5\textwidth}\small
+\begin{column}{0.5\textwidth}\footnotesize
 \textbf{The benchmark}
 \begin{itemize}\footnotesize
 \item 900 YouTube videos $\times$ 3 MCQs; we run the \textbf{short} subset, \textbf{without
@@ -546,7 +544,7 @@ subtitles}, audio taken from the video itself.
 \begin{column}{0.5\textwidth}
 \centering
 \renewcommand{\arraystretch}{1.2}
-\small
+\footnotesize
 \begin{tabular}{l c c}
 \toprule
 Qwen3-Omni & acc & $\Delta$ \\
@@ -581,7 +579,7 @@ distribution, and its cost elsewhere is quantified rather than assumed.
 {\scriptsize Share of the answer position's attention on audio/visual tokens, per clip
 (box $=$ median/IQR). Eager attention; compare \textbf{within} a model only.}
 \end{column}
-\begin{column}{0.44\textwidth}\small
+\begin{column}{0.44\textwidth}\footnotesize
 \begin{itemize}\footnotesize
 \item Qwen3-Omni, base $\to$ swap-DPO: $5.4\% \to 5.7\%$ (unchanged within variation), indicating
 grounding via re-encoding of the tokens rather than increased attention to them.
@@ -605,7 +603,7 @@ they differ in whether attention to the evidence also increases.}
 {\scriptsize Log-likelihood of the gold answer under the true audio (teal) and under substituted
 audio (magenta); KDE over 40 AVE clips, dashed lines are means.}
 \end{column}
-\begin{column}{0.46\textwidth}\small
+\begin{column}{0.46\textwidth}\footnotesize
 {\footnotesize Substituting the audio and re-scoring the \emph{same} answer measures how much the
 response depends on the audio stream. A model that ignores audio yields a shift near zero.}
 \vspace{0.4em}
@@ -639,7 +637,7 @@ raises both.
 \vspace{0.3em}
 \centering
 \renewcommand{\arraystretch}{1.3}
-\small
+\footnotesize
 \begin{tabular}{l c l}
 \toprule
 probe & value & reading \\
@@ -662,7 +660,7 @@ by re-weighting the visual contribution.
 \begin{frame}{Generalization across backbones}
 \centering
 \renewcommand{\arraystretch}{1.2}
-\small
+\footnotesize
 \begin{tabular}{l cc c l}
 \toprule
 backbone & base & $+$ adapter & $\Delta$ & attention to AV tokens \\
@@ -689,7 +687,7 @@ information usable, but cannot supply audio competence the backbone lacks.
 \begin{frame}{A fourth backbone: MiniCPM-O 2.6 and harness sensitivity}
 \centering
 \renewcommand{\arraystretch}{1.2}
-\small
+\footnotesize
 \begin{tabular}{l cccc}
 \toprule
 MiniCPM-O 2.6, AVHBench & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & overall \\
@@ -715,7 +713,7 @@ substantially weaker audio grounding, and correspondingly more headroom for the 
 \begin{frame}{Comparison with prior methods (relative improvements)}
 \centering
 \renewcommand{\arraystretch}{1.25}
-\small
+\footnotesize
 \begin{tabular}{l l c c l}
 \toprule
 backbone & method & base $\to$ trained & $\Delta$ & trains \\
@@ -750,7 +748,7 @@ $1.4$ when the audio is displaced by $\pm2$\,s. We reproduce the effect under ou
 \vspace{0.2em}
 \centering
 \renewcommand{\arraystretch}{1.2}
-\small
+\footnotesize
 \begin{tabular}{l c l}
 \toprule
 AVE-Shift (held-out, balanced $\Rightarrow$ chance $=0.50$) & acc & reading \\
@@ -784,7 +782,7 @@ cannot supply it.
 \end{frame}
 
 \begin{frame}{Proposed extension: temporal input features}
-\centering\small
+\centering\footnotesize
 $\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big]
 \qquad h = \mathrm{GELU}(W_e\,\tilde x_t)$
 \vspace{0.3em}
@@ -890,7 +888,7 @@ analysis probes
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{}
-\centering\small Every value reported here is either measured under our protocol (with the source
+\centering\footnotesize Every value reported here is either measured under our protocol (with the source
 file identified in the document source) or taken from a cited publication.
 \end{block}
 \end{center}
@@ -915,7 +913,7 @@ audio-visual tokens ($5.4\% \to 7.4\%$); the unconditional variant improves accu
 \begin{center}
 \setbeamercolor{block body}{bg=blue!6}
 \begin{block}{}
-\centering\small A parameter-efficient adapter improves audio grounding in a frozen audio-visual
+\centering\footnotesize A parameter-efficient adapter improves audio grounding in a frozen audio-visual
 LLM, and the improvement is supported by mechanistic evidence in addition to benchmark accuracy.
 \end{block}
 \end{center}
@@ -940,7 +938,8 @@ LLM, and the improvement is supported by mechanistic evidence in addition to ben
 \centering
 \vspace{0.4em}
 {\Large Questions?}\\[1.2em]
-{\footnotesize \color{gray} Souleiman Sbai\\ \fillin{email / contact}}
+{\footnotesize \color{gray} Souleiman Sbai\\[2pt]
+\texttt{souleiman.sbai@polytechnique.edu}\\[1pt] \texttt{+33 6 20 94 64 63}}
 \end{column}
 \end{columns}
 \end{frame}
