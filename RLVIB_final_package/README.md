@@ -82,6 +82,7 @@ paired *p* < 10⁻⁴, with hallucination resistance preserved.
 │   └── mad/                      MAD training-free decoding re-implementation
 ├── tests/                        unit tests (identity-at-init, masks, metrics, …)
 ├── paper/final.tex               the report
+├── paper/summary.tex             two-page, two-column standalone summary
 ├── docs/
 │   ├── DECK_TO_CODE.md           slide → code → command map
 │   ├── CLUSTER_NOTES.md          ABCI/PBS specifics and known gotchas

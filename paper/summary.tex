@@ -1,0 +1,592 @@
+% FiLMVIB --- two-page research summary.   Build:  cd paper && pdflatex summary.tex  (x2)
+%
+% Provenance rule, identical to final.tex: every value below is either (a) measured under our own
+% evaluation protocol or (b) reported by a cited publication, with the arXiv identifier given in the
+% row. Nothing is estimated or extrapolated.  All numbers are transcribed from paper/final.tex,
+% which names the source runs/*.json for each table.
+%
+% Dependencies are deliberately minimal: geometry, amsmath, amssymb, booktabs, xcolor, graphicx,
+% tikz.  pgfplots is NOT used (it is absent on the target machines and previously broke the build) --
+% every chart here is drawn in raw TikZ.  lmodern/microtype are loaded only if present.
+% Figures degrade to labelled placeholder boxes when absent, so the document always compiles.
+
+\documentclass[10pt,twocolumn,a4paper]{article}
+\usepackage[a4paper,left=1.3cm,right=1.3cm,top=1.15cm,bottom=1.15cm,columnsep=5.5mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}}{}
+\IfFileExists{microtype.sty}{\usepackage{microtype}}{}
+
+\graphicspath{{figures/}}
+\definecolor{frz}{RGB}{40,95,175}     % frozen  (blue)
+\definecolor{trn}{RGB}{210,120,20}    % trained (orange)
+\definecolor{hdr}{RGB}{25,60,115}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.2pt}
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\abovedisplayskip}{3pt}
+\setlength{\belowdisplayskip}{3pt}
+\setlength{\abovedisplayshortskip}{1pt}
+\setlength{\belowdisplayshortskip}{1pt}
+
+% Compact section headings, kernel-only (no titlesec dependency).
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}%
+  {1.9ex \@plus .4ex \@minus .2ex}{0.6ex \@plus .2ex}%
+  {\normalfont\normalsize\bfseries\color{hdr}}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+  {1.1ex \@plus .3ex \@minus .2ex}{0.25ex \@plus .1ex}%
+  {\normalfont\small\bfseries\color{hdr}}}
+\makeatother
+
+% Tight itemize.
+\newenvironment{tl}%
+  {\begin{list}{$\bullet$}{\leftmargin=1.5em\itemindent=0pt\topsep=1.5pt\parsep=0pt
+   \itemsep=1.2pt\labelwidth=1em\labelsep=0.4em}}%
+  {\end{list}}
+
+% Figure slot that degrades to a labelled box if the file is missing.
+\newcommand{\figslot}[2]{\IfFileExists{figures/#1}%
+  {\includegraphics[width=#2]{figures/#1}}%
+  {\fbox{\parbox[c][2.2cm][c]{#2}{\centering\tiny\ttfamily\detokenize{figures/#1}}}}}
+
+% Caption without the float machinery, so placement is exactly where it is written.
+\newcommand{\cptn}[2]{\par\vspace{1.5pt}{\scriptsize\textbf{#1}~#2\par}\vspace{2pt}}
+
+% Shrink-to-fit only if too wide; never enlarge. Keeps diagrams inside the text block whatever
+% the installed font metrics do to their natural width.
+\newcommand{\fitw}[2]{\resizebox{\ifdim\width>#1 #1\else\width\fi}{!}{#2}}
+
+% ---- raw-TikZ horizontal bar (no pgfplots) -------------------------------------------------
+% \hbarrow{baseline y}{bar length in cm}{fill colour}{row label}{value label}
+% (named \hbarrow, not \hbar: amssymb already defines \hbar as the Planck constant)
+\newcommand{\hbarrow}[5]{%
+  \fill[#3!28,draw=#3!75!black,line width=0.3pt] (0,#1) rectangle (#2,#1+0.26);
+  \node[anchor=east,font=\tiny] at (-0.08,#1+0.13) {#4};
+  \node[anchor=west,font=\tiny] at (#2+0.08,#1+0.13) {#5};}
+
+\begin{document}
+
+\twocolumn[{%
+\begin{center}
+{\LARGE\bfseries\color{hdr} Making Frozen Audio--Visual LLMs Listen}\\[3pt]
+{\large Audio grounding via tiny adapters, anchored preference optimisation, and honest evaluation}\\[6pt]
+{\normalsize \textbf{Souleiman Sbai}}\\[2pt]
+{\footnotesize Research internship --- final report\quad$\cdot$\quad Host lab: AIST CVRT\quad$\cdot$\quad Supervisor: Qiu Yue}\\[1pt]
+{\footnotesize \texttt{souleiman.sbai@polytechnique.edu} \quad$\cdot$\quad \texttt{+33 6 20 94 64 63}}
+\end{center}
+\vspace{2pt}
+\begin{center}
+\begin{minipage}{0.94\textwidth}\footnotesize
+\textbf{Abstract.}\;
+Audio--visual LLMs routinely answer questions about \emph{sound} from \emph{visual} evidence: muting the
+audio track of Qwen3-Omni leaves its answers to audio-existence questions unchanged, driving accuracy
+from $95.1\%$ to $0.0\%$. We ask whether this can be repaired \emph{without touching the backbone}. We
+attach a variational information bottleneck to each modality stream ($<\!0.5\%$ of parameters,
+zero-initialised so that it is exactly the identity map at attachment) and train it with an
+\emph{anchored} preference objective on constructed audio--visual conflicts. Standard DPO on these
+pairs collapses to a constant response (perception accuracy $0.95\!\to\!0.10$); two explicit
+constraints --- a chosen-answer anchor and a KL tether to the frozen backbone on ordinary inputs ---
+remove the degenerate optimum. On AVHBench ($n\!=\!5302$) the adapter improves overall accuracy by
+$+5.1$ points, and a query-conditioned (FiLM) variant by $+5.8$ ($p<10^{-4}$, paired McNemar), with
+hallucination resistance preserved and non-significant changes on MMAU and Video-MME. Two probes
+separate the mechanisms: both variants raise the answer's dependence on the audio by
+$3.3$--$3.6\times$, but only the query-conditioned one also increases attention to audio--visual
+tokens ($5.4\%\!\to\!7.4\%$). The method's reach is bounded by what the frozen backbone already
+encodes: the gain is $+5.8$ on Qwen3-Omni, $+0.1$ on Qwen2.5-Omni and $-2.3$ on VideoLLaMA2, and on
+temporal alignment --- where the backbone is at chance ($0.495$) --- no adapter helps.
+\end{minipage}
+\end{center}
+\vspace{5pt}
+
+% ============================ FIGURE 1 (full width, in the header block) ====================
+\begin{center}
+\fitw{\textwidth}{%
+\begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.4mm]},node distance=2.2mm and 3.6mm,
+  trn/.style={draw,very thick,rounded corners=2pt,fill=trn!22,draw=trn!70!black,
+              minimum height=5.6mm,inner sep=2.2pt,align=center},
+  new/.style={draw,very thick,rounded corners=2pt,fill=trn!45,draw=trn!85!black,
+              minimum height=5.6mm,inner sep=2.2pt,align=center},
+  frzs/.style={draw,rounded corners=2pt,fill=frz!13,minimum height=5.6mm,inner sep=2.2pt,align=center},
+  op/.style={draw,circle,inner sep=1.1pt},
+  io/.style={align=center}]
+
+  % ---------- (a) where the module attaches ----------
+  \node[io] (vin) {video\\{\tiny 2\,fps}};
+  \node[frzs,right=of vin] (venc) {vision\\encoder};
+  \node[frzs,right=of venc] (vproj) {vision\\adapter};
+  \node[io,below=7.5mm of vin] (ain) {audio};
+  \node[frzs,right=of ain] (aenc) {audio\\encoder};
+  \node[frzs,right=of aenc] (aproj) {audio\\adapter};
+  \node[trn,right=4.5mm of vproj] (vvib) {vision\\VIB};
+  \node[trn,right=4.5mm of aproj] (avib) {audio\\VIB};
+  \node[frzs,right=5mm of vvib,yshift=-7.5mm,minimum height=17mm] (llm) {frozen\\LLM};
+  \node[io,right=3.4mm of llm] (ans) {answer};
+  \draw[->] (vin)--(venc); \draw[->] (venc)--(vproj); \draw[->] (vproj)--(vvib); \draw[->] (vvib)--(llm.west);
+  \draw[->] (ain)--(aenc); \draw[->] (aenc)--(aproj); \draw[->] (aproj)--(avib); \draw[->] (avib)--(llm.west);
+  \draw[->] (llm)--(ans);
+  \node[anchor=north,font=\scriptsize\bfseries] at ([yshift=-4mm]aenc.south) {(a) attachment};
+
+  % ---------- (b) module internals ----------
+  \node[io,right=13mm of ans] (x) {$x_t$};
+  \node[trn,right=of x] (enc) {$W_e$\\{\tiny GELU}};
+  \node[new,right=of enc] (film) {FiLM\\{\tiny $(1{+}\gamma)\odot h+\beta$}};
+  \node[trn,right=of film] (ms) {$\mu,\sigma$};
+  \node[op,right=of ms] (z) {$z$};
+  \node[trn,right=of z] (wo) {$W_{\text{out}}$\\{\tiny 0-init}};
+  \node[op,right=of wo] (mult) {$\times$};
+  \node[op,right=of mult] (add) {$+$};
+  \node[io,right=2.6mm of add] (y) {$y_t$};
+  \draw[->] (x)--(enc); \draw[->] (enc)--node[above]{\tiny $h$}(film);
+  \draw[->] (film)--(ms); \draw[->] (ms)--node[above]{\tiny $\mu{+}\sigma{\odot}\epsilon$}(z);
+  \draw[->] (z)--(wo); \draw[->] (wo)--(mult); \draw[->] (mult)--(add); \draw[->] (add)--(y);
+  \draw[->] (x.north) to[out=32,in=148] node[above,pos=0.5]{\tiny skip: $y_t=x_t+\cdots$} (add.north);
+  % question path
+  \node[io,below=8.5mm of x,anchor=west,xshift=-4mm] (w) {question $w_{1:L}$};
+  \node[frzs,right=2.4mm of w] (embed) {$E$ frozen,\\mean-pool};
+  \node[new,right=2.4mm of embed] (wq) {$W_q$};
+  \node[io,right=2.4mm of wq] (qv) {$q$};
+  \node[new,below=5.5mm of film] (wf) {$W_{\!f}$};
+  \node[new,below=5.5mm of mult] (wg) {$w_g$};
+  \draw[->] (w)--(embed); \draw[->] (embed)--(wq); \draw[->] (wq)--(qv);
+  \draw[->] (qv)--(wf);
+  \draw[->] (qv)-|(wg);
+  \draw[->,trn!85!black,very thick] (wf)--node[right,pos=0.45]{\tiny $[\gamma;\beta]$}(film);
+  \draw[->,trn!85!black,very thick] (wg)--node[right,pos=0.45]{\tiny $g(q)$}(mult);
+  \node[anchor=north,font=\scriptsize\bfseries] at ([yshift=-4.4mm]embed.south)
+        {(b) the adapter: variational bottleneck $+$ question conditioning};
+\end{tikzpicture}}
+\end{center}
+\cptn{Figure 1.}{\textbf{(a)} One bottleneck per modality, inserted \emph{after} the frozen
+projection adapter, i.e.\ in the LLM's embedding space. Blue $=$ frozen, orange $=$ trained.
+\textbf{(b)} Internals. $z=\mu(x)+\sigma(x)\odot\epsilon$, $y=x+W_{\text{out}}z$ with
+$W_{\text{out}}\!\stackrel{\text{init}}{=}\!0$, so attaching the module provably changes nothing until
+training starts; a bypass flag recovers the frozen backbone \emph{exactly}, which supplies the DPO
+reference distribution for free, with no second model in memory. The FiLM path (darker) reads a
+pooled, frozen embedding of the question and emits a per-feature scale/shift $[\gamma;\beta]$ and a
+scalar gate $g(q)$. Notation: $\gamma,\beta$ here are FiLM's parameters (Perez et al., 2018), not the
+DPO temperature $\beta$ nor the bottleneck rate $\beta_{kl}$.}
+\vspace{4pt}
+}]
+
+% ================================================================================================
+\section{The problem: sound answered from sight}
+
+Audio--visual LLMs encode each modality into tokens (audio $\sim$25/s; video sampled at 2\,fps in all
+our Qwen3-Omni runs), project them into the LLM's embedding space and answer over the mixed sequence,
+where text, audio and vision compete for attention. Audio consistently loses. \textbf{AVHBench}
+(Sung-Bin et al., ICLR'25) shows cross-modal hallucination in every model it evaluates; \textbf{CMM}
+(Leng et al., 2024) attributes it to unimodal priors, with audio the most frequently overridden
+channel; \textbf{Wen et al.\ (2026)} characterise it as a \emph{Clever Hans} effect. Their audio
+interventions on Qwen3-Omni --- \emph{our} backbone --- are decisive (accuracy \%):
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l cc l@{}}
+\toprule
+probe & original & intervened & intervention \\
+\midrule
+audio existence   & 95.1  & \textcolor{red!70!black}{\textbf{0.0}}  & \emph{Mute}: silence the track \\
+temporal sync     & 100.0 & \textcolor{red!70!black}{\textbf{1.4}}  & \emph{Shift}: audio moved $\pm2$\,s \\
+sound consistency & 75.4  & \textcolor{red!70!black}{\textbf{37.3}} & \emph{Swap}: another clip's audio \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 1.}{Reported values, arXiv:2605.16403, Tab.~1. Under muting accuracy falls to
+\emph{zero}, not to chance: the answers stay consistent with the \emph{video}.}
+
+Existing mitigations --- contrastive decoding (MAD), modality-decoupled DPO (MoD-DPO) and full
+re-alignment --- all modify or bypass the backbone. \textbf{Our question: can audio grounding be
+improved in a frozen backbone by training a parameter-efficient adapter alone?}
+
+% ================================================================================================
+\section{Method}
+
+\subsection{A variational bottleneck per stream}
+The information bottleneck (Tishby et al., 2000) seeks a compressed $Z$ of the input $X$ retaining
+only what predicts $Y$: $\max_{q(z|x)} I(Z;Y)-\beta_{kl}I(Z;X)$. Both terms are intractable and are
+replaced by the variational bounds of Alemi et al.\ (ICLR'17); the compression term becomes the rate
+$\mathbb E_x\,\mathrm{KL}(q(z|x)\,\|\,\mathcal N(0,I))$ and the encoder is trained by
+reparameterisation. Concretely (Fig.~1b), per modality:
+\[ z=\mu(x)+\sigma(x)\odot\epsilon,\qquad y=x+W_{\text{out}}z,\qquad W_{\text{out}}\stackrel{\text{init}}{=}0 .\]
+Together the two modules are $<\!0.5\%$ of backbone parameters. Two properties matter: the module is
+the \emph{identity at initialisation}, and bypassing it reproduces the frozen backbone bit-for-bit,
+so the DPO reference model is free.
+
+\subsection{Training data: constructed conflicts}
+Substituting a clip's audio track yields an instance where the visible and audible events disagree
+(\emph{see} a flute, \emph{hear} a train horn). Preferring the audio-consistent answer on such an
+instance is only possible by using the audio stream.
+
+\subsection{Why standard DPO fails}
+With $c,r$ the log-probabilities of the chosen (heard) and rejected (seen) answer, subscript $p$ $=$
+adapter on and $r$ $=$ bypassed,
+\[
+\mathcal L_{\text{DPO}}=-\log\sigma\big(\beta[(c_p-c_r)-(r_p-r_r)]\big),\quad \beta=0.1 ,
+\]
+where $\sigma$ is the logistic sigmoid, \emph{not} the encoder's $\sigma(x)$. This objective
+constrains only the \emph{margin}: it is minimised even when both probabilities fall, provided the
+rejected one falls faster, and the displaced mass accumulates on an unconstrained third response
+(\emph{likelihood displacement}). Empirically the model converges to answering ``no'' everywhere and
+perception accuracy drops from $\mathbf{0.95}$ to $\mathbf{0.10}$ --- while \emph{maximising} the
+hallucination-resistance metric. A hallucination score alone is not a sufficient training signal.
+
+\subsection{Anchored objective}
+\vspace{-2pt}
+\begin{align*}
+\mathcal L =\ & \underbrace{-\log\sigma(\beta[(c_p{-}c_r){-}(r_p{-}r_r)])}_{\textbf{engine}:\ \text{prefer the heard answer}} \\[1pt]
+ &+\ \lambda_a\underbrace{\big({-}\log\sigma(\beta(c_p{-}c_r){-}\delta)\big)}_{\textcolor{trn}{\textbf{rail 1}}:\ \text{chosen}\,\ge\,\text{base}\ \Rightarrow\ \text{PA}}
+  \ +\ \lambda_{kl}\underbrace{\mathrm{KL}(p_{\text{base}}\|p_\theta)}_{\textcolor{trn}{\textbf{rail 2}}:\ \text{normal inputs}\ \Rightarrow\ \text{HR}} \\[1pt]
+ &+\ \beta_{kl}\,\mathrm{KL}_{\text{VIB}}
+\end{align*}
+Rail 1 (an mDPO-style anchor) forbids the chosen response from losing probability relative to the
+frozen backbone; rail 2 tethers the model to the backbone on ordinary, non-substituted inputs. The
+uniform-``no'' solution violates both, so the preference term can only be reduced by \emph{using the
+audio}.
+
+\subsection{Query conditioning is necessary at the optimum}
+Take one substituted clip and two questions over identical inputs --- ``what do you hear?''
+(target: bell) and ``what do you see?'' (target: dog). With per-question loss $-\log\sigma(m)$
+$=0.13,\,0.69,\,2.13$ at margins $m=+2,0,-2$:
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l cc c@{}}
+\toprule
+adapter & HEAR & SEE & total \\
+\midrule
+cannot read $q$, commits to ``bell'' & $0.13$ & $2.13$ & $2.26$ \\
+cannot read $q$, hedges 50/50        & $0.69$ & $0.69$ & $\mathbf{1.39}$ (floor) \\
+\textbf{reads $q$} (FiLM)            & $0.13$ & $0.13$ & $\mathbf{0.26\!\to\!0}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 2.}{A query-independent adapter has a loss floor of $2\log2\approx1.39$ per pair; a
+query-conditioned one reaches zero. This is a property of the objective, not an empirical result.}
+
+% ================================================================================================
+\section{Evaluation protocol}
+
+\textbf{AVHBench} ($n\!=\!5302$ over 2{,}136 videos): A$\to$V $1{,}136$, V$\to$A $2{,}290$, A--V
+Matching $1{,}876$; yes/no exactly balanced, so a constant answer scores $50\%$. V$\to$A --- is a
+queried sound audible --- is our primary audio-grounding measure. \textbf{CMM} ($1{,}200$ samples
+$\times\,2$ probes $=2{,}400$) reports perception accuracy PA (correct ``yes''/gold ``yes'') and
+hallucination resistance HR (correct ``no''/gold ``no''); \emph{both must be read jointly}, since
+answering ``no'' always gives $\text{HR}=1.0$, $\text{PA}=0$.
+
+\begin{tl}\footnotesize
+\item \textbf{Frame rate} fixed in code at 2\,fps for Qwen3-Omni (1\,fps for the 7B backbones),
+identically for selection and final evaluation. Below 2\,fps Qwen3-Omni develops a systematic
+yes-bias.
+\item \textbf{Prompt sensitivity is large.} Changing only the answer-format suffix moved one score by
+$+11$ points (V$\to$A, $69.0\!\to\!80.3$) at \emph{identical weights}. Prompts, suffix and decoding
+are therefore fixed and logged.
+\item \textbf{Checkpoint selection} on a validation half, results on the disjoint remainder. The
+initially selected checkpoint did not survive this.
+\item \textbf{Paired significance}: identical items for both models; McNemar with bootstrap CIs.
+\item \textbf{Contamination}: training$\,\cap\,$benchmark clips $=\emptyset$, verified by script.
+\end{tl}
+
+% ================================================================================================
+\section{Results}
+
+\begin{center}\scriptsize
+\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{@{}l cccc ccc@{}}
+\toprule
+& \multicolumn{4}{c}{AVHBench ($n{=}5302$)} & \multicolumn{3}{c}{CMM ($n{=}2400$)} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-8}
+ & $A\!\to\!V$ & $V\!\to\!A$ & AV-m & \textbf{all} & PA & HR & all \\
+\midrule
+Gemini {\tiny(closed)} & 0.850 & 0.747 & 0.603 & 0.718 & 0.907 & 0.628 & 0.768 \\
+GPT-4o {\tiny(closed)} & 0.846 & 0.510 & 0.501 & 0.579 & 0.359 & 0.892 & 0.626 \\
+\midrule
+frozen base                   & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.900} & 0.733 & 0.816 \\
+$+$ cross-attn {\tiny(st.\ 60)}  & \textbf{0.850} & 0.805 & 0.696 & 0.776 & \multicolumn{3}{c}{\emph{CMM running}} \\
+$+$ LoRA $r{=}16$ {\tiny(st.\ 90)} & 0.828 & 0.835 & 0.709 & 0.789 & 0.896 & 0.724 & 0.810 \\
+$+$ swap-DPO {\tiny(st.\ 60)}    & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 & 0.816 \\
+$+$ \textbf{FiLM} {\tiny(st.\ 160)} & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} & \textbf{0.820} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 3.}{All rows under one fixed protocol; adapters selected on a validation half. The two
+proposed adapters gain $+5.1$ and $+5.8$ overall points while preserving capability (HR rises, PA
+falls by at most one point). The gain is concentrated in A--V Matching, $0.653\!\to\!0.808$
+($\mathbf{+15.5}$). GPT-4o's $\text{HR}\,0.892$ with $\text{PA}\,0.359$ is precisely the degenerate
+solution of \S2.3, appearing in a deployed system.}
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l c c l@{}}
+\toprule
+comparison (held-out) & $b/c$ & $\Delta$ [95\% CI] & verdict \\
+\midrule
+base $\to$ swap-DPO & 152/411 & $+5.2$ [{+}4.3, {+}6.1] & real ($p<10^{-4}$) \\
+base $\to$ FiLM     & 253/532 & $+5.6$ [{+}4.5, {+}6.7] & real ($p<10^{-4}$) \\
+DPO $\to$ FiLM      & 204/224 & $+0.4$ [{-}0.4, {+}1.2] & tie \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 4.}{Only discordant pairs are informative: $b$ correct for the baseline alone, $c$ for the
+adapted model alone; $\Delta=(c-b)/N$. Discordant counts of $411$ versus $152$ are incompatible with
+a fair-coin null. On A--V Matching alone FiLM beats swap-DPO by $+3.7$ ($p<10^{-4}$). \emph{Single
+training seed}: intervals reflect item sampling only, not seed variance.}
+
+\subsection{Capability controls}
+Two out-of-distribution benchmarks bound the cost of the intervention.
+
+\begin{center}\scriptsize
+\begin{minipage}[t]{0.585\linewidth}\centering
+\begin{tabular}{@{}l cccc@{}}
+\toprule
+MMAU ($n{=}1000$) & Snd & Mus & Sph & Avg \\
+\midrule
+frozen base  & \textbf{80.2} & \textbf{75.4} & \textbf{68.5} & \textbf{74.7} \\
+$+$ swap-DPO & 78.4 & 75.1 & 67.0 & 73.5 \\
+$+$ FiLM     & 79.6 & 73.1 & 66.4 & 73.0 \\
+\bottomrule
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.40\linewidth}\centering
+\begin{tabular}{@{}l cc@{}}
+\toprule
+Video-MME ($n{=}900$) & acc & $\Delta$ \\
+\midrule
+frozen base  & \textbf{0.842} & --- \\
+$+$ swap-DPO & 0.828 & $-1.4$ \\
+$+$ FiLM     & 0.837 & $-0.6$ \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\end{center}
+\cptn{Table 5.}{Both measured under the same pinned harness (2\,fps, letter answers, one parser).
+MMAU parse rate $0.94$ on all rows; Video-MME is the \textbf{short} subset \textbf{without}
+subtitles, audio taken from the video. The $95\%$ intervals are $\pm2.8$ and $\pm2.4$ points, so
+every difference is non-significant --- but each is \emph{negative}, and is reported as such rather
+than rounded to ``no change''. Both benchmarks are out of distribution for this method (no video, or
+no hallucination-inducing construction), and the ordering is consistent: FiLM preserves capability
+better than swap-DPO. Learning \emph{which modality to trust} does not transfer to audio
+understanding in general.}
+
+% ================================================================================================
+\section{Mechanism: what the adapter actually changes}
+
+Benchmark accuracy alone cannot distinguish two adapters that gain the same amount. Three probes do.
+
+\textbf{(i) Attention to audio--visual tokens.} Share of the answer position's attention falling on
+audio/video tokens (eager attention; comparable \emph{within} a model only). \textbf{(ii)
+Audio dependence.} Substitute the audio and re-score the \emph{same} gold answer: a model that ignores
+audio shifts by $\approx0$. \textbf{(iii) Parameters.} Read directly off the trained FiLM checkpoint,
+with no inference at all.
+
+\begin{center}
+\fitw{\linewidth}{%
+\begin{tikzpicture}[font=\scriptsize]
+% ---- panel (i): attention share, %  (scale 0.52 cm per point) ----
+\node[anchor=west,font=\scriptsize\bfseries] at (-1.55,1.32)
+      {(i) attention on AV tokens (\%)};
+\hbarrow{0.84}{2.81}{frz}{base}{5.4}
+\hbarrow{0.42}{2.96}{trn}{+swap-DPO}{5.7}
+\hbarrow{0.00}{3.85}{trn}{+FiLM}{\textbf{7.4}}
+\draw[gray!55,line width=0.3pt] (0,-0.12) -- (0,1.16);
+% ---- panel (ii): |log-lik shift| (scale 1.45 cm per nat) ----
+\node[anchor=west,font=\scriptsize\bfseries] at (-1.55,-0.55)
+      {(ii) audio dependence, $|\Delta\log p|$};
+\hbarrow{-1.03}{0.75}{frz}{base}{0.515}
+\hbarrow{-1.45}{2.46}{trn}{+swap-DPO}{1.698}
+\hbarrow{-1.87}{2.68}{trn}{+FiLM}{\textbf{1.848}}
+\draw[gray!55,line width=0.3pt] (0,-1.99) -- (0,-0.91);
+% ---- panel (iii): cross-backbone delta (scale 0.40 cm per point, zero at x=1.30) ----
+\node[anchor=west,font=\scriptsize\bfseries] at (-1.55,-2.42)
+      {(iii) AVHBench $\Delta$ by backbone (pts)};
+\fill[trn!28,draw=trn!75!black,line width=0.3pt] (1.30,-2.90) rectangle (3.62,-2.64);
+\node[anchor=east,font=\tiny] at (1.22,-2.77) {Qwen3-Omni};
+\node[anchor=west,font=\tiny] at (3.70,-2.77) {\textbf{+5.8}};
+\fill[trn!28,draw=trn!75!black,line width=0.3pt] (1.30,-3.32) rectangle (1.34,-3.06);
+\node[anchor=east,font=\tiny] at (1.22,-3.19) {Qwen2.5-Omni};
+\node[anchor=west,font=\tiny] at (1.42,-3.19) {+0.1};
+\fill[red!25,draw=red!65!black,line width=0.3pt] (0.38,-3.74) rectangle (1.30,-3.48);
+\node[anchor=east,font=\tiny] at (0.30,-3.61) {VideoLLaMA2};
+\node[anchor=west,font=\tiny] at (1.38,-3.61) {\textcolor{red!70!black}{$-2.3$}};
+\draw[gray!55,line width=0.3pt] (1.30,-3.86) -- (1.30,-2.55);
+\node[anchor=north,font=\tiny,text=gray!60!black] at (1.30,-3.88) {0};
+\end{tikzpicture}}
+\end{center}
+\cptn{Figure 2.}{Raw-TikZ charts of the three headline mechanism/scaling measurements.
+Panel (i): Qwen3-Omni, $5.4\%\!\to\!5.7\%$ for swap-DPO (unchanged within variation) versus
+$5.4\%\!\to\!7.4\%$ for FiLM, a $38\%$ relative increase; Qwen2.5-Omni moves $7.9\%\!\to\!8.1\%$.
+Panel (ii): $n{=}40$ AVE clip pairs; both adapters raise audio dependence by $3.3$--$3.6\times$ and
+differ little from one another. Panel (iii): identical data, objective, constraints and selection
+for every backbone.}
+
+\textbf{Reading.} Comparable accuracy gains are reached by \emph{two different mechanisms}: swap-DPO
+raises audio dependence \emph{without} attending more to the evidence (it re-encodes the tokens),
+whereas FiLM raises both. Parameter probes agree: the spectral norm ratio
+$\|W_{\text{out}}\|/\|W_e\|\approx1.0$ (the edit \textbf{rotates} features rather than amplifying
+them), the FiLM gate $g(q)$ \textbf{never falls below $0.4$} over the evaluation questions
+(modulation, not routing --- it never switches a stream off), and question-driven modulation is
+$\approx4.5\times$ stronger on vision than on audio, i.e.\ the query steers mostly by re-weighting
+the \emph{visual} contribution. An earlier version of this analysis claimed that $59\%$ of the vision
+stream was rewritten with the audio module inactive; direct parameter inspection did not support it
+and the claim was withdrawn.
+
+\begin{center}
+\figslot{ll_shift.png}{0.99\linewidth}
+\end{center}
+\cptn{Figure 3.}{Measured log-likelihood of the gold answer under the true audio (teal) versus
+substituted audio (magenta); KDE over $40$ AVE clips, dashed lines are means. Mean shifts:
+frozen base $-0.515$, $+$swap-DPO $-1.698$, $+$FiLM $-\mathbf{1.848}$.}
+
+% ================================================================================================
+\section{Generalisation, and the bound on the method}
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l cc c l@{}}
+\toprule
+backbone & base & $+$adapter & $\Delta$ & attention on AV \\
+\midrule
+Qwen3-Omni (30B)   & 0.761 & \textbf{0.819} & $+5.8$ & $5.4\%\!\to\!7.4\%$ \\
+Qwen2.5-Omni (7B)  & 0.729 & 0.730 & $+0.1$ & $7.9\%\!\to\!8.1\%$ \\
+VideoLLaMA2 (7B)   & 0.707 & 0.684 & \textcolor{red!70!black}{$-2.3$} & audio bolted on post hoc \\
+MiniCPM-O 2.6 (8B) & 0.744 & \emph{training} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 6.}{AVHBench overall accuracy, $n{=}5302$. The gain tracks the audio information
+\emph{already present} in the frozen backbone: substantial for Qwen3-Omni, negligible for
+Qwen2.5-Omni, negative for VideoLLaMA2 whose audio pathway was added post hoc. This negative result
+bounds the method --- an adapter can make existing audio information \emph{usable}, but cannot supply
+audio competence the backbone lacks.}
+
+\textbf{Harness sensitivity, quantified.} On MiniCPM-O 2.6 our harness measures AVHBench
+$0.751/0.796/0.678$ (overall $\mathbf{0.744}$, parse $1.00$) where the published figures are
+$0.834/0.745/0.543$ (overall $0.693$, arXiv:2603.03192) --- \emph{identical weights and benchmark},
+$5.1$ points apart, from prompt, answer-format and frame-rate choices alone. We therefore compare
+relative improvements within one protocol and never absolute accuracies across publications. Its CMM
+hallucination resistance under our harness is $\text{HR}\,0.578$ (PA $0.897$) against $0.733$ for
+Qwen3-Omni: weaker audio grounding, and correspondingly more headroom.
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l l c c l@{}}
+\toprule
+backbone & method & base $\to$ trained & $\Delta$ & trains \\
+\midrule
+MiniCPM-O 2.6 & MoD-DPO++ {\tiny(rep.)} & $0.693\!\to\!0.745$ & $+5.2$ & \textcolor{red!70!black}{full LLM} \\
+Qwen2.5-Omni  & MoD-DPO++ {\tiny(rep.)} & $0.708\!\to\!0.796$ & $+8.8$ & \textcolor{red!70!black}{full LLM} \\
+Qwen2.5-Omni  & MAD {\tiny(rep.)}       & $0.769\!\to\!0.816$ & $+4.7$ & \textcolor{frz}{decode-time} \\
+\midrule
+Qwen3-Omni    & \textbf{FiLM (ours)}    & $0.761\!\to\!0.819$ & \textbf{+5.8} & \textcolor{trn}{\textbf{$<$0.5\%, frozen}} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 7.}{Reported rows: arXiv:2603.03192 (Tab.~1) and arXiv:2601.21181 (Tab.~1), each on
+\emph{their} backbone and harness --- hence deltas only, never absolute comparison. The proposed
+method sits between full fine-tuning ($+8.8$) and training-free decoding ($+4.7$) while updating
+$<\!0.5\%$ of parameters and remaining reversible. On A--V Matching our $+15.5$ is comparable to the
+$+15.0$ reported for MoD-DPO.}
+
+% ================================================================================================
+\section{Temporal alignment: a negative result that explains the rest}
+
+The same objective applies with a different intervention: displace the audio by
+$\Delta\in\pm\{0.5,1,2\}$\,s and prefer the correct synchronisation judgement. The preference term and
+both rails are unchanged. It does not work, and the reason is instructive.
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l c l@{}}
+\toprule
+AVE-Shift (held out, balanced $\Rightarrow$ chance $0.50$) & acc & reading \\
+\midrule
+base --- synchronised vs shifted ($n{=}200$) & 0.495 & at chance \\
+base --- lag vs lead ($n{=}100$)             & 0.500 & at chance \\
+base --- $\pm2$\,s displacement only ($n{=}200$) & 0.495 & at chance \\
+\midrule
+$+$ shift-DPO {\tiny(st.\ 60)} --- sync vs shifted & 0.515 & unchanged \\
+$+$ shift-DPO {\tiny(st.\ 60)} --- lag vs lead     & 0.450 & unchanged \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 8.}{Measured; all differences lie inside the $\pm7$-point interval at these sample sizes.
+Row 3 restricts the probe to $\pm2$\,s --- four frames at 2\,fps, the largest and most clearly
+resolvable offset --- and the backbone is at chance \emph{there too}.}
+
+Training on displaced data leaves accuracy at chance, so the limitation is not the objective:
+\textbf{the frozen backbone carries no usable temporal-alignment signal, and there is nothing for an
+adapter to unlock.} This is the same pattern as audio on VideoLLaMA2, and together the two cases
+state the law governing this method --- \emph{gain is proportional to usable-but-underused signal}.
+This also reconciles our chance-level result with Table~1, where Wen et al.\ report a fall from
+$100.0$ to $1.4$: a model that answers ``synchronised'' regardless of the input scores $\approx\!100$
+on synchronised items and $\approx\!0$ on displaced ones, hence $\approx\!50$ on a balanced mix. The
+two measurements are the same finding seen from either side, and $0.495$ is what our balanced probe
+must report if theirs is right.
+
+As a controlled test of the representability hypothesis we add a shared clock feature
+$\tau_t=[\sin(2\pi t/T),\cos(2\pi t/T)]$ to both streams before the bottleneck,
+$\tilde x_t=[x_t;\tau_t]$, so that misalignment becomes representable at all (audio at $t$ and a frame
+at $t+\Delta$ then differ in encoding); $W_{\text{out}}$ stays zero-initialised. At 2\,fps the frame
+interval of $0.5$\,s bounds the smallest resolvable displacement. \emph{Implemented and in training;
+given the chance-level baseline we expect limited benefit and retain the run as a test of the
+hypothesis, not as an expected improvement.}
+
+% ================================================================================================
+\section{Negative results and what they taught}
+
+\begin{center}\scriptsize
+\begin{tabular}{@{}l l l@{}}
+\toprule
+tried & failure & lesson \\
+\midrule
+standard DPO on swap pairs & constant response (PA $0.95\!\to\!0.10$) & motivated the two rails \\
+GRPO on easy items & zero advantage on ${\sim}2/3$ of steps & unanimous rewards give no gradient \\
+gate $g(q)$ as a router & stayed $>0.4$ throughout & modulation beats routing \\
+``59\% of vision rewritten'' & unsupported by parameter inspection & claim withdrawn \\
+LoRA at identical attach points & $+2.8$ vs $+5.1$; HR \emph{below} base & residual form $>$ capacity \\
+Bottleneck \emph{pre}-adapter & comparable accuracy, worse portability & kept post-adapter \\
+\bottomrule
+\end{tabular}
+\end{center}
+\cptn{Table 9.}{The LoRA row is the cleanest control: same attachment points, same data, same
+objective, more capacity --- and half the gain with degraded HR. What helps is the zero-initialised
+residual bottleneck form, not parameter count. The placement ablation was decided on portability:
+post-adapter uses one attachment width (the LLM hidden size) on every backbone, whereas pre-adapter
+needs a distinct width per modality per backbone; its numerical results are not in the current
+results directory and are therefore not tabulated.}
+
+% ================================================================================================
+\section{Limitations and status}
+
+\begin{tl}\footnotesize
+\item \textbf{Single seed.} All intervals reflect item sampling, not seed variance. Multi-seed
+statistics, a $\beta_{kl}$ sweep, a VIB-ingredient ablation and a data-scaling curve are not yet
+measured and are deliberately \emph{not} reported.
+\item \textbf{In progress.} CMM for the cross-attention baseline; MiniCPM-O adapter training and
+evaluation; the video-substitution and temporal-displacement variants are trained but not yet
+evaluated.
+\item \textbf{Scope.} Gains require a backbone with usable audio representations, and out-of-%
+distribution audio reasoning shows a small, consistently negative cost.
+\end{tl}
+
+\textbf{Reproducibility.} Four model wrappers, five benchmark runners, four training variants, two
+baselines and three analysis probes; ${\approx}10$k lines, 23 cluster job scripts, seven test suites.
+Frame rate, prompts, answer format and decoding are pinned; selection is on a disjoint validation
+half; per-item predictions are stored so every paired test can be recomputed. Each table and figure
+is produced by a single script.
+
+% ================================================================================================
+\section{Conclusion}
+
+A parameter-efficient, zero-initialised variational adapter ($<\!0.5\%$ of parameters), trained with
+an anchored preference objective on constructed audio--visual conflicts, improves audio grounding in a
+\emph{frozen} audio--visual LLM by $+5.1$ points and, with query conditioning, $+5.8$ points on
+AVHBench ($p<10^{-4}$, paired), preserving hallucination resistance and costing nothing significant on
+MMAU or Video-MME. The improvement is supported by mechanistic evidence, not accuracy alone: audio
+dependence rises $3.3$--$3.6\times$ in both variants, while only the query-conditioned one also
+increases attention to the audio--visual evidence. Its limit is equally clear and equally measured ---
+where the frozen representation carries no usable signal, whether that is audio on VideoLLaMA2 or
+temporal alignment on Qwen3-Omni, no adapter can supply it.
+
+\end{document}
