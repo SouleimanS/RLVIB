@@ -1,0 +1,73 @@
+#!/bin/bash
+#PBS -N rlvib_avhbench_baseline
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o rlvib_avhbench_baseline.qsub.log
+
+# Frozen Qwen3-Omni baseline on AVHBench (3 binary tasks).
+# See src/rlvib/eval/run_avhbench.py and docs/research/grounding-audio-to-video.md.
+#
+# First, on the LOGIN node, download AVHBench (Google Drive) into the repo's data/
+# dir (data/ is gitignored -> the videos are NOT committed):
+#   pip install gdown
+#   cd ~/SOULEIMAN_repo/RLVIB && mkdir -p data/AVHBench
+#   gdown 1KcYDAv9lLy3hsx5rWdfRqMFV2NYcZ94W -O data/AVHBench/qa.json
+#   gdown 10-Qp8zxA3ITT-ileEnCgJkf5Nzx1wry7 -O data/AVHBench/videos.zip && \
+#     unzip -q data/AVHBench/videos.zip -d data/AVHBench/videos
+#   (check the layout; set AVHBENCH_VIDEOS if the {id}.mp4 files land deeper)
+#
+#   LIMIT=100 qsub -v LIMIT scripts/eval_avhbench.qsub   # quick sanity baseline
+#   LIMIT=0   qsub -v LIMIT scripts/eval_avhbench.qsub   # full run
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u   # rlvib env's activate.d/libstdcxx.sh reads $LD_LIBRARY_PATH unguarded -> set -u aborts
+conda activate "${CONDA_ENV:-rlvib}"
+set -u
+# Do NOT export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:..." -- conda's OpenSSL then shadows the system
+# one and crashes the Qwen media/import path (the same EVP_md2 symbol-lookup error that breaks
+# system git). torch finds its bundled CUDA libs via RPATH, so it isn't needed -- verified: the
+# interactive smoke runs Qwen fine without it. See CLAUDE.md "Gotcha".
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+AVHBENCH_QA="${AVHBENCH_QA:-$PWD/data/AVHBench/qa.json}"
+AVHBENCH_VIDEOS="${AVHBENCH_VIDEOS:-$PWD/data/AVHBench/videos}"
+BN_ARG=""
+if [ -n "${BOTTLENECK:-}" ]; then BN_ARG="--bottleneck $BOTTLENECK"; TAG="${TAG:-_bn}"; else TAG="${TAG:-}"; fi
+# audio-aware contrastive decoding (composes with the bottleneck); tag the output so a CD
+# run never overwrites the plain/bottleneck JSON. AUDIO_CD unset/0 => byte-identical to before.
+if awk "BEGIN{exit !(${AUDIO_CD:-0} > 0)}"; then TAG="${TAG}_cd${AUDIO_CD}"; fi
+# optional single-task re-run: TASKS="AV Matching" restricts to one AVHBench task (array so the
+# space in the name survives); NO_RESUME=1 forces a fresh JSON. Pair with a distinct TAG so a
+# single-task run never overwrites the full 3-task eval.
+OPT_ARGS=()
+[ -n "${TASKS:-}" ] && OPT_ARGS+=(--tasks "$TASKS")
+[ "${NO_RESUME:-0}" = 1 ] && OPT_ARGS+=(--no-resume)
+# video fps for the Qwen frame sampler (FPS=1 matches the standalone AVHBench harness). Only the
+# Qwen models read it; VideoLLaMA2 has its own sampler, so FPS is not passed there.
+case "${MODEL:-qwen3-omni}" in
+    qwen3-omni|qwen2.5-omni) [ -n "${FPS:-}" ] && OPT_ARGS+=(--fps "$FPS");;
+esac
+
+echo "=== Node: $(hostname)  Date: $(date)  bottleneck=${BOTTLENECK:-none}  audio_cd=${AUDIO_CD:-0}  tasks=${TASKS:-all} ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/avhbench_${MODEL:-qwen3-omni}${TAG}_out.txt") 2>&1
+
+python -u -m rlvib.eval.run_avhbench \
+    --model "${MODEL:-qwen3-omni}" \
+    --qa-json "$AVHBENCH_QA" --video-root "$AVHBENCH_VIDEOS" \
+    --limit "${LIMIT:-100}" $BN_ARG "${OPT_ARGS[@]}" \
+    --audio-cd "${AUDIO_CD:-0}" --cd-plausibility "${CD_PLAUSIBILITY:-0.1}" \
+    --out "runs/avhbench_${MODEL:-qwen3-omni}${TAG}.json"
+
+echo "=== Done $(date) ==="

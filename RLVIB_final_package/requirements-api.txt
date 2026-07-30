@@ -1,0 +1,6 @@
+# Closed-API frontier baselines (benchmark-only; see src/rlvib/models/api_models.py).
+# Install in the rlvib env on a node with internet (ABCI login node), NOT the GPU batch
+# nodes (which are air-gapped). Also requires ffmpeg/ffprobe on PATH (for GPT-4o frames).
+#   pip install -r requirements-api.txt
+google-genai>=0.3
+openai>=1.40

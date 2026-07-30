@@ -1,0 +1,63 @@
+#!/bin/bash
+#PBS -N rlvib_llshift
+#PBS -P gae50891
+#PBS -q rt_HF
+#PBS -l select=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+#PBS -o rlvib_llshift.qsub.log
+
+# Likelihood-shift probe for base + swap-DPO + FiLM in ONE job, then the KDE figure.
+# shift = mean( log p(gold | audio-SWAPPED) - log p(gold | original) ); ~0 means the answer
+# does not depend on the audio, more negative = more audio-reliant.
+#
+#   qsub scripts/probe_ll_shift.qsub                       # defaults below
+#   PAIRS=60 qsub -v PAIRS scripts/probe_ll_shift.qsub
+#
+# Outputs: runs/llshift_qwen3-omni{,_broad_step60,_film_step160}.json
+#          paper/figures/ll_shift.png   (3 panels, the deck's figure)
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p "$PBS_O_WORKDIR/runs" "$PBS_O_WORKDIR/paper/figures"
+
+source /home/aab11336im/anaconda3/etc/profile.d/conda.sh
+set +u
+conda activate "${CONDA_ENV:-rlvib}"
+set -u
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
+MODEL="${MODEL:-qwen3-omni}"
+PAIRS="${PAIRS:-40}"
+DPO_CKPT="${DPO_CKPT:-runs/anchored_${MODEL}_broad/bottleneck_step60.pt}"
+FILM_CKPT="${FILM_CKPT:-runs/anchored_${MODEL}_film/bottleneck_step160.pt}"
+
+echo "=== Node: $(hostname)  Date: $(date)  model=$MODEL  pairs=$PAIRS ==="
+nvidia-smi -L
+
+exec > >(tee -a "$PBS_O_WORKDIR/runs/llshift_${MODEL}_out.txt") 2>&1
+
+echo "--- base ---"
+python -u scripts/probe_ll_shift.py --model "$MODEL" --pairs "$PAIRS"
+
+for spec in "broad_step60:$DPO_CKPT" "film_step160:$FILM_CKPT"; do
+    tag="${spec%%:*}"; ck="${spec#*:}"
+    if [ -f "$ck" ]; then
+        echo "--- $tag ($ck) ---"
+        python -u scripts/probe_ll_shift.py --model "$MODEL" --pairs "$PAIRS" \
+            --bottleneck "$ck" --tag "$tag"
+    else
+        echo "!! missing $ck -- skipping $tag"
+    fi
+done
+
+echo "--- figure ---"
+python -u scripts/plot_ll_shift.py runs/llshift_${MODEL}.json \
+    runs/llshift_${MODEL}_broad_step60.json runs/llshift_${MODEL}_film_step160.json \
+    --out paper/figures/ll_shift.png || echo "(plot skipped: not all panels present)"
+
+echo "=== Done $(date) ==="

@@ -1,0 +1,66 @@
+# RLVIB — conda environment
+#
+# Target: ABCI cluster (NVIDIA H200 / Hopper).
+# The PyTorch wheel from PyPI bundles its own CUDA runtime, so the same spec
+# works on the cluster and on CPU-only boxes (it just reports CUDA unavailable
+# where there's no GPU). See the pip section for the CUDA-version caveat.
+#
+#   Create:   conda env create -f environment.yml
+#   Update:   conda env update -f environment.yml --prune
+#   Activate: conda activate rlvib
+#
+# This is a deliberately MINIMAL base. RL / model libraries get added as the
+# design firms up (see the commented list at the bottom).
+
+name: rlvib
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+
+  # --- scientific stack ---
+  - numpy
+  - scipy
+
+  # --- config / utilities ---
+  - pyyaml
+  - tqdm
+
+  # --- media (audio/video decoding for qwen-omni-utils) ---
+  - ffmpeg
+
+  # --- dev / quality ---
+  - pytest
+  - ruff
+
+  - pip:
+      # PyTorch. The default PyPI wheel currently resolves to a CUDA 13.0 build,
+      # which runs on ABCI H200 only with a recent driver (~R580+). If the
+      # cluster driver is older, force a CUDA 12.x build by prepending an index
+      # URL above this line, e.g.:
+      #   --index-url https://download.pytorch.org/whl/cu126
+      # (or .../whl/cpu for a CPU-only install).
+      - torch
+      - torchvision                  # required by transformers' Qwen2-VL/Qwen3-Omni video processor
+
+      # --- Qwen3-Omni base model + audio-visual I/O (v0) ---
+      - transformers>=5.2.0          # Qwen3-Omni-MoE support landed in transformers 5.2
+      - accelerate
+      - qwen-omni-utils              # process_mm_info + AV preprocessing helpers
+      - soundfile
+      - huggingface_hub
+      - eva-decord                   # video reader (decord fork, py3.11 wheels); torchvision removed io.read_video
+      # flash-attn is optional (faster attention); needs a manual build:
+      #   pip install flash-attn --no-build-isolation
+
+      - datasets                     # HF datasets (DAVE, OmniInstruct-v1 training data)
+      - torchcodec                   # datasets>=5 audio decoding (OmniInstruct Audio feature)
+      - gdown                        # Google Drive downloads (AVHBench)
+
+      # --- add later, as the RL design firms up ---
+      # - trl
+      # - peft
+      # - wandb
