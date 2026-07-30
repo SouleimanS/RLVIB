@@ -1,8 +1,32 @@
-# RLVIB — Audio Grounding for Frozen Audio-Visual LLMs
+<h1 align="center">RLVIB</h1>
+<p align="center"><b>Audio Grounding for Frozen Audio-Visual LLMs</b></p>
+<p align="center">
+  A &lt;0.5% adapter that makes a <i>frozen</i> audio-visual LLM listen —
+  <b>+5.8</b> AVHBench points, <i>p</i> &lt; 10<sup>-4</sup>, backbone untouched.
+</p>
+<p align="center">
+  <img alt="python" src="https://img.shields.io/badge/python-3.10%20%7C%203.11-blue">
+  <img alt="backbones" src="https://img.shields.io/badge/backbones-4-orange">
+  <img alt="benchmarks" src="https://img.shields.io/badge/benchmarks-5-green">
+  <img alt="status" src="https://img.shields.io/badge/results-reproducible-brightgreen">
+</p>
+
+---
 
 Reproduction package for the final internship report (`paper/final.tex`).
 
 **Author:** Souleiman Sbai · **Host lab:** AIST CVRT · **Supervisor:** Qiu Yue
+
+### At a glance
+
+| | AVHBench (n=5302) | CMM HR | MMAU | Video-MME |
+|---|---|---|---|---|
+| frozen base | 0.761 | 0.733 | 74.7 | 0.842 |
+| + swap-DPO | 0.812 | 0.743 | 73.5 | 0.828 |
+| + **FiLM** | **0.819** | **0.746** | 73.0 | 0.837 |
+
+Trains `<0.5%` of parameters · identity at initialization · fully reversible ·
+every number reproducible from this folder.
 
 ---
 

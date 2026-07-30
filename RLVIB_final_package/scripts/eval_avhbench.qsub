@@ -33,7 +33,7 @@ set -u
 # Do NOT export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:..." -- conda's OpenSSL then shadows the system
 # one and crashes the Qwen media/import path (the same EVP_md2 symbol-lookup error that breaks
 # system git). torch finds its bundled CUDA libs via RPATH, so it isn't needed -- verified: the
-# interactive smoke runs Qwen fine without it. See CLAUDE.md "Gotcha".
+# interactive smoke runs Qwen fine without it. See docs/CLUSTER_NOTES.md "Gotcha".
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRANSFORMERS_OFFLINE=1

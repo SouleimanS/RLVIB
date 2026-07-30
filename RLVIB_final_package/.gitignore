@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+/.venv/
+/venv/
+/env/
+
+# Experiment artifacts (reproducible from code + data)
+/runs/
+/data/
+*.pt
+
+# LaTeX build products
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# PBS job logs
+*.qsub.log

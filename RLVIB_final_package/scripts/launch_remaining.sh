@@ -8,7 +8,7 @@
 #
 # Why eval_one.sh and not launch_all_evals.sh: eval_one encodes the correct PER-MODEL fps
 # (qwen2.5=1, qwen3=2) and the corrected yn-suffix automatically. launch_all_evals.sh hard-pins
-# FPS=1 for every Qwen, which starves qwen3's video task and reintroduces yes-bias (see CLAUDE/
+# FPS=1 for every Qwen, which starves qwen3's video task and reintroduces yes-bias (see docs/CLUSTER_NOTES.md /
 # agent-onboarding §6). Each run is RESUMABLE: a walltime cutoff is fine, just re-run this script.
 #
 # Remaining cells (gemini/gpt4o are API-only, no VIB -> already complete; qwen2.5-omni is also

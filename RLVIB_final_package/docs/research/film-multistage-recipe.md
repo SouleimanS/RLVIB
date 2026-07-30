@@ -34,7 +34,7 @@ which is exactly what Part B fixes.
 
 ```bash
 cd ~/SOULEIMAN_repo/RLVIB
-env -u LD_LIBRARY_PATH git pull origin claude/blissful-ride-n9dras
+env -u LD_LIBRARY_PATH git pull origin main
 
 # (0) one-time leakage check (AVE train vs AVHBench/CMM clips) -- needs data/ (cluster)
 source /home/aab11336im/anaconda3/etc/profile.d/conda.sh && conda activate rlvib
