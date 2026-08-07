@@ -260,6 +260,75 @@ objective.
 \end{itemize}
 \end{frame}
 
+\begin{frame}{VIB, derived: where the two variational bounds come from}
+\footnotesize
+Both terms above are intractable: $I(Z;Y)$ needs the true $p(y|z)$; $I(Z;X)$ needs the true marginal
+$p(z)=\int p(z|x)p(x)\,dx$. Fix a decoder $q(y|z)$ and a prior $r(z)$ --- both bounds below follow
+from the \emph{same} tool, $\mathrm{KL}(\cdot\,\|\,\cdot)\ge 0$.
+\vspace{0.25em}
+\begin{align*}
+\textcolor{trn}{\textbf{relevance}}\quad I(Z;Y) &\ \ge\ \mathbb E_{p(x,y)}\mathbb E_{p(z|x)}\big[\log q(y|z)\big] \\[2pt]
+\textcolor{trn}{\textbf{compression}}\quad I(Z;X) &\ \le\ \mathbb E_{p(x)}\big[\mathrm{KL}(p(z|x)\,\|\,r(z))\big]
+\end{align*}
+\vspace{-0.35em}
+\begin{itemize}\footnotesize
+\item From $\mathrm{KL}(p(y|z)\|q(y|z))\!\ge\!0$ and $\mathrm{KL}(p(z)\|r(z))\!\ge\!0$: each surrogate
+recovers the exact value only when it matches the true distribution.
+\item Dropped: $I(Z;Y)=H(Y)+\mathbb E[\log p(y|z)]$, and $H(Y)\ge0$ is a constant, independent of
+encoder/decoder. What survives, $\mathbb E[\log q(y|z)]$, is a \textbf{log-likelihood} --- the same
+quantity that reappears as $c_p,r_p$ once we introduce the DPO objective.
+\item $\beta>0$, so upper-bounding the term we \emph{subtract} still lower-bounds the difference:
+\end{itemize}
+\vspace{-0.3em}
+{\scriptsize
+\[
+I(Z;Y)-\beta I(Z;X)\ \ge\
+\underbrace{\mathbb E[\log q(y|z)] - \beta\,\mathbb E_x\mathrm{KL}(p(z|x)\|r(z))}_{=:\ \mathcal R_{\text{VIB}}}
+\]}
+\vspace{-0.3em}
+{\footnotesize Maximizing $\mathcal R_{\text{VIB}}$ (Alemi et al., ICLR'17) by gradient ascent is
+therefore a \textbf{certified} lower bound on the true objective, not merely something that
+resembles it.}
+\end{frame}
+
+\begin{frame}{Reparameterization, and the rate in closed form}
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}\footnotesize
+\textbf{Why reparameterize?} $\mathcal R_{\text{VIB}}$ needs $\nabla_\theta\,
+\mathbb E_{p(z|x;\theta)}[f(z)]$ --- but $\theta$ names a \emph{distribution} for $z$, not something
+a sampled point is differentiable in.
+\vspace{0.3em}
+
+Rewrite the sample as a deterministic map of $x$ and \emph{parameter-free} noise (Kingma \& Welling,
+2014):
+\[ z=\mu(x)+\sigma(x)\odot\epsilon,\quad \epsilon\sim\mathcal N(0,I) \]
+\vspace{-0.3em}
+\begin{itemize}\footnotesize
+\item For fixed $\epsilon$, $z$ is an ordinary differentiable function of $\mu(x),\sigma(x)$:
+$\nabla_\theta\mathbb E_\epsilon[f(z)]=\mathbb E_\epsilon[\nabla_\theta f(z)]$ --- one Monte Carlo
+sample gives an \textbf{unbiased} gradient.
+\item The same $z=\mu(x)+\sigma(x)\odot\epsilon$ from the encoder (previous slides), now justified.
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}\footnotesize
+\textbf{The compression term, in closed form.} $q(z|x)=\mathcal N(\mu,\sigma^2I)$ and
+$r(z)=\mathcal N(0,I)$ are both Gaussian, so no sampling is needed at all:
+\vspace{0.2em}
+\[
+\mathrm{KL}(q\|r)=\tfrac12{\textstyle\sum_{i=1}^{d}}\big(\mu_i^2+\sigma_i^2-1-\log\sigma_i^2\big)
+\]
+\vspace{-0.3em}
+\begin{itemize}\footnotesize
+\item From $\mathbb E_q[(z_i{-}\mu_i)^2]=\sigma_i^2$, $\mathbb E_q[z_i^2]=\sigma_i^2{+}\mu_i^2$,
+coordinate-wise, summed over the $d$ latent dimensions.
+\item This \textbf{is} $\mathrm{KL}_{\text{VIB}}$ in the anchored objective introduced shortly
+($\beta_{kl}\,\mathrm{KL}_{\text{VIB}}$): computed directly from the encoder's own outputs, no Monte
+Carlo needed for this half of the bound.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
 \begin{frame}{Method: a variational bottleneck per modality stream}
 \centering
 \begin{tikzpicture}[font=\scriptsize,>={Latex[length=1.5mm]},node distance=2mm and 4mm,
