@@ -5,3 +5,6 @@
 *.synctex.gz
 *.bbl
 *.blg
+*.nav
+*.snm
+*.toc
