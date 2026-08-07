@@ -13,7 +13,8 @@
 
 ---
 
-Reproduction package for the final internship report (`paper/final.tex`).
+Reproduction package for the final internship deliverables: a written report
+(`paper/report.tex`, 28pp) and the accompanying presentation (`paper/final.tex`, 34 slides).
 
 **Author:** Souleiman Sbai · **Host lab:** AIST CVRT · **Supervisor:** Qiu Yue
 
@@ -81,7 +82,8 @@ paired *p* < 10⁻⁴, with hallucination resistance preserved.
 │   ├── mod_dpo/                  MoD-DPO / MoD-DPO++ re-implementation
 │   └── mad/                      MAD training-free decoding re-implementation
 ├── tests/                        unit tests (identity-at-init, masks, metrics, …)
-├── paper/final.tex               the report
+├── paper/report.tex              written internship report (28pp)
+├── paper/final.tex               the presentation (34 slides)
 ├── paper/summary.tex             two-page, two-column standalone summary
 ├── docs/
 │   ├── DECK_TO_CODE.md           slide → code → command map
@@ -99,8 +101,9 @@ versions. This is not accidental complexity; see §4.
 
 ## 3. Results and their provenance
 
-Every number in `paper/final.tex` is either measured under this harness or taken from a cited
-paper. The table below states which, and how to regenerate it.
+Every number in `paper/report.tex` and `paper/final.tex` (identical figures; the report is the
+prose write-up, the slides are the presentation of the same work) is either measured under this
+harness or taken from a cited paper. The table below states which, and how to regenerate it.
 
 ### Measured here (Qwen3-Omni, AVHBench n=5302 / CMM n=2400)
 
