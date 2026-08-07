@@ -849,6 +849,7 @@ therefore not tabulated.}}
 \centering
 \renewcommand{\arraystretch}{1.3}
 \scriptsize
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{l l l}
 \toprule
 tried & failure & lesson \\
@@ -859,7 +860,7 @@ query-conditioned gate $g(q)$ & remained $>0.4$ throughout & modulation is prefe
 ``59\% of vision rewritten'' & not supported by parameter inspection & claim withdrawn \\
 LoRA at identical attach points & $+2.8$ versus $+5.1$; HR below base & the residual form matters, not capacity \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \vfill
 {\footnotesize Several of these results informed the final design and are reported for completeness.}
 \end{frame}
