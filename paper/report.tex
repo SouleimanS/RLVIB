@@ -74,10 +74,9 @@ underlying mechanisms: both variants increase the model's dependence on the audi
 of 3.3--3.6, but only the query-conditioned variant also increases attention allocated to
 audio--visual tokens. The method's reach is bounded by what the frozen backbone already encodes: the
 gain is $+5.8$ points on Qwen3-Omni, $+0.1$ on Qwen2.5-Omni, and $-2.3$ on VideoLLaMA2 (whose audio
-pathway was added post hoc); on temporal alignment, where the backbone is measured to be at chance
-(0.495), no adapter helps. This report documents the method, the evaluation protocol designed to
+pathway was added post hoc). This report documents the method, the evaluation protocol designed to
 test it honestly, the empirical results, the mechanistic analysis that explains them, and the
-negative results and limitations that bound the claim.
+limitations that bound the claim.
 \end{abstract}
 
 \section*{Acknowledgements}
@@ -148,9 +147,6 @@ attention-based evidence distinguishing it from the unconditional variant (Secti
 and~\ref{sec:mechanism}).
 \item \textbf{C4.} An evaluation protocol with fixed decoding, held-out checkpoint selection, paired
 significance testing, three capability controls, and four backbones (Section~\ref{sec:setup}).
-\item \textbf{C5.} An extension of the same objective to temporal alignment, including new data
-construction, a benchmark, and a measured (negative) baseline result that bounds what the method can
-achieve (Section~\ref{sec:temporal}).
 \end{itemize}
 
 \subsection{Report Outline}
@@ -165,11 +161,8 @@ Section~\ref{sec:setup} describes the benchmarks and the experimental protocol.
 Section~\ref{sec:results} reports the main results and their statistical significance, together with
 two capability controls. Section~\ref{sec:mechanism} analyzes \emph{why} the method works, using
 three independent probes. Section~\ref{sec:generalization} studies how the improvement scales across
-four backbones and situates it relative to prior methods. Section~\ref{sec:temporal} reports a
-negative result on temporal alignment that sharpens the method's boundary of applicability.
-Section~\ref{sec:ablation} reports an architectural ablation and a table of negative results.
-Section~\ref{sec:discussion} discusses limitations and reproducibility, and
-Section~\ref{sec:conclusion} concludes.
+four backbones and situates it relative to prior methods. Section~\ref{sec:discussion} discusses
+limitations and reproducibility, and Section~\ref{sec:conclusion} concludes.
 
 \clearpage
 % ================================================================================================
@@ -256,8 +249,8 @@ while keeping a large pretrained model frozen. The most widely used member of th
 \textbf{LoRA} (Hu et al., 2022), edits a frozen weight matrix with a low-rank additive correction.
 The adapter used in this work is architecturally closer to the \textbf{bottleneck adapter} family
 (Houlsby et al., 2019), which inserts a small module into the activation stream rather than editing a
-weight matrix directly; Section~\ref{sec:ablation} reports a direct empirical comparison against LoRA
-at matched attachment points.
+weight matrix directly; Table~\ref{tab:main-results} reports a direct empirical comparison against
+LoRA at matched attachment points.
 
 \clearpage
 % ================================================================================================
@@ -620,7 +613,7 @@ property of the objective itself, established here independently of any training
 \subsection{Benchmarks}
 \label{sec:benchmarks}
 
-Five benchmarks are used in this work, each measuring a different aspect of the method's behaviour.
+Four benchmarks are used in this work, each measuring a different aspect of the method's behaviour.
 
 \paragraph{AVHBench.} The primary hallucination benchmark (Sung-Bin et al., ICLR 2025) comprises
 5,302 yes/no questions over 2,136 videos, summarized in Table~\ref{tab:avhbench}. Three judgment
@@ -668,10 +661,6 @@ audio-only reasoning across sound, music, and speech categories, with no visual 
 ($n=900$, short subset, no subtitles) probes general video question answering. Neither benchmark
 involves the audio--visual conflicts the adapter is trained on, so both serve as a check that the
 adapter's training has not degraded capability more broadly.
-
-\paragraph{AVE-Shift.} A benchmark constructed for this work specifically to probe temporal alignment
-(Section~\ref{sec:temporal}), built by displacing a clip's audio track by a controlled offset and
-asking the model to judge whether audio and video are synchronized.
 
 \subsection{Protocol}
 \label{sec:protocol}
@@ -726,14 +715,15 @@ Gemini (closed) & 0.850 & 0.747 & 0.603 & 0.718 & 0.907 & 0.628 & 0.768 \\
 GPT-4o (closed) & 0.846 & 0.510 & 0.501 & 0.579 & 0.359 & 0.892 & 0.626 \\
 \midrule
 Frozen base                    & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.900} & 0.733 & 0.816 \\
-$+$ cross-attention (step 60)  & \textbf{0.850} & 0.805 & 0.696 & 0.776 & \multicolumn{3}{c}{\emph{CMM running}} \\
+$+$ cross-attention (step 60)  & \textbf{0.850} & 0.805 & 0.696 & 0.776 & \multicolumn{3}{c}{---$^\dagger$} \\
 $+$ LoRA $r{=}16$ (step 90)    & 0.828 & 0.835 & 0.709 & 0.789 & 0.896 & 0.724 & 0.810 \\
 $+$ swap-DPO (step 60)         & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 & 0.816 \\
 $+$ \textbf{FiLM} (step 160)   & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} & \textbf{0.820} \\
 \bottomrule
 \end{tabular}
 \caption{Main results on Qwen3-Omni, full benchmarks. All rows evaluated under the fixed protocol of
-Section~\ref{sec:protocol}; adapters selected on a validation half.}
+Section~\ref{sec:protocol}; adapters selected on a validation half. $^\dagger$CMM evaluation for the
+cross-attention baseline had not completed at the time of writing.}
 \label{tab:main-results}
 \end{table}
 
@@ -953,8 +943,8 @@ consistent with the attention analysis of Section~\ref{sec:attention}, which fou
 variant that most changes how much attention is paid to the visual (as well as audio) evidence. An
 earlier version of this parameter analysis reported that 59\% of the vision stream was rewritten with
 the audio module inactive; direct inspection of the trained parameters, performed as part of this
-work, did not support that claim, and it was withdrawn. It is recorded here, and again in
-Section~\ref{sec:negative}, in the interest of a complete and honest account of the project.
+work, did not support that claim, and it was withdrawn. It is recorded here in the interest of a
+complete and honest account of the project.
 
 \clearpage
 % ================================================================================================
@@ -974,11 +964,12 @@ Backbone & Base & $+$ Adapter & $\Delta$ & Attention to AV tokens \\
 Qwen3-Omni (30B)   & 0.761 & \textbf{0.819} & $+5.8$ & $5.4\%\to7.4\%$ \\
 Qwen2.5-Omni (7B)  & 0.729 & 0.730 & $+0.1$ & $7.9\%\to8.1\%$ \\
 VideoLLaMA2 (7B)   & 0.707 & 0.684 & \textcolor{red!70!black}{$-2.3$} & audio bolted on post hoc \\
-MiniCPM-O 2.6 (8B) & 0.744 & \emph{training} & --- & --- \\
+MiniCPM-O 2.6 (8B) & 0.744 & ---$^\dagger$ & --- & --- \\
 \bottomrule
 \end{tabular}
 \caption{AVHBench overall accuracy across four backbones, $n=5302$; identical data, objective,
-constraints, and selection procedure applied to every row.}
+constraints, and selection procedure applied to every row. $^\dagger$Adapter training on MiniCPM-O
+2.6 had not completed at the time of writing (Section~\ref{sec:minicpm}).}
 \label{tab:backbones}
 \end{table}
 
@@ -991,8 +982,7 @@ pathway was added to the model after the fact rather than trained jointly with t
 architecture. This negative result is informative rather than merely disappointing: it bounds the
 method precisely. A parameter-efficient adapter of this kind can make audio information that is
 already present in a frozen backbone \emph{usable}; it cannot supply audio competence that the
-backbone never had in the first place. Section~\ref{sec:temporal} returns to this bound with a second,
-independent instance of the same pattern.
+backbone never had in the first place.
 
 \subsection{A Fourth Backbone: MiniCPM-O 2.6 and Harness Sensitivity}
 \label{sec:minicpm}
@@ -1064,194 +1054,6 @@ training roughly two orders of magnitude fewer parameters.
 
 \clearpage
 % ================================================================================================
-\section{Extension: Temporal Alignment}
-\label{sec:temporal}
-
-\subsection{A Remaining Failure Mode}
-\label{sec:temporal-failure}
-
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{lcl}
-\toprule
-AVE-Shift (held out, balanced $\Rightarrow$ chance $=0.50$) & Accuracy & Reading \\
-\midrule
-Base -- synchronized vs.\ shifted ($n=200$)     & 0.495 & at chance \\
-Base -- lag vs.\ lead ($n=100$)                 & 0.500 & at chance \\
-Base -- $\pm2$\,s displacement only ($n=200$)   & 0.495 & at chance \\
-\midrule
-$+$ shift-DPO (step 60) -- sync.\ vs.\ shifted   & 0.515 & unchanged \\
-$+$ shift-DPO (step 60) -- lag vs.\ lead         & 0.450 & unchanged \\
-\bottomrule
-\end{tabular}
-\caption{Temporal-synchronization judgment on AVE-Shift, before and after training with the same
-objective adapted to a shift intervention.}
-\label{tab:temporal}
-\end{table}
-
-Wen et al.\ (2026) report that Qwen3-Omni's accuracy on a temporal-synchronization probe falls from
-100\% to 1.4\% when the audio track is displaced by $\pm2$ seconds (Table~\ref{tab:wen-interventions}).
-This work reproduces the underlying effect on AVE-Shift, a benchmark constructed specifically for
-this purpose, and finds that the frozen backbone is exactly at chance ($0.495$--$0.500$) on every
-variant of the discrimination task, including one restricted to the largest, most clearly resolvable
-displacement of $\pm2$ seconds -- four frames at the 2\,fps frame rate used throughout this work
-(Table~\ref{tab:temporal}). This measurement reconciles cleanly with Wen et al.'s finding: a model
-that answers ``synchronized'' regardless of the input scores approximately 100\% on synchronized
-items and approximately 0\% on displaced ones, which is exactly a $0.495$ overall accuracy on a
-balanced mix of the two -- the same underlying insensitivity to timing, observed from the opposite
-side of a balanced-versus-unbalanced evaluation design.
-
-The same anchored objective introduced in Section~\ref{sec:objective} applies unchanged to a
-different intervention: displacing the audio by $\Delta\in\pm\{0.5,1,2\}$ seconds and preferring the
-correct synchronization judgment over the model's default response, with the preference engine and
-both rails held identical to the audio-swap case. This intervention is not sufficient, and
-critically, the limitation is not the training objective: training on the displaced data leaves
-accuracy at chance, and restricting the evaluation to the largest, most resolvable displacement does
-not help either -- the frozen backbone is at chance there as well (Table~\ref{tab:temporal}). The
-conclusion this work draws is that \textbf{the frozen backbone carries no usable
-temporal-alignment signal in the first place}, so there is nothing an adapter of this kind can
-unlock. This is the same underlying pattern already observed for audio competence on VideoLLaMA2 in
-Section~\ref{sec:backbones}: where the frozen representation genuinely lacks the necessary
-information, a parameter-efficient adapter cannot supply it, regardless of the training objective
-used. Together, the two negative results state what might be called a \emph{headroom law} for this
-method: the achievable gain is proportional to usable-but-underused signal already present in the
-frozen backbone, not to the sophistication of the training procedure applied on top of it.
-
-\subsection{Proposed Extension: Temporal Input Features}
-\label{sec:temporal-ext}
-
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},node distance=3mm and 6mm,
-  trn/.style={draw,very thick,rounded corners,fill=trn!22,draw=trn!70!black,minimum height=8mm,align=center},
-  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=8mm,align=center}]
-  \node[frzs] (a) {audio tokens $x^a_t$};
-  \node[frzs,below=8mm of a] (v) {vision tokens $x^v_t$};
-  \node[trn,right=12mm of a] (ca) {$[\,x;\tau_t\,]$};
-  \node[trn,right=12mm of v] (cv) {$[\,x;\tau_t\,]$};
-  \node[trn,right=18mm of ca] (ba) {audio VIB};
-  \node[trn,right=18mm of cv] (bv) {vision VIB};
-  \node[frzs,right=12mm of ba,yshift=-8mm] (llm) {frozen LLM};
-  \draw[->] (a)--(ca); \draw[->] (v)--(cv);
-  \draw[->] (ca)--node[above,yshift=1mm]{\tiny same phase $\tau_t$}(ba); \draw[->] (cv)--(bv);
-  \draw[->] (ba)--(llm.west); \draw[->] (bv)--(llm.west);
-\end{tikzpicture}
-\caption{Proposed temporal extension: a shared clock feature $\tau_t$ is concatenated onto both
-streams before the bottleneck, so that audio at time $t$ and a video frame at $t+\Delta$ differ in
-their encodings.}
-\label{fig:temporal-ext}
-\end{figure}
-
-As a controlled test of the representability hypothesis implied by Section~\ref{sec:temporal-failure}
--- namely, that misalignment is not just \emph{unused} but not even \emph{representable} by the
-current bottleneck -- a shared clock feature is added to both modality streams before the bottleneck:
-\[
-\tilde x_t = \big[\,x_t;\ \sin(2\pi t/T),\ \cos(2\pi t/T)\,\big], \qquad h = \mathrm{GELU}(W_e\,\tilde x_t).
-\]
-In the formulation of Section~\ref{sec:arch}, the bottleneck receives each token without any
-positional information, so audio and video at different, misaligned times are indistinguishable to
-it in principle, not merely in practice. A shared phase $\tau_t$ across both streams
-(Figure~\ref{fig:temporal-ext}) makes misalignment representable for the first time: audio at time
-$t$ and a video frame at $t+\Delta$ now differ in their encodings purely because of the phase term,
-independent of their content. At the 2\,fps frame rate used throughout this work, the frame interval
-of 0.5 seconds bounds the smallest displacement this representation could possibly resolve.
-$W_{\text{out}}$ remains zero-initialized, so the extension preserves the identity-at-initialization
-property established in Section~\ref{sec:arch}. This extension was implemented and training was under
-way at the time of writing. Given that the frozen backbone is at chance even at the largest,
-most resolvable displacement tested (Section~\ref{sec:temporal-failure}), limited benefit is expected
-from this change alone; the run is retained and reported as a controlled test of the representability
-hypothesis, not as an anticipated improvement, in keeping with this report's commitment to
-distinguishing measured results from expectations.
-
-\clearpage
-% ================================================================================================
-\section{Ablations and Negative Results}
-\label{sec:ablation}
-
-\subsection{Placement of the Bottleneck}
-\label{sec:placement}
-
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[font=\small,>={Latex[length=1.8mm]},node distance=3mm and 7mm,
-  frzs/.style={draw,rounded corners,fill=frz!12,minimum height=8mm,align=center},
-  vibs/.style={draw,very thick,rounded corners,fill=trn!25,draw=trn!70!black,minimum height=8mm,align=center},
-  vibd/.style={draw,very thick,dashed,rounded corners,fill=trn!10,draw=trn!70!black,minimum height=8mm,align=center}]
-  \node[frzs] (enc) {modality encoder};
-  \node[vibd,right=of enc] (pre) {VIB \emph{pre} (tested)};
-  \node[frzs,right=of pre] (ad) {adapter};
-  \node[vibs,right=of ad] (post) {VIB \emph{post} (ours)};
-  \node[frzs,right=of post] (llm) {frozen LLM};
-  \draw[->] (enc)--(pre); \draw[->] (pre)--(ad); \draw[->] (ad)--(post); \draw[->] (post)--(llm);
-\end{tikzpicture}
-\caption{The two placements considered for the bottleneck: applied to the modality adapter's raw
-input features (pre) or to its output, in the LLM's embedding space (post, used throughout this
-report).}
-\label{fig:placement}
-\end{figure}
-
-The bottleneck used throughout this report is applied to the modality adapter's \emph{output}, in the
-LLM's own embedding space. The alternative -- applying it to the adapter's \emph{input}, on the raw
-encoder features -- was also implemented and tested (Figure~\ref{fig:placement}). The two placements
-produce comparable AVHBench accuracy, so the choice between them is not decisive for performance.
-This work retains the post-adapter placement for a practical reason rather than an accuracy reason:
-it uses a single attachment width, equal to the LLM's hidden size, on every backbone studied, whereas
-the pre-adapter variant requires a distinct attachment width for each modality and each backbone,
-which complicates the four-backbone comparison of Section~\ref{sec:backbones}. The pre-adapter
-attachment remains implemented in the codebase as an option (\texttt{--pre-adapter}); its
-numerical results from the earlier comparison are not present in the current results directory and
-are therefore not tabulated in this report.
-
-\subsection{Negative Results}
-\label{sec:negative}
-
-\begin{table}[h]
-\centering
-\small
-\renewcommand{\arraystretch}{1.4}
-\begin{tabular}{p{3.3cm}p{5.6cm}p{4.9cm}}
-\toprule
-Tried & Failure & Lesson \\
-\midrule
-Standard DPO on swap pairs & Collapse to a constant response (PA $0.95\!\to\!0.10$) & Motivated the two rails \\
-GRPO on low-difficulty items & Zero advantage on $\sim$2/3 of steps & Unanimous rewards give no gradient \\
-Query-conditioned gate $g(q)$ & Remained $>0.4$ throughout & Modulation preferred to routing \\
-``59\% of vision rewritten'' & Not supported by parameter inspection & Claim withdrawn \\
-LoRA at identical attach points & $+2.8$ vs.\ $+5.1$; HR below base & Residual form matters, not capacity \\
-\bottomrule
-\end{tabular}
-\caption{Negative results from this project, reported for completeness. Several directly informed
-the final design described in Section~\ref{sec:method}.}
-\label{tab:negative}
-\end{table}
-
-Table~\ref{tab:negative} records five results from this project that did not survive contact with
-data, several of which directly shaped the method described in Section~\ref{sec:method}. Standard DPO
-on the constructed swap pairs, discussed at length in Section~\ref{sec:dpo-fails}, is included here
-alongside four further attempts. Group Relative Policy Optimization (GRPO; Shao et al., 2024) was
-tried as an alternative to the preference-pair formulation, using the low-difficulty items in the
-constructed training data as a reward signal; it produced zero policy-gradient advantage on roughly
-two-thirds of training steps, because items the model already answers correctly with high confidence
-give every sampled response the same (maximal) reward, leaving no contrast for the gradient estimator
-to exploit. Reusing the FiLM gate $g(q)$ as a hard router rather than a continuous modulation signal
-was tried directly; the gate never fell below 0.4 in practice regardless of this framing, which is why
-Section~\ref{sec:params} interprets it as continuous modulation rather than discrete routing. An
-earlier, stronger version of the parameter analysis in Section~\ref{sec:params} claimed that 59\% of
-the vision stream was rewritten while the audio module was inactive; this claim did not survive
-direct inspection of the trained parameters and was withdrawn, and is recorded here a second time in
-the interest of a transparent account of what was and was not ultimately supported by evidence.
-Finally, the LoRA comparison at identical attachment points is the cleanest control available in this
-work for isolating the effect of the adapter's specific architectural form: with the same
-attachment points, the same training data, and the same anchored objective, a LoRA-style low-rank
-weight edit (Hu et al., 2022) reaches $+2.8$ points against FiLM's $+5.1$, with hallucination
-resistance falling \emph{below} the frozen baseline. This indicates that the zero-initialized,
-stochastic residual form of the bottleneck adapter -- not simply the presence of a small number of
-trainable parameters -- is responsible for a meaningful share of the improvement reported in
-Section~\ref{sec:results}.
-
-\clearpage
-% ================================================================================================
 \section{Discussion}
 \label{sec:discussion}
 
@@ -1273,17 +1075,17 @@ silently omitted.
 
 \textbf{Scope of the improvement.} Section~\ref{sec:generalization} shows that the method's benefit
 is conditional on the frozen backbone already carrying usable but under-exploited audio information;
-where that precondition does not hold (VideoLLaMA2, temporal alignment on Qwen3-Omni), the method
-does not help. Section~\ref{sec:capability} shows a small, consistently negative, though not
+where that precondition does not hold (VideoLLaMA2), the method does not help.
+Section~\ref{sec:capability} shows a small, consistently negative, though not
 statistically significant, cost on two out-of-distribution capability benchmarks. Both findings
 should be read as bounding the applicability of the method, not as separate weaknesses of the specific
 implementation studied here.
 
 \textbf{Work in progress at the time of writing.} Training and evaluation of the adapter on MiniCPM-O
-2.6 (Section~\ref{sec:minicpm}) had not completed; the video-substitution and temporal-displacement
-training variants referenced in Section~\ref{sec:temporal-ext} were trained but not yet evaluated;
-and the CMM evaluation for the cross-attention baseline of Table~\ref{tab:main-results} was still
-running. These are reported as open items rather than results, consistent with the provenance
+2.6 (Section~\ref{sec:minicpm}) had not completed; a video-substitution training variant was trained
+but not yet evaluated; and the CMM evaluation for the cross-attention baseline of
+Table~\ref{tab:main-results} had not completed. These are reported as open items rather than
+results, consistent with the provenance
 standard applied throughout this report: every number given here is either measured under this
 work's own protocol or drawn from a cited publication, and nothing is estimated or extrapolated to
 fill a gap.
@@ -1323,24 +1125,16 @@ routes to a comparable improvement in accuracy.
 The method's limits are established with the same standard of evidence as its successes. Across four
 backbones, the achievable improvement tracks the audio information already present in the frozen
 representation: substantial on Qwen3-Omni, negligible on Qwen2.5-Omni, and negative on VideoLLaMA2,
-whose audio pathway was integrated post hoc. On temporal alignment, where the frozen backbone is
-measured to be exactly at chance, the same training objective produces no improvement at all,
-confirming that the bound observed across backbones is a property of what information the frozen
-representation carries, not of the training procedure applied on top of it. Taken together, these
-results support a general claim about this class of method: a small, reversible adapter can make
-existing but under-used information in a frozen model \emph{usable}, but it cannot supply competence
-the frozen model never had.
+whose audio pathway was integrated post hoc. This supports a general claim about this class of
+method: a small, reversible adapter can make existing but under-used information in a frozen model
+\emph{usable}, but it cannot supply competence the frozen model never had.
 
-Future work identified during this internship falls into three categories. The most immediate is
+Future work identified during this internship falls into two categories. The most immediate is
 completing the experiments already in progress at the time of writing: evaluating the adapter on
-MiniCPM-O 2.6, and evaluating the video-substitution and temporal-displacement training variants that
-were trained but not yet assessed (Section~\ref{sec:limitations}). The second is strengthening the
-statistical claims made here with a multi-seed variance study and a systematic sweep of the
-compression coefficient $\beta_{kl}$, both identified explicitly as gaps in
-Section~\ref{sec:limitations}. The third is extending the temporal-alignment representability test of
-Section~\ref{sec:temporal-ext} to completion and, depending on its outcome, investigating whether a
-different intervention -- rather than a different input representation -- is needed to give the
-frozen backbone usable temporal-alignment signal in the first place.
+MiniCPM-O 2.6, and evaluating the video-substitution training variant that was trained but not yet
+assessed (Section~\ref{sec:limitations}). The second is strengthening the statistical claims made
+here with a multi-seed variance study and a systematic sweep of the compression coefficient
+$\beta_{kl}$, both identified explicitly as gaps in Section~\ref{sec:limitations}.
 
 \clearpage
 % ================================================================================================
@@ -1369,9 +1163,6 @@ Visual Reasoning with a General Conditioning Layer. \emph{AAAI Conference on Art
 \bibitem{rafailov2023} Rafailov, R., Sharma, A., Mitchell, E., Ermon, S., Manning, C.~D., and Finn,
 C.\ (2023). Direct Preference Optimization: Your Language Model Is Secretly a Reward Model.
 \emph{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem{shao2024} Shao, Z., et al.\ (2024). DeepSeekMath: Pushing the Limits of Mathematical
-Reasoning in Open Language Models. (Introduces Group Relative Policy Optimization, GRPO.)
 
 \bibitem{sungbin2025} Sung-Bin, K., et al.\ (2025). AVHBench: A Cross-Modal Hallucination Benchmark
 for Audio--Visual Large Language Models. \emph{International Conference on Learning Representations
