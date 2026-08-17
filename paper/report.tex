@@ -43,8 +43,9 @@
   \color{green!40!black}ours: #2 $\boldsymbol{\checkmark}$}}
 
 \title{\textbf{Making Frozen Audio--Visual LLMs Listen}\\[4pt]
-  \large Audio Grounding via Tiny Adapters, Anchored Preference Optimization,\\ and Honest Evaluation\\[10pt]
-  \normalsize\itshape Internship Report}
+  \large A Variational Latent-Variable Model for Audio Grounding, Fit by\\
+  Regularized Preference-Based Estimation\\[10pt]
+  \normalsize\itshape Internship Report --- Applied Mathematics: Statistics and Modelling}
 \author{Souleiman Sbai\\[4pt]
   \normalsize\normalfont \'Ecole Polytechnique\\
   Host laboratory: AIST CVRT \quad$\cdot$\quad Supervisor: Qiu Yue\\
@@ -60,13 +61,16 @@ Audio--visual large language models (LLMs) routinely answer questions about \emp
 \emph{visual} evidence instead: muting the audio track of Qwen3-Omni leaves its answers to
 audio-existence questions unchanged, driving accuracy from 95.1\% to 0.0\%. This report presents
 work carried out during a research internship investigating whether this failure can be repaired
-\emph{without touching the backbone}. We attach a variational information bottleneck (VIB) to each
-modality stream of a frozen audio--visual LLM ($<$0.5\% of backbone parameters, zero-initialized so
-that it is exactly the identity map at attachment) and train it with an \emph{anchored} preference
-objective on constructed audio--visual conflicts. Standard direct preference optimization (DPO) on
-these pairs collapses to a constant response (perception accuracy $0.95\!\to\!0.10$); two explicit
-constraints -- a chosen-answer anchor and a KL tether to the frozen backbone on ordinary inputs --
-remove this degenerate optimum. On AVHBench ($n=5302$) the adapter improves overall accuracy by 5.1
+\emph{without touching the backbone}. We formulate a discriminative latent-variable model -- a
+variational information bottleneck (VIB) -- attached to each modality stream of a frozen
+audio--visual LLM ($<$0.5\% of backbone parameters, zero-initialized so that it is exactly the
+identity map at attachment), and estimate its parameters by regularized maximum likelihood under an
+\emph{anchored} preference objective on constructed audio--visual conflicts. The unregularized
+estimator -- standard direct preference optimization (DPO), itself a Bradley-Terry paired-comparison
+likelihood -- collapses to a constant response on these pairs (perception accuracy
+$0.95\!\to\!0.10$); two explicit penalty terms -- a chosen-answer anchor and a KL tether to the
+frozen backbone on ordinary inputs -- remove this degenerate optimum. On AVHBench ($n=5302$) the
+fitted model improves overall accuracy by 5.1
 points, and a query-conditioned (FiLM) variant by 5.8 points ($p<10^{-4}$, paired McNemar), while
 preserving hallucination resistance and incurring no statistically significant cost on two
 out-of-distribution capability controls (MMAU, Video-MME). Two independent probes separate the
@@ -74,9 +78,10 @@ underlying mechanisms: both variants increase the model's dependence on the audi
 of 3.3--3.6, but only the query-conditioned variant also increases attention allocated to
 audio--visual tokens. The method's reach is bounded by what the frozen backbone already encodes: the
 gain is $+5.8$ points on Qwen3-Omni, $+0.1$ on Qwen2.5-Omni, and $-2.3$ on VideoLLaMA2 (whose audio
-pathway was added post hoc). This report documents the method, the evaluation protocol designed to
-test it honestly, the empirical results, the mechanistic analysis that explains them, and the
-limitations that bound the claim.
+pathway was added post hoc). This report documents the statistical model, its estimation procedure,
+the evaluation protocol designed to test it honestly, the empirical results with their paired
+significance analysis, the mechanistic diagnostics that explain them, and the limitations that bound
+the claim.
 \end{abstract}
 
 \section*{Acknowledgements}
@@ -379,6 +384,30 @@ This is exactly the quantity referred to as $\mathrm{KL}_{\text{VIB}}$ in the an
 Section~\ref{sec:method}: a closed-form penalty computed directly from the encoder's own $\mu(x)$ and
 $\sigma(x)$ outputs, requiring no sampling for this half of the bound.
 
+\subsection{A Statistical Modeling Perspective}
+\label{sec:stat-model}
+
+It is worth stating plainly what Sections~\ref{sec:ib-bounds}--\ref{sec:ib-reparam} amount to as a
+statistical model, since the architecture of Section~\ref{sec:method} is easiest to read as an
+instance of it. The pair $q(z\mid x)=\mathcal N(\mu(x),\sigma(x)^2I)$ and $q(y\mid z)$ define a
+\textbf{discriminative latent-variable model}: $Z$ is a per-token latent with a data-dependent
+Gaussian law, and $Y$ (the answer) is generated conditionally on $Z$ rather than on $X$ directly. The
+encoder $(\mu(\cdot),\sigma(\cdot))$ plays the role of an \textbf{amortized inference network} in the
+sense of Kingma and Welling (2014): rather than fitting a separate variational posterior for every
+$x$, a single set of weights maps any $x$ to the parameters of its approximate posterior, which is
+what makes the model applicable token-by-token at inference time instead of requiring a fresh
+optimization per input. The variational family is restricted to \textbf{diagonal (mean-field)
+Gaussians}, a modeling choice with two direct consequences worth stating explicitly rather than
+leaving implicit: the posterior over $Z$ cannot represent correlation between latent coordinates, and
+it is unimodal, so any genuine multimodality in what $Z$ needs to encode (for instance, two
+qualitatively different but equally plausible completions of an ambiguous input) is necessarily
+averaged over rather than represented. Fitting this model reduces, by
+Equation~\eqref{eq:rvib}, to maximizing a single scalar criterion that is a sum of a
+data-log-likelihood term and a KL-divergence penalty -- i.e., \textbf{penalized maximum likelihood}
+rather than an unconstrained likelihood maximization. Section~\ref{sec:objective} extends this same
+penalized-likelihood view to the full training criterion, adding two further penalty terms to the
+likelihood contributed by the preference data.
+
 \clearpage
 % ================================================================================================
 \section{Method}
@@ -472,6 +501,16 @@ where $\sigma$ is the logistic sigmoid (not to be confused with the encoder's st
 $\sigma(x)$), and $\beta$ here is the DPO temperature (not to be confused with the VIB rate
 $\beta_{kl}$ of Section~\ref{sec:background}; this notational collision is unfortunate but standard
 in both literatures, and is flagged explicitly wherever it could cause ambiguity in this report).
+Structurally, Equation~\eqref{eq:dpo} is the negative log-likelihood of a \textbf{Bradley-Terry
+paired-comparison model}: writing $s(y)=\beta\big(\log q_\theta(y\mid z)-\log q_{\text{base}}(y\mid
+z)\big)$ for the implicit score assigned to a candidate answer $y$, the loss is exactly
+$-\log\sigma\big(s(\text{chosen})-s(\text{rejected})\big)$, the standard likelihood for observing
+``chosen beats rejected'' when each candidate has latent strength $s(\cdot)$. Minimizing
+Equation~\eqref{eq:dpo} over the constructed pairs is therefore ordinary maximum-likelihood
+estimation of a Bradley-Terry model in which the adapter parameters $\theta$ enter only through
+their effect on the two candidates' scores -- which is exactly what makes the failure mode below an
+estimation pathology rather than an implementation bug: an unregularized likelihood fit constrains
+only the \emph{difference} between the two scores, leaving their common level free.
 Equation~\eqref{eq:dpo} constrains only the \emph{margin} between the chosen and rejected candidates:
 it is minimized even when both $c_p$ and $r_p$ decrease, provided the rejected candidate's
 probability decreases faster. In practice, this means the loss can be driven to zero while both
@@ -499,11 +538,19 @@ each targeting one half of the degenerate solution identified above:
  \;+\; \beta_{kl}\,\mathrm{KL}_{\text{VIB}}.
 \label{eq:anchored}
 \end{align}
-\textbf{Rail 1} is an mDPO-style anchor (Wang et al., 2024): it directly penalizes any drop in the
-chosen response's probability relative to the frozen backbone, which is exactly what would happen if
+In the language of Section~\ref{sec:stat-model}, Equation~\eqref{eq:anchored} is a
+\textbf{penalized-likelihood estimator}: the engine term is the Bradley-Terry log-likelihood of
+Section~\ref{sec:dpo-fails}, and the remaining three terms are penalties added to remove specific
+pathologies of its unconstrained optimum, each with a standard statistical reading. \textbf{Rail 1}
+is an mDPO-style anchor (Wang et al., 2024) and reads as an exterior-penalty relaxation of the
+inequality constraint chosen-score $\ge$ base-score: it directly penalizes any drop in the chosen
+response's probability relative to the frozen backbone, which is exactly what would happen if
 training pushed both candidate probabilities down together. \textbf{Rail 2} penalizes divergence
-from the frozen backbone's output distribution on ordinary, non-substituted inputs, which is exactly
-what preserves capability on inputs the training data never touches. The uniform-``no'' solution of
+from the frozen backbone's output distribution on ordinary, non-substituted inputs; it is a
+\textbf{proximal (trust-region) penalty} in the same sense used to stabilize policy-gradient methods
+such as TRPO and PPO, keeping $p_\theta$ within a KL-divergence neighborhood of $p_{\text{base}}$
+rather than restricting it directly in parameter space, which is exactly what preserves capability on
+inputs the training data never touches. The uniform-``no'' solution of
 Section~\ref{sec:dpo-fails} violates both constraints simultaneously -- it lowers the chosen
 response's probability (violating rail 1) and changes behaviour on ordinary inputs (violating rail 2)
 -- so the preference term can only be reduced by genuinely using the audio stream to distinguish
@@ -761,14 +808,27 @@ the adapted model alone; $\Delta=(c-b)/N$.}
 \label{tab:significance}
 \end{table}
 
-Because the baseline and every trained variant are evaluated on identical items, only discordant
-pairs are informative: of $N$ items, $b$ are answered correctly by the baseline alone and $c$ by the
-adapted model alone, giving
+Because the frozen baseline and every trained variant are scored on the exact same items, their
+outcomes are \textbf{paired}, not independent: an unpaired test for the difference of two accuracies
+(e.g., a two-sample $z$-test on the two overall accuracies) would discard the item-level correlation
+between the two outcome sequences and is the wrong test for this design. The appropriate paired test
+for binary outcomes conditions on the items where the two models agree and asks only whether the
+items where they disagree split evenly between the two directions of disagreement -- this is exactly
+McNemar's test. Of $N$ items, write $b$ for those answered correctly by the baseline alone and $c$
+for those answered correctly by the adapted model alone, giving
 \[
 \Delta = \frac{c-b}{N}, \qquad
 \text{95\% CI: } \Delta \pm 1.96\,\frac{\sqrt{(b+c)-(c-b)^2/N}}{N}, \qquad
 \text{McNemar's test: is } b/c \text{ a fair coin?}
 \]
+The interval above is the standard normal (Wald) approximation to the sampling distribution of
+$\Delta$ under McNemar's test, valid once the discordant count $b+c$ is not too small; every row of
+Table~\ref{tab:significance} has $b+c$ in the hundreds, comfortably inside the regime where the
+approximation holds. Because per-item predictions are stored for every evaluation run
+(Section~\ref{sec:reproducibility}), an exact McNemar test or a nonparametric item-level bootstrap
+could be recomputed from the same stored predictions without re-running any model; the Wald interval
+is reported here for interpretability, not because a more exact alternative is unavailable.
+
 Table~\ref{tab:significance} reports this analysis on the held-out evaluation split. The discordant
 counts for both proposed adapters (411 versus 152 for swap-DPO; 532 versus 253 for FiLM) are
 strongly inconsistent with an equal-probability null, confirming that the improvements reported in
@@ -777,6 +837,17 @@ between the two proposed variants is a statistical tie on overall accuracy, thou
 specifically on A--V Matching. These results are from a single training seed in each case; the
 reported intervals reflect item-sampling uncertainty only, and do not capture variation across
 training seeds, which Section~\ref{sec:limitations} lists among the study's limitations.
+
+One further caveat applies to every significance claim in this report, not only
+Table~\ref{tab:significance}: Tables~\ref{tab:main-results}, \ref{tab:significance},
+\ref{tab:mmau}, and \ref{tab:videomme} together report a substantial number of pairwise comparisons across
+benchmarks, metrics, and backbones, and no family-wise error-rate correction (e.g.\ Bonferroni or
+Benjamini--Hochberg) is applied across them. Each reported $p$-value and confidence interval should
+therefore be read as a per-comparison statement rather than as controlling a joint error rate over
+the full set of comparisons in this report. The $p<10^{-4}$ results above are conservative enough to
+survive any standard correction applied to the handful of primary comparisons they belong to, but the
+smaller, non-significant differences discussed in Section~\ref{sec:capability} should likewise not be
+over-interpreted as a multiplicity-adjusted null result.
 
 \subsection{Capability Controls}
 \label{sec:capability}
@@ -1093,16 +1164,17 @@ fill a gap.
 \subsection{Reproducibility}
 \label{sec:reproducibility}
 
-The codebase developed during this internship comprises four model wrappers (one per backbone
-studied), five benchmark runners, four training variants, two baseline implementations, and three
-analysis probes, totalling approximately 10,000 lines of code, 23 cluster job scripts, and seven test
-suites. Every table and figure in this report is produced by a single, dedicated script, so that any
-number reported here can be traced back to the exact procedure that produced it. Beyond the protocol
-choices already discussed in Section~\ref{sec:protocol} -- frame rate, prompts, answer format, and
-decoding parameters, all fixed and logged -- checkpoint selection is always performed on a validation
-half disjoint from the reported evaluation split, and per-item predictions are stored for every
-evaluation run, so that the paired statistical tests of Section~\ref{sec:significance} can be
-recomputed exactly from the stored predictions rather than re-run from scratch.
+Reproducibility here is a statistical concern as much as a software one: every number reported in
+this document can be traced back to the exact procedure that produced it, because each table and
+figure is generated by a single, dedicated script rather than assembled by hand. The protocol choices
+of Section~\ref{sec:protocol} -- frame rate, prompts, answer format, and decoding parameters -- are
+fixed in code and logged rather than re-tuned between conditions, which is what makes comparisons
+across rows of the same table valid in the first place. Checkpoint selection is always performed on a
+validation half disjoint from the reported evaluation split, so that no reported accuracy is the
+result of selecting on the test set. Finally, per-item predictions are stored for every evaluation
+run, which is what makes the paired analysis of Section~\ref{sec:significance} -- and, in principle,
+an exact McNemar test or a bootstrap in place of the Wald approximation used there -- recomputable
+directly from stored data rather than requiring the models to be re-run.
 
 \clearpage
 % ================================================================================================
