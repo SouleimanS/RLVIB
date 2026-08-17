@@ -603,8 +603,7 @@ al., 2018) -- unrelated to the DPO temperature $\beta$ or the VIB rate $\beta_{k
 \end{figure}
 
 The unconditional adapter of Section~\ref{sec:arch} processes every token identically, regardless of
-what the current question is asking about. Section~\ref{sec:loss-floor} shows this is provably
-insufficient on part of the constructed training data. The query-conditioned variant, illustrated in
+what the current question is asking about. The query-conditioned variant, illustrated in
 Figure~\ref{fig:film}, extends the architecture using Feature-wise Linear Modulation (FiLM; Perez et
 al., 2018): a frozen, mean-pooled embedding of the question text is projected into a vector $q$,
 which is in turn used to produce a per-feature scale and shift $[\gamma;\beta]$ applied to the
@@ -613,44 +612,6 @@ bottleneck's output before it is added back to the residual stream. All newly in
 ($W_q$, $W_f$, $w_g$) are small linear heads; the frozen embedding table $E$ and the mean-pooling
 operation introduce no new parameters. As in the unconditional case, $W_{\text{out}}$ remains
 zero-initialized, so the variant is still exactly the identity map at initialization.
-
-\subsection{Why Query Conditioning Is Necessary: A Loss-Floor Argument}
-\label{sec:loss-floor}
-
-\begin{table}[h]
-\centering
-\small
-\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{llccc}
-\toprule
-Adapter & Answers (hear / see) & Hear loss & See loss & Total \\
-\midrule
-Cannot read $q$, commits to ``bell'' & ``bell'' / ``bell'' & $0.13$ & $2.13$ & $2.26$ \\
-Cannot read $q$, hedges 50/50        & --- & $0.69$ & $0.69$ & $\mathbf{1.39}$ (floor) \\
-\textbf{Reads $q$}                   & ``bell'' / ``dog''  & $0.13$ & $0.13$ & $\mathbf{0.26\to 0}$ \\
-\bottomrule
-\end{tabular}
-\caption{A query-independent adapter cannot beat a loss floor of $2\log2\approx1.39$ per pair; a
-query-conditioned one can drive the loss to zero.}
-\label{tab:loss-floor}
-\end{table}
-
-This subsection gives a short argument, independent of any experiment, for why query conditioning is
-necessary at the optimum of the training objective, not merely a convenient extension. Consider one
-substituted clip in which the visible event is a dog and the (overlaid) audible event is a bell, and
-two questions posed over the identical input: ``what do you hear?'' (correct answer: bell) and ``what
-do you see?'' (correct answer: dog). Writing the per-question loss as $-\log\sigma(m)$ for margin
-$m$, the values $m=+2,0,-2$ give losses of $0.13$, $0.69$, and $2.13$ respectively. Table
-\ref{tab:loss-floor} works through the three possible strategies available to an adapter that cannot
-condition on the question text: it can commit to one answer for both questions, hedge 50/50 between
-them, or -- the only remaining option -- read the question and answer each correctly. Committing to a
-single answer incurs the full margin-loss penalty on whichever question it gets wrong; hedging
-incurs the intermediate loss $-\log\sigma(0)=\log2$ on both questions, for a floor of $2\log2\approx
-1.39$ per pair that no query-independent strategy can beat. A query-conditioned adapter, by contrast,
-can answer both questions correctly and drive the loss to exactly zero. Because the training data of
-Section~\ref{sec:data} contains exactly this kind of paired question over a single substituted clip,
-the data construction makes query conditioning necessary at the optimum of the objective -- a
-property of the objective itself, established here independently of any training run.
 
 \clearpage
 % ================================================================================================
@@ -737,8 +698,7 @@ case reported here.
 
 Reported accuracies throughout this report are meaningful only relative to this fixed protocol; they
 should not be compared to numbers reported elsewhere under different decoding or prompting choices
-without accounting for the sensitivity documented above. Section~\ref{sec:minicpm} returns to this
-point with a direct, quantified example.
+without accounting for the sensitivity documented above.
 
 \clearpage
 % ================================================================================================
@@ -764,7 +724,7 @@ GPT-4o (closed) & 0.846 & 0.510 & 0.501 & 0.579 & 0.359 & 0.892 & 0.626 \\
 Frozen base                    & \textbf{0.838} & 0.812 & 0.653 & 0.761 & \textbf{0.900} & 0.733 & 0.816 \\
 $+$ cross-attention (step 60)  & \textbf{0.850} & 0.805 & 0.696 & 0.776 & \multicolumn{3}{c}{---$^\dagger$} \\
 $+$ LoRA $r{=}16$ (step 90)    & 0.828 & 0.835 & 0.709 & 0.789 & 0.896 & 0.724 & 0.810 \\
-$+$ swap-DPO (step 60)         & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 & 0.816 \\
+$+$ VIB-DPO (step 60)         & 0.837 & \textbf{0.838} & 0.766 & 0.812 & 0.890 & 0.743 & 0.816 \\
 $+$ \textbf{FiLM} (step 160)   & 0.822 & 0.827 & \textbf{0.808} & \textbf{0.819} & 0.894 & \textbf{0.746} & \textbf{0.820} \\
 \bottomrule
 \end{tabular}
@@ -776,7 +736,7 @@ cross-attention baseline had not completed at the time of writing.}
 
 Table~\ref{tab:main-results} reports the central empirical result of this work. Both proposed
 adapters improve AVHBench overall accuracy relative to the frozen base -- by 5.1 points for the
-unconditional swap-DPO variant and 5.8 points for the query-conditioned FiLM variant -- while
+unconditional VIB-DPO variant and 5.8 points for the query-conditioned FiLM variant -- while
 preserving CMM capability: hallucination resistance increases in both cases, and perception accuracy
 decreases by at most one point, in sharp contrast to the collapse documented in
 Section~\ref{sec:dpo-fails}. The improvement is not distributed uniformly across AVHBench's three
@@ -798,7 +758,7 @@ failed training run.
 \toprule
 Comparison (held-out) & $b$ / $c$ & $\Delta$ [95\% CI] & Verdict \\
 \midrule
-Base $\to$ swap-DPO & 152 / 411 & $+5.2$ [+4.3, +6.1] & Real ($p<10^{-4}$) \\
+Base $\to$ VIB-DPO & 152 / 411 & $+5.2$ [+4.3, +6.1] & Real ($p<10^{-4}$) \\
 Base $\to$ FiLM     & 253 / 532 & $+5.6$ [+4.5, +6.7] & Real ($p<10^{-4}$) \\
 DPO $\to$ FiLM      & 204 / 224 & $+0.4$ [-0.4, +1.2] & Tie; FiLM wins AV-m ($+3.7$, $p<10^{-4}$) \\
 \bottomrule
@@ -830,7 +790,7 @@ could be recomputed from the same stored predictions without re-running any mode
 is reported here for interpretability, not because a more exact alternative is unavailable.
 
 Table~\ref{tab:significance} reports this analysis on the held-out evaluation split. The discordant
-counts for both proposed adapters (411 versus 152 for swap-DPO; 532 versus 253 for FiLM) are
+counts for both proposed adapters (411 versus 152 for VIB-DPO; 532 versus 253 for FiLM) are
 strongly inconsistent with an equal-probability null, confirming that the improvements reported in
 Table~\ref{tab:main-results} are real rather than an artefact of item sampling. The direct comparison
 between the two proposed variants is a statistical tie on overall accuracy, though FiLM wins
@@ -863,7 +823,7 @@ the intervention on general capability.
 Qwen3-Omni & Sound & Music & Speech & Avg. \\
 \midrule
 Frozen base    & \textbf{80.2} & \textbf{75.4} & \textbf{68.5} & \textbf{74.7} \\
-$+$ swap-DPO   & 78.4 & 75.1 & 67.0 & 73.5 \\
+$+$ VIB-DPO   & 78.4 & 75.1 & 67.0 & 73.5 \\
 $+$ FiLM       & 79.6 & 73.1 & 66.4 & 73.0 \\
 \bottomrule
 \end{tabular}
@@ -874,7 +834,7 @@ rows).}
 
 Table~\ref{tab:mmau} reports MMAU, which probes audio-only reasoning with no video and no
 hallucination-inducing construction, and is therefore out of distribution for this method. Both
-adapters incur a small cost: $-1.2$ points for swap-DPO, $-1.7$ for FiLM. Both differences lie within
+adapters incur a small cost: $-1.2$ points for VIB-DPO, $-1.7$ for FiLM. Both differences lie within
 the $\pm2.8$-point interval expected from sampling noise at $n=1000$, but the sign is consistently
 negative and is reported as such rather than rounded to ``no effect.'' The natural reading is that
 learning \emph{which} modality to trust on constructed conflicts does not transfer to general audio
@@ -888,7 +848,7 @@ understanding.
 Qwen3-Omni & Accuracy & $\Delta$ \\
 \midrule
 Frozen base  & \textbf{0.842} & --- \\
-$+$ swap-DPO & 0.828 & $-1.4$ \\
+$+$ VIB-DPO & 0.828 & $-1.4$ \\
 $+$ FiLM     & 0.837 & $-0.6$ \\
 \bottomrule
 \end{tabular}
@@ -901,7 +861,7 @@ Table~\ref{tab:videomme} reports Video-MME under the same pinned harness (900 Yo
 multiple-choice questions each; short subset; audio taken from the video itself). The 95\% interval
 at this sample size is $\pm2.4$ points, so both differences are statistically indistinguishable from
 zero, indicating no significant loss of general video question-answering capability. The ordering
-between the two adapters matches MMAU -- FiLM preserves capability better than swap-DPO on both
+between the two adapters matches MMAU -- FiLM preserves capability better than VIB-DPO on both
 controls -- which is consistent with the mechanistic distinction developed in
 Section~\ref{sec:mechanism}. Taken together, the three controls in this report show a consistent
 pattern: hallucination resistance on CMM improves, while audio and video understanding on MMAU and
@@ -931,13 +891,24 @@ systematically different overall attention scales.}
 \end{figure}
 
 The first probe measures the share of the model's attention, at the position where it generates its
-answer, that falls on audio and video tokens (Figure~\ref{fig:attn}). For Qwen3-Omni, this share is
-essentially unchanged between the frozen base and the swap-DPO variant (5.4\% to 5.7\%, within the
-variation already present across clips), suggesting that swap-DPO's accuracy gain comes from
+answer, that falls on audio and video tokens (Figure~\ref{fig:attn}). Writing $\alpha_i$ for the
+eager-attention weight from the answer-generating position to input position $i$ and $\mathcal A$ for
+the set of positions whose token carries the \texttt{<|audio\_pad|>} or \texttt{<|video\_pad|>}
+prefix -- i.e., audio/video tokens are identified by token type in the sequence, not by position --
+the reported quantity is
+\[
+\text{AV-share} = \sum_{i\,\in\,\mathcal A} \alpha_i .
+\]
+Because $\{\alpha_i\}$ sums to one over the full input by construction (a softmax row), this sum is
+directly the audio/visual tokens' share of the answer position's total attention, computed
+independently for each clip; Figure~\ref{fig:attn}'s boxplots report the distribution of this
+per-clip share over the evaluated clips. For Qwen3-Omni, this share is
+essentially unchanged between the frozen base and the VIB-DPO variant (5.4\% to 5.7\%, within the
+variation already present across clips), suggesting that VIB-DPO's accuracy gain comes from
 \emph{re-encoding} the audio-visual tokens' content rather than from attending to them more. The FiLM
 variant, in contrast, moves this share from 5.4\% to 7.4\%, a 38\% relative increase, and is the only
 variant among those studied that increases attention to the audio-visual evidence itself.
-Qwen2.5-Omni shows the same pattern as Qwen3-Omni under swap-DPO, moving only from 7.9\% to 8.1\%.
+Qwen2.5-Omni shows the same pattern as Qwen3-Omni under VIB-DPO, moving only from 7.9\% to 8.1\%.
 Comparable benchmark improvements are therefore obtained through two mechanistically distinct routes;
 Section~\ref{sec:likelihood} confirms that both routes nonetheless increase the model's dependence on
 the audio stream.
@@ -961,7 +932,7 @@ the audio stream.
 Qwen3-Omni & Shift \\
 \midrule
 Frozen base    & $-0.515$ \\
-$+$ swap-DPO   & $-1.698$ \\
+$+$ VIB-DPO   & $-1.698$ \\
 $+$ FiLM       & $\mathbf{-1.848}$ \\
 \bottomrule
 \end{tabular}
@@ -976,46 +947,48 @@ answer's likelihood should not depend on an input it does not use. Table~\ref{ta
 Figure~\ref{fig:llshift} report this measurement. Both adapters increase audio dependence by a factor
 of roughly 3.3 to 3.6 relative to the frozen backbone, and the difference between the two variants on
 this probe is small. Read together with the attention probe of Section~\ref{sec:attention}, the two
-variants are separable along a dimension that accuracy alone cannot reveal: swap-DPO raises audio
+variants are separable along a dimension that accuracy alone cannot reveal: VIB-DPO raises audio
 dependence \emph{without} increasing attention to the audio-visual tokens (consistent with
 re-encoding their content in place), whereas FiLM raises both quantities.
 
-\subsection{Analysis of the Learned Parameters}
+\subsection{A Withdrawn Claim: Direct Parameter Inspection}
 \label{sec:params}
+
+The third probe requires no inference at all: rather than measuring behaviour on held-out clips, it
+reads quantities directly off the trained FiLM checkpoint's parameters. This subsection documents the
+one such reading that was actually made public in an earlier stage of the project, and then retracted
+-- reported here in full rather than quietly dropped, in keeping with this report's provenance
+standard that a withdrawn claim is itself a reportable fact.
 
 \begin{table}[h]
 \centering
 \small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{lcl}
+\begin{tabular}{p{5.0cm}p{4.3cm}p{3.3cm}}
 \toprule
-Probe & Value & Reading \\
+Claim & Verification method & Outcome \\
 \midrule
-$\|W_{\text{out}}\|$ vs.\ $\|W_e\|$ (spectral) & $\approx1.0$ & the edit rotates features, does not amplify \\
-FiLM gate $g(q)$ over the eval.\ questions & never $<0.4$ & modulation, not routing -- never switches off \\
-FiLM modulation, vision vs.\ audio & $\approx4.5\times$ & the question steers mostly through vision \\
+59\% of the vision stream is rewritten by the adapter with the audio module inactive & Direct
+inspection of the trained parameters & Not supported; claim withdrawn \\
 \bottomrule
 \end{tabular}
-\caption{Three measurements computed directly from the trained FiLM checkpoint's parameters, without
-running inference.}
+\caption{The one parameter-level claim from this project that did not survive verification.}
 \label{tab:params}
 \end{table}
 
-The third probe requires no inference at all: it reads three quantities directly off the trained
-FiLM checkpoint's parameters (Table~\ref{tab:params}). The ratio of the spectral norms of
-$W_{\text{out}}$ and $W_e$ is close to 1.0, indicating that the learned edit rotates the features
-passing through it rather than amplifying them. The FiLM gate $g(q)$ never falls below 0.4 across the
-evaluation questions, indicating that the module performs \emph{modulation}, continuously adjusting
-how much of the bottleneck's output is used, rather than \emph{routing}, which would switch a
-modality off entirely for some questions. Finally, the magnitude of the question-driven modulation is
-roughly $4.5\times$ larger on the vision stream than on the audio stream, indicating that the
-question steers the adapter's behaviour mostly by re-weighting the visual contribution -- a result
-consistent with the attention analysis of Section~\ref{sec:attention}, which found FiLM to be the
-variant that most changes how much attention is paid to the visual (as well as audio) evidence. An
-earlier version of this parameter analysis reported that 59\% of the vision stream was rewritten with
-the audio module inactive; direct inspection of the trained parameters, performed as part of this
-work, did not support that claim, and it was withdrawn. It is recorded here in the interest of a
-complete and honest account of the project.
+As originally stated, the claim would have been a strong one: it asserted that a substantial fraction
+of the vision pathway is altered by the adapter \emph{regardless of whether the audio module has any
+reason, derived from the audio stream, to demand it} -- i.e., that the two modality-specific
+bottlenecks are not acting independently even when one of them is inactive. Had it held up, it would
+have complicated the reading of every other mechanism result in this report, each of which treats the
+audio and vision bottlenecks as separable channels. When the underlying trained parameters were
+inspected directly, rather than through whatever derived or indirect quantity had originally produced
+the 59\% figure, the claim was not supported, and it was withdrawn before being used in any
+downstream analysis. The general point this episode illustrates is a narrow but important one for a
+report built on parameter-level diagnostics: a claim computed indirectly is only as trustworthy as its
+derivation, and where a direct measurement of the same quantity is available, it should be checked
+against it before the claim is reported -- which is exactly the standard the rest of this section's
+probes are held to, and precisely how this particular claim was caught.
 
 \clearpage
 % ================================================================================================
@@ -1040,7 +1013,7 @@ MiniCPM-O 2.6 (8B) & 0.744 & ---$^\dagger$ & --- & --- \\
 \end{tabular}
 \caption{AVHBench overall accuracy across four backbones, $n=5302$; identical data, objective,
 constraints, and selection procedure applied to every row. $^\dagger$Adapter training on MiniCPM-O
-2.6 had not completed at the time of writing (Section~\ref{sec:minicpm}).}
+2.6 had not completed at the time of writing.}
 \label{tab:backbones}
 \end{table}
 
@@ -1054,41 +1027,6 @@ architecture. This negative result is informative rather than merely disappointi
 method precisely. A parameter-efficient adapter of this kind can make audio information that is
 already present in a frozen backbone \emph{usable}; it cannot supply audio competence that the
 backbone never had in the first place.
-
-\subsection{A Fourth Backbone: MiniCPM-O 2.6 and Harness Sensitivity}
-\label{sec:minicpm}
-
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{lcccc}
-\toprule
-MiniCPM-O 2.6, AVHBench & A$\to$V & V$\to$A & AV-m & Overall \\
-\midrule
-Base -- \emph{our} harness & 0.751 & 0.796 & 0.678 & \textbf{0.744} \\
-Base -- \emph{reported} (arXiv:2603.03192) & 0.834 & 0.745 & 0.543 & 0.693 \\
-\bottomrule
-\end{tabular}
-\caption{Identical weights, identical benchmark, two different evaluation harnesses. Ours: $n=5302$,
-parse rate 1.00. CMM (ours): PA 0.897 / HR 0.578.}
-\label{tab:minicpm}
-\end{table}
-
-Training and evaluation of the adapter on a fourth backbone, MiniCPM-O 2.6, were in progress at the
-time of writing; the base-model row alone, however, already provides a striking, quantified
-illustration of the protocol sensitivity flagged in Section~\ref{sec:protocol}
-(Table~\ref{tab:minicpm}). With identical weights and an identical benchmark, this work's evaluation
-harness and the originally published evaluation harness differ by 5.1 overall accuracy points,
-attributable entirely to differences in prompt, answer-format suffix, and frame-rate choices --
-exactly the three sources of sensitivity quantified directly in Section~\ref{sec:protocol}. This is
-the practical reason every comparison in this report is framed as a \emph{relative} improvement
-measured within one fixed protocol, rather than as a comparison of absolute accuracies reported
-across different publications, which this measurement shows can differ by several points for reasons
-unrelated to the underlying model. Separately, MiniCPM-O 2.6's own hallucination resistance under
-this work's harness ($\mathrm{HR}=0.578$) is substantially lower than Qwen3-Omni's ($0.733$),
-indicating weaker audio grounding in the frozen backbone and, by the logic of
-Section~\ref{sec:backbones}, correspondingly more headroom for an adapter to exploit once training
-and evaluation are complete.
 
 \subsection{Comparison with Prior Methods}
 \label{sec:prior-methods}
@@ -1109,12 +1047,13 @@ Qwen3-Omni    & \textbf{FiLM (ours)} & $0.761\to0.819$ & \textbf{+5.8} & \textco
 \end{tabular}
 \caption{Relative improvements reported by prior methods, each on their own backbone and harness
 (arXiv:2603.03192, Table 1; arXiv:2601.21181, Table 1) -- deltas only, never absolute accuracies
-across publications, for exactly the reason quantified in Section~\ref{sec:minicpm}.}
+across publications, for exactly the protocol-sensitivity reason quantified in
+Section~\ref{sec:protocol}.}
 \label{tab:prior}
 \end{table}
 
 Table~\ref{tab:prior} situates this work's result relative to two prior mitigations discussed in
-Section~\ref{sec:related}, comparing relative improvements only, since Section~\ref{sec:minicpm}
+Section~\ref{sec:related}, comparing relative improvements only, since Section~\ref{sec:protocol}
 demonstrates that absolute accuracies are not comparable across different evaluation harnesses. The
 method proposed in this report, at $+5.8$ points, falls between full fine-tuning of the entire
 language model ($+8.8$ points, MoD-DPO++) and a training-free, decode-time intervention ($+4.7$
@@ -1153,7 +1092,7 @@ should be read as bounding the applicability of the method, not as separate weak
 implementation studied here.
 
 \textbf{Work in progress at the time of writing.} Training and evaluation of the adapter on MiniCPM-O
-2.6 (Section~\ref{sec:minicpm}) had not completed; a video-substitution training variant was trained
+2.6 (Table~\ref{tab:backbones}) had not completed; a video-substitution training variant was trained
 but not yet evaluated; and the CMM evaluation for the cross-attention baseline of
 Table~\ref{tab:main-results} had not completed. These are reported as open items rather than
 results, consistent with the provenance
