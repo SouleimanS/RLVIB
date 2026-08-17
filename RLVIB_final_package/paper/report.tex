@@ -10,9 +10,8 @@
 %
 % Uses the official Ecole Polytechnique document class (polytechnique.sty, gitlab.binets.fr/
 % typographix/polytechnique), copied in alongside this file. It requires five brand-asset PDFs in
-% figures/: polytechnique-{logovert,logohori,filetlongrouge,filetcourt}.pdf are the real files;
-% polytechnique-armes.pdf (the title-page coat-of-arms watermark) is a clearly-labelled stand-in --
-% see figures/README.md -- swap in the real file and rebuild once you have it, no other change needed.
+% figures/ (polytechnique-{logovert,logohori,filetlongrouge,filetcourt,armes}.pdf), all real,
+% official files -- see figures/README.md.
 %
 % Dependencies beyond polytechnique.sty itself (which pulls in calc, xcolor, geometry, graphicx,
 % ifthen, ifpdf, lmodern, titlesec): amsmath, amssymb, booktabs, tikz (positioning, arrows.meta),
@@ -42,6 +41,34 @@
 \newcommand{\figslot}[2]{\IfFileExists{figures/#1}%
   {\includegraphics[width=#2]{figures/#1}}%
   {\fbox{\parbox[c][3cm][c]{#2}{\centering\small\ttfamily\detokenize{figures/#1}}}}}
+
+% polytechnique.sty's \titlepagelayout reserves a fixed 0.475\textheight across three \vspace*
+% gaps, sized for the sample document's one-line title/subtitle/author. Our longer title, two-line
+% subtitle, and five-line author block push the bottom logo line onto a spurious second page under
+% the default gaps; shrinking them (the \fill glue after the author block still pins the logo to
+% the page bottom) keeps everything on the title page without touching the vendored .sty.
+\renewcommand{\titlepagelayout}{
+        \noindent\makebox[\textwidth][c]{%
+          \raisebox{-\totalheight}[0pt][0pt]{%
+            \color{bleu303pale}%
+            \includegraphics[height=\hauteurlogopage]{\polyarmes}}}
+        \vspace*{0.06\textheight}
+        \begin{center}
+            \Huge\sffamily\bfseries\color{bleu303}
+            \MakeUppercaseWithNewline{\polytitresave}\\
+            \vspace*{0.10\textheight}
+            \LARGE\hspace{0cm}\polysoustitresave\\
+            \vspace*{0.075\textheight}
+            \Large\mdseries\hspace{0cm}\polydatesave\\
+            \includegraphics{\polyfiletcourtbleu}
+            \\[0.4\baselineskip]
+            \rmfamily\hspace{0cm}\polyauthorsave\\[\fill]
+            $\;$\titlepagebottomline{}
+            \vspace*{-0.5\margebas}
+        \end{center}
+        \thispagestyle{empty}
+        \clearpage
+}
 
 \title[Making Frozen Audio--Visual LLMs Listen]{Making Frozen Audio--Visual LLMs Listen}
 \subtitle{A Variational Latent-Variable Model for Audio Grounding, Fit by Regularized
