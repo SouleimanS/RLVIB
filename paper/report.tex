@@ -8,26 +8,30 @@
 % and paper/summary.tex already establish, expanded with the additional context and discussion a
 % written report allows that slide bullets do not.
 %
-% Dependencies are the same minimal set already verified in this environment: geometry, xcolor,
-% graphicx, tikz (positioning, arrows.meta), booktabs, amsmath, amssymb, lmodern/microtype (guarded),
-% hyperref (guarded). No pgfplots (absent on the target machines; previously broke the build).
+% Uses the official Ecole Polytechnique document class (polytechnique.sty, gitlab.binets.fr/
+% typographix/polytechnique), copied in alongside this file. It requires five brand-asset PDFs in
+% figures/: polytechnique-{logovert,logohori,filetlongrouge,filetcourt}.pdf are the real files;
+% polytechnique-armes.pdf (the title-page coat-of-arms watermark) is a clearly-labelled stand-in --
+% see figures/README.md -- swap in the real file and rebuild once you have it, no other change needed.
+%
+% Dependencies beyond polytechnique.sty itself (which pulls in calc, xcolor, geometry, graphicx,
+% ifthen, ifpdf, lmodern, titlesec): amsmath, amssymb, booktabs, tikz (positioning, arrows.meta),
+% microtype (guarded), hyperref (guarded). No pgfplots (absent on the target machines; previously
+% broke the build). No babel -- the report is in English and compiled fine without it before.
 
-\documentclass[11pt,a4paper]{article}
-\usepackage[a4paper,left=2.7cm,right=2.7cm,top=2.6cm,bottom=2.8cm]{geometry}
+\documentclass[11pt,a4paper,oneside]{article}
+\usepackage[a4paper,fancysections,titlepage]{polytechnique}
+\usepackage[T1]{fontenc}
+\IfFileExists{hyperref.sty}{\usepackage[hidelinks,bookmarksnumbered]{hyperref}}{}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
-\usepackage{xcolor}
-\usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
-\IfFileExists{lmodern.sty}{\usepackage{lmodern}}{}
 \IfFileExists{microtype.sty}{\usepackage[protrusion=true,expansion=false]{microtype}}{}
-\IfFileExists{hyperref.sty}{\usepackage[hidelinks,bookmarksnumbered]{hyperref}}{}
 
 \graphicspath{{figures/}}
 \definecolor{frz}{RGB}{40,95,175}     % frozen  (blue)
 \definecolor{trn}{RGB}{210,120,20}    % trained (orange)
-\definecolor{hdr}{RGB}{25,60,115}
 
 \setlength{\parskip}{4pt}
 \setlength{\parindent}{0pt}
@@ -39,15 +43,12 @@
   {\includegraphics[width=#2]{figures/#1}}%
   {\fbox{\parbox[c][3cm][c]{#2}{\centering\small\ttfamily\detokenize{figures/#1}}}}}
 
-\newcommand{\exlabel}[2]{{\small \color{red!65!black}base: #1 $\boldsymbol{\times}$\hspace{1em}%
-  \color{green!40!black}ours: #2 $\boldsymbol{\checkmark}$}}
-
-\title{\textbf{Making Frozen Audio--Visual LLMs Listen}\\[4pt]
-  \large A Variational Latent-Variable Model for Audio Grounding, Fit by\\
-  Regularized Preference-Based Estimation\\[10pt]
-  \normalsize\itshape Internship Report --- Applied Mathematics: Statistics and Modelling}
-\author{Souleiman Sbai\\[4pt]
-  \normalsize\normalfont \'Ecole Polytechnique\\
+\title[Making Frozen Audio--Visual LLMs Listen]{Making Frozen Audio--Visual LLMs Listen}
+\subtitle{A Variational Latent-Variable Model for Audio Grounding, Fit by Regularized
+  Preference-Based Estimation}
+\author{\itshape Internship Report --- Applied Mathematics: Statistics and Modelling\\[8pt]
+  \upshape Souleiman Sbai\\[4pt]
+  \'Ecole Polytechnique\\
   Host laboratory: AIST CVRT \quad$\cdot$\quad Supervisor: Qiu Yue\\
   \texttt{souleiman.sbai@polytechnique.edu}}
 \date{\today}

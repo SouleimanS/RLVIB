@@ -14,7 +14,8 @@
 ---
 
 Reproduction package for the final internship deliverables: a written report
-(`paper/report.tex`, 28pp) and the accompanying presentation (`paper/final.tex`, 34 slides).
+(`paper/report.tex`, 29pp, École Polytechnique template) and the accompanying presentation
+(`paper/final.tex`, 34 slides).
 
 **Author:** Souleiman Sbai · **Host lab:** AIST CVRT · **Supervisor:** Qiu Yue
 
@@ -82,9 +83,12 @@ paired *p* < 10⁻⁴, with hallucination resistance preserved.
 │   ├── mod_dpo/                  MoD-DPO / MoD-DPO++ re-implementation
 │   └── mad/                      MAD training-free decoding re-implementation
 ├── tests/                        unit tests (identity-at-init, masks, metrics, …)
-├── paper/report.tex              written internship report (28pp)
+├── paper/report.tex              written internship report (29pp)
+├── paper/polytechnique.sty       official École Polytechnique document class, used by report.tex
 ├── paper/final.tex               the presentation (34 slides)
 ├── paper/summary.tex             two-page, two-column standalone summary
+├── paper/figures/polytechnique-*.pdf   report.tex brand assets (see paper/figures/README.md —
+│                                        one, the coat-of-arms watermark, is a placeholder)
 ├── docs/
 │   ├── DECK_TO_CODE.md           slide → code → command map
 │   ├── CLUSTER_NOTES.md          ABCI/PBS specifics and known gotchas

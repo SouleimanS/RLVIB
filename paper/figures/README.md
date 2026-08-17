@@ -22,3 +22,28 @@ To confirm what the current build is missing:
 cd paper && pdflatex -interaction=nonstopmode final.tex >/dev/null 2>&1
 grep -c "figures/" final.log      # counts placeholder fallbacks that were drawn
 ```
+
+## Brand assets used by `paper/report.tex` (École Polytechnique template)
+
+`report.tex` uses the official `polytechnique.sty` document class (copied in at
+`paper/polytechnique.sty`), which requires five image files under `pdflatex`. Four are the real
+official files, supplied directly by the user:
+
+| File | Role | Status |
+|---|---|---|
+| `polytechnique-logovert.pdf` | vertical logo, title-page bottom | **real** |
+| `polytechnique-logohori.pdf` | horizontal logo, running header on every page | **real** |
+| `polytechnique-filetlongrouge.pdf` | red decorative rule under `\section` headings | **real** |
+| `polytechnique-filetcourt.pdf` | short blue rule under `\subsection` headings and on the title page | **real** |
+| `polytechnique-armes.pdf` | large pale coat-of-arms watermark on the title page | **placeholder** — see below |
+
+`polytechnique-armes.pdf` is **not** the official coat of arms; it was never supplied. It's a
+locally-generated stand-in (light-grey dashed shield outline with "MISSING / replace with the
+official coat of arms file" text) so the document compiles cleanly instead of erroring or showing
+a broken-image box. Swap in the real file under this exact name and rebuild — no other change is
+needed.
+
+`typographix.pdf` (the LaTeX users'-group logo, from the same upload) is present here but **not**
+currently wired into `report.tex` via `\logo{}` — it's unrelated to the report's actual host
+institution (AIST CVRT) and was left out rather than guessed in. Delete it or wire it in via
+`\logo{typographix}` in the preamble if a second header logo is wanted.
